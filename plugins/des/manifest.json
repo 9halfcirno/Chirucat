@@ -1,0 +1,9 @@
+{
+	"id": "des",
+	"version": "0.0.0",
+	"name": "Ping 的依赖",
+	"author": "9halfcirno",
+	"main": "index.js",
+	"dependencies": {
+	}
+}
