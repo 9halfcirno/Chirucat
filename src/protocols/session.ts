@@ -11,7 +11,6 @@ export type SessionType =
 export interface Session {
 	/** 框架会话ID */
 	id: string;
-
-	/**  */
-	extra: SessionExtra;
+	/** 会话类型 */
+	type: SessionType;
 }

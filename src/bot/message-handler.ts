@@ -10,11 +10,13 @@ export class MessageHandler {
 	}
 
 	handle(msg: Message) {
-		let skip = this.filter.filter(msg);
+		let ok = this.filter.filter(msg);
 
-		if (skip) {
-			console.log(msg);
-			
+		if (!ok) return; // 被过滤就忽略
+
+		if (!this.bot.command.exec(msg)) {
+			// 没有匹配指令的消息, 进入插件消息回调
+			this.bot.plugin.handleMessage(msg);
 		}
 	}
 }

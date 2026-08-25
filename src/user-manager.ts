@@ -5,7 +5,7 @@ export class UserManager {
 	db: sqlite.Database;
 	constructor(file: string) {
 		this.db = new sqlite(file, {});
-		this.db.pragma("foregign_keys = ON")
+		this.db.pragma("foreign_keys = ON")
 	}
 
 	init() {

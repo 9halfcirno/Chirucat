@@ -1,9 +1,9 @@
-import type { PluginContext } from "./context";
+import type { PluginContext } from "./contexts/context";
 
 /** 依赖: 插件id -> 版本约束, 如 { "des": "=0.0.0" } */
 export type PluginDependencies = Record<string, string>;
 
-export type PluginType = "adapter";
+export type PluginType = "adapter" | "normal";
 
 export type PluginManifest = {
 	id: string;
@@ -37,3 +37,8 @@ export type PluginState =
 	| "unloading"
 	| "unloaded"
 	| "error";
+
+
+export type NPMPackages = {
+	dependencies: Record<string, string>
+} 

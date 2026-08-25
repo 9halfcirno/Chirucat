@@ -35,7 +35,7 @@ export function uuid(): string {
 	// 3. 终极兜底方案：如果 crypto 完全不存在，直接用高效的 Math.random 配合位运算
 	const fallbackBuffer = new Uint8Array(16);
 	for (let i = 0; i < 16; i++) {
-		// Math.random() * 256 再用位或 0 快速取整，在 V8 引擎里是极快的整型操
+		// Math.random() * 256 再用位或 0 快速取整
 		fallbackBuffer[i] = (Math.random() * 256) | 0;
 	}
 	fallbackBuffer[6] = (fallbackBuffer[6] & 0x0f) | 0x40;
