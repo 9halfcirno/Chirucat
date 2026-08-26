@@ -1,2 +1,4 @@
 node_modules/
 bots/chirucat/plugins/qq-adapter/
+data/
+.codewhale/
