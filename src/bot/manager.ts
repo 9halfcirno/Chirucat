@@ -7,6 +7,7 @@ import { ValidationError } from "../errors/validation-error";
 import { Bot } from "./bot";
 import type { Core } from "../core";
 import Logger from "../utils/logger";
+import { dirCheck } from "../utils/dir-check";
 
 const logger = new Logger("BotManager");
 
@@ -18,6 +19,7 @@ export class BotManager {
 	async scan(botDir: string) {
 		// 将dir解析为绝对路径
 		path.isAbsolute(botDir) ? (botDir) : (botDir = path.join(root, botDir));
+		await dirCheck(botDir);
 
 
 		const dirs = await fs.readdir(botDir);

@@ -13,6 +13,7 @@ import type { BotActions } from "../protocols/actions";
 import type { AdapterContext } from "./contexts/adapter-context";
 import type { BotState } from "../bot/types";
 import Logger from "../utils/logger";
+import { dirCheck } from "../utils/dir-check";
 
 const logger = new Logger("PluginManager");
 
@@ -40,6 +41,8 @@ export class PluginManager {
 		let manifests = new Map<string, PluginManifest>()
 		for (let dir of dirs) {
 			path.isAbsolute(dir) ? (dir) : (dir = path.join(root, dir)); // 转为绝对路径
+			await dirCheck(dir);
+			
 			// 先扫描一遍清单
 			const seen = new Set<string>();	// 防止同目录出现重复插件		
 			const pluginDirs = await fs.readdir(dir);

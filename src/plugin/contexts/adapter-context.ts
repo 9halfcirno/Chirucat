@@ -34,19 +34,19 @@ export class AdapterContext extends PluginContext {
 
 	user: PluginUserAPI = {
 		get: (platform: string, id: string) => {
-			return this._bot.core.user.get(platform, id)
+			return this._bot.core.user!.get(platform, id)
 		},
 		query: (uuid: string) => {
-			return this._bot.core.user.query(uuid);
+			return this._bot.core.user!.query(uuid);
 		}
 	}
 
 	session: PluginSessionAPI = {
 		get: (platform: string, type: SessionType, id: string) => {
-			return this._bot.core.session.get(platform, type, id)
+			return this._bot.core.session!.get(platform, type, id)
 		},
 		query: (uuid) => {
-			return this._bot.core.session.query(uuid);
+			return this._bot.core.session!.query(uuid);
 		},
 	}
 

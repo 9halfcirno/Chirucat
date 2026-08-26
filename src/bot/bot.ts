@@ -17,17 +17,21 @@ export class Bot extends EventEmitter {
 	command = new CommandManager({});
 	plugin = new PluginManager(this);
 
-	constructor(config: BotConfig, readonly core: Core, public state: BotState) {
+	constructor(config: BotConfig, readonly core: Core, private _state: BotState) {
 		super();
 		this.path = config.path;
 		this.id = config.id;
 
 	}
 
+	get state() {
+		return this._state;
+	}
+
 	async start() {
 		await this.plugin.scan("plugins", path.join(this.path, "plugins"));
 
-		await this.plugin.load(this.state.plugins) // 用bot state加载插件
+		await this.plugin.load(this._state.plugins) // 用bot state加载插件
 	}
 
 	async stop() {
