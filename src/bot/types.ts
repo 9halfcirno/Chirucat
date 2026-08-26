@@ -7,3 +7,10 @@ export type BotConfig = {
 }
 
 export type BotActionCallback = (action: BotActions) => void
+
+export type BotState = {
+	/** Bot是否处于启用状态 */
+	enable: boolean;
+	/** 插件启用状态 */
+	plugins: Record<string, boolean>;
+}

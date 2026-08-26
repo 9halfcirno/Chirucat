@@ -1,12 +1,13 @@
 import path from "path";
 import { PluginManager } from "../plugin/manager";
 import { MessageHandler } from "./message-handler";
-import type { BotConfig, BotActionCallback } from "./types";
+import type { BotConfig, BotState } from "./types";
 import type { BotEventMeta, BotEvents } from "../protocols/events";
 import { EntityFactory } from "../entity/factory";
 import type { Core } from "../core";
 import { CommandManager } from "../command/manager";
 import EventEmitter from "events";
+import type { BotActions } from "../protocols/actions";
 
 // 虽然不知道继承Emitter有什么用吧
 export class Bot extends EventEmitter {
@@ -16,9 +17,7 @@ export class Bot extends EventEmitter {
 	command = new CommandManager({});
 	plugin = new PluginManager(this);
 
-	private _actionCallbacks: BotActionCallback[] = [];
-
-	constructor(config: BotConfig, readonly core: Core) {
+	constructor(config: BotConfig, readonly core: Core, public state: BotState) {
 		super();
 		this.path = config.path;
 		this.id = config.id;
@@ -27,6 +26,8 @@ export class Bot extends EventEmitter {
 
 	async start() {
 		await this.plugin.scan("plugins", path.join(this.path, "plugins"));
+
+		await this.plugin.load(this.state.plugins) // 用bot state加载插件
 	}
 
 	async stop() {
@@ -34,16 +35,20 @@ export class Bot extends EventEmitter {
 	}
 
 	dispatch(event: BotEvents, meta: BotEventMeta) {
-		const entity = EntityFactory.from(event, meta);
+		const entity = EntityFactory.create(event, meta, this);
 		if (!entity) return;
 		if (entity.type === "message.create") {
 			this.message.handle(entity);
 		}
 	}
 
-	onAction(callback: BotActionCallback) {
-		if (this._actionCallbacks.includes(callback)) return; // 防止重入
-
-		this._actionCallbacks.push(callback);
+	/**
+	 * 将Action转发给对应的适配器插件
+	 * @param action Action对象
+	 * @param adapter 适配器插件的id
+	 * @param extra 额外数据, 应从对应event.extra取
+	 */
+	async action(action: BotActions, adapter: string, extra?: Record<string, any>) {
+		this.plugin.handleAction(action, adapter, extra);
 	}
 }
