@@ -1,9 +1,12 @@
+import type { Command } from "../../command/types";
 import type { Message } from "../../entity/message";
 import type { BotActions } from "../../protocols/actions";
 import type { BotEvents } from "../../protocols/events";
 import type { SessionType } from "../../protocols/session";
+import type { SessionPlatformInfo } from "../../session-manager";
+import type { UserPlatformInfo } from "../../user-manager";
 
-export type PluginMessageCallback = (message: Message) => void | Promise<void>;
+export type PluginMessageCallback = (message: Message) => unknown;
 
 /** 一条消息回调: 匹配器 + 处理器, 按注册顺序触发 */
 export type MessageCallbackEntry = {
@@ -28,11 +31,16 @@ export interface PluginMessageAPI {
 	match(predicate: ((msg: Message) => boolean), handler: PluginMessageCallback): void;
 }
 
+export interface PluginCommandAPI {
+	register(name: string, handler: Command["handler"]): Command;
+	unregister(command: Command): void
+}
+
 export interface PluginActionAPI {
 
 }
 
-export type ActionHandler = (action: BotActions) => any;
+export type ActionHandler = (action: BotActions, extra?: Record<string, any>) => any;
 export interface PluginBotAPI {
 	dispatch(event: BotEvents): void;
 	onAction: (handler: ActionHandler) => void;
@@ -40,9 +48,12 @@ export interface PluginBotAPI {
 
 export interface PluginUserAPI {
 	get: (platform: string, id: string) => string;
+
+	query(uuid: string): UserPlatformInfo | null;
 }
 
 export interface PluginSessionAPI {
 	get: (platform: string, type: SessionType, id: string) => string;
+	query: (uuid: string) => SessionPlatformInfo | null
 }
 
