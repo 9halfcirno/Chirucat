@@ -1,0 +1,98 @@
+:root {
+	/* 毛玻璃面板参数: 导航栏与右侧内容区共用, 保证视觉对齐 */
+	--glass-bg: rgba(255, 255, 255, 0.2);
+	--glass-blur: 10px;
+	--glass-border: 1px solid rgba(255, 255, 255, 0.3);
+	--glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+
+	--main-nav-btn-size: 5cqw;
+}
+
+body {
+	/* background-color: gray; */
+	background-image: url("/img/bg.jpg");
+	background-size: cover;
+}
+
+/* 顶部导航栏: 毛玻璃品牌条, 横跨整行 */
+#top-nav {
+	background-color: var(--glass-bg);
+	backdrop-filter: blur(var(--glass-blur));
+	border-bottom: var(--glass-border);
+	box-shadow: var(--glass-shadow);
+}
+
+#top-nav .brand {
+	font-size: 1.05em;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	color: rgba(0, 0, 0, 0.75);
+}
+
+/* 顶部导航的展开按钮 (窄屏可见, 宽屏 display:none 由 layout.css 控制) */
+#nav-toggle {
+	align-items: center;
+	justify-content: center;
+	width: 2.25em;
+	height: 2.25em;
+	margin-right: 12px;
+	padding: 0;
+	border-radius: 8px;
+	border: 1px solid rgba(0, 0, 0, 0.12);
+	background: rgba(255, 255, 255, 0.15);
+	color: rgba(0, 0, 0, 0.75);
+	cursor: pointer;
+	transition: background-color 0.15s ease;
+}
+
+#nav-toggle:hover {
+	background-color: rgba(255, 255, 255, 0.3);
+}
+
+/* 窄屏时顶部条保持压在抽屉与遮罩之上, 按钮始终可点 */
+@media (max-width: 768px) {
+	#top-nav {
+		position: relative;
+		z-index: 30;
+	}
+}
+
+#main-nav {
+	display: inline-flex;
+	flex-direction: column;
+	background-color: var(--glass-bg);
+	backdrop-filter: blur(var(--glass-blur));
+	border-radius: 9999px;
+	/* 胶囊形 */
+	border: var(--glass-border);
+	box-shadow: var(--glass-shadow);
+
+	/* 顶部导航下方开始, 与内容区间距 24px */
+	margin: 24px 0 24px 24px;
+
+	align-items: center;
+
+	padding: calc(100px / 2 - 5em / 2);
+}
+
+#main {
+	/* 与导航栏同款毛玻璃: 半透明 + 背景模糊 + 细边框 */
+	/* background-color: var(--glass-bg); */
+	backdrop-filter: blur(var(--glass-blur));
+	box-shadow: var(--glass-shadow);
+	background-color: rgba(255, 255, 255, 0.6);
+	border-radius: 24px;
+	border: var(--glass-border);
+	/* 与导航胶囊间距及屏幕四边统一留 24px */
+	margin: 24px;
+}
+
+.main-nav-btn:hover {
+	background-color: rgba(255, 255, 255, 0.25);
+}
+
+/* 当前页按钮高亮 */
+.main-nav-btn.active {
+	background-color: rgba(74, 144, 217, 0.35);
+	box-shadow: inset 0 0 0 2px rgba(74, 144, 217, 0.6);
+}

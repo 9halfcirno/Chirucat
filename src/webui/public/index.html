@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Chirucat WebUI</title>
+	<link rel="stylesheet" href="css/layout.css">
+	<link rel="stylesheet" href="css/overlay.css">
+	<link rel="stylesheet" href="css/themes/default.css">
+</head>
+
+<body>
+	<header id="top-nav">
+		<button id="nav-toggle" type="button" class="nav-toggle" aria-label="展开导航" aria-expanded="false" aria-controls="main-nav">
+			<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+				<line x1="4" y1="6" x2="20" y2="6" />
+				<line x1="4" y1="12" x2="20" y2="12" />
+				<line x1="4" y1="18" x2="20" y2="18" />
+			</svg>
+		</button>
+		<span class="brand">Chirucat WebUI</span>
+	</header>
+	<nav id="main-nav" aria-label="主导航">
+		<!-- 侧边栏按钮由 SPA 框架根据注册的页面自动生成 -->
+	</nav>
+	<div id="main">
+		<!-- 页面内容渲染目标: SPA 框架把当前页面渲染到这里 -->
+		<div id="page-view"></div>
+		<noscript>
+			<p>需要启用 JavaScript 才能使用 WebUI</p>
+		</noscript>
+		<script type="module" src="/app.js"></script>
+	</div>
+</body>
+
+</html>

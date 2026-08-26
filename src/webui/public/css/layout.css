@@ -1,0 +1,151 @@
+html,
+body {
+	padding: 0;
+	margin: 0;
+
+	width: 100%;
+	height: 100%;
+}
+
+body {
+	min-width: 100%;
+
+	/* 三区布局: 顶部导航横跨整行, 下方左侧导航 + 右侧内容区 */
+	display: grid;
+	grid-template-columns: auto 1fr;
+	grid-template-rows: auto 1fr;
+	grid-template-areas:
+		"top-nav top-nav"
+		"main-nav main";
+}
+
+/* 顶部导航栏: 横跨整行的品牌栏 */
+#top-nav {
+	grid-area: top-nav;
+
+	display: flex;
+	align-items: center;
+	min-height: 56px;
+	box-sizing: border-box;
+	padding: 0 24px;
+}
+
+#main-nav {
+	grid-area: main-nav;
+
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	/* flex-basis: 100px; */
+}
+
+#main {
+	grid-area: main;
+
+	/* 遮罩定位基准 */
+	position: relative;
+	/* 防止长内容撑破 grid 轨道 */
+	min-width: 0;
+}
+
+/* 页面内容容器: SPA 框架渲染目标 */
+#page-view {
+	width: 100%;
+	height: 100%;
+	overflow: auto;
+	box-sizing: border-box;
+	padding: 24px;
+}
+
+.main-nav-btn {
+	width: 3em;
+	height: 3em;
+	border-radius: 50%;
+
+	/* 内容居中对齐 */
+	display: flex;
+	align-items: center;
+	justify-content: center;
+
+	/* 重置浏览器默认按钮样式, 提供交互反馈 */
+	border: 1px solid transparent;
+	background: transparent;
+	cursor: pointer;
+	font-size: 1.2em;
+	transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* 侧边栏按钮的 SVG 图标, 与旧的 emoji 视觉尺寸一致 */
+.main-nav-icon {
+	width: 1.2em;
+	height: 1.2em;
+	pointer-events: none;
+}
+
+/* ---- 页面通用组件 ---- */
+.card {
+	border: 1px solid rgba(0, 0, 0, 0.12);
+	border-radius: 12px;
+	padding: 16px;
+	background: rgba(255, 255, 255, 0.6);
+}
+
+.page-error {
+	border: 1px solid #d9534f;
+	border-radius: 12px;
+	padding: 16px;
+	background: rgba(217, 83, 79, 0.1);
+	color: #a94442;
+}
+
+.muted {
+	color: #888;
+}
+
+/* 窄屏顶部导航的展开按钮: 宽屏隐藏, 窄屏由媒体查询显示 */
+#nav-toggle {
+	display: none;
+}
+
+/* ---- 窄屏响应式: 侧边栏收为左侧抽屉, 顶部按钮展开 ---- */
+@media (max-width: 768px) {
+	/* 单列布局: 顶部导航 + 内容区, 侧边栏脱离网格 */
+	body {
+		grid-template-columns: 1fr;
+		grid-template-areas:
+			"top-nav"
+			"main";
+	}
+
+	#nav-toggle {
+		display: inline-flex;
+	}
+
+	/* 侧边栏变为左侧抽屉: 默认移出视口, body.nav-open 时滑入 */
+	#main-nav {
+		position: fixed;
+		top: 56px; /* 顶部导航栏下方 */
+		bottom: 0;
+		left: 0;
+		z-index: 20;
+		margin: 24px;
+
+		visibility: hidden;
+		transform: translateX(calc(-100% - 48px));
+		transition: transform 0.25s ease, visibility 0.25s ease;
+	}
+
+	body.nav-open #main-nav {
+		visibility: visible;
+		transform: none;
+	}
+
+	/* 抽屉背后的变暗遮罩: 点击任意非侧边栏区域即可收起 (由 app.js 处理) */
+	body.nav-open::after {
+		content: "";
+		position: fixed;
+		inset: 0;
+		z-index: 15;
+		background: rgba(0, 0, 0, 0.25);
+	}
+}
