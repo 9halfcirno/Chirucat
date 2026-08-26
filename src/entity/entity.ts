@@ -1,4 +1,5 @@
 import type { Bot } from "../bot/bot";
+import type { BotActions } from "../protocols/actions";
 import type { BotEventMeta, BotEvents } from "../protocols/events";
 import type { Session } from "../session/session";
 import { uuid } from "../utils/uuid";
@@ -15,10 +16,16 @@ export class Entity {
 
 	session: Session | null = null;
 
-	constructor(event: BotEvents, readonly meta: BotEventMeta, private bot: Bot) {
+	constructor(event: BotEvents, readonly meta: BotEventMeta, private bot?: Bot) {
 		this.type = event.type;
 		this.time = event.time;
 		this.platform = event.platform;
 		this.extra = event.extra;
-	 }
+	}
+
+	action(action: BotActions) {
+		if (this.bot) {
+			this.bot.action(action, this.meta.adapter, this.extra)
+		}
+	}
 }
