@@ -1,5 +1,7 @@
 # Chirucat!
 
+[English](./README.en.md)
+
 > 跨平台的多Bot框架
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)

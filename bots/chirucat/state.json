@@ -1,0 +1,6 @@
+{
+	"enable": true,
+	"plugins": {
+		"ping": true
+	}
+}
