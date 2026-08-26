@@ -1,12 +1,13 @@
+import type { Bot } from "../bot/bot";
 import type { BotEventMeta, BotEvents } from "../protocols/events";
 import type { SessionManager } from "../session-manager";
 import type { UserManager } from "../user-manager";
 import { Message } from "./message";
 
 const EntityFactory = {
-	from(event: BotEvents, meta: BotEventMeta) {
+	create(event: BotEvents, meta: BotEventMeta, bot: Bot) {
 		if (event.type === "message.create") {
-			return new Message(event, meta);
+			return new Message(event, meta, bot);
 		}
 	}
 }
