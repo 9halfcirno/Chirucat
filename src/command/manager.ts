@@ -1,5 +1,8 @@
-import type { Message } from "../entity/message";
+import { Message } from "../entity/message";
 import CommandParser from "./parser";
+import Logger from "../utils/logger";
+
+const logger = new Logger("CommandManager");
 import type { Command, CommandManagerOption } from "./types";
 
 export class CommandManager {
@@ -17,15 +20,26 @@ export class CommandManager {
 	}
 
 	/**
-	 * 
+	 * 使用纯文本和参数触发指令
+	 * @param name 指令名
+	 * @param args 参数
+	 */
+	exec(name: string, args: (string | number)[]): boolean;
+	/**
+	 * 对消息进行匹配
 	 * @param message 进行匹配的消息
 	 * @returns true为匹配到指令, false为未匹配
 	 */
-	exec(message: Message) {
-		let text = message.text;
+	exec(message: Message): boolean;
 
-		if (text.startsWith(this.prefix)) { // 如果以前缀开头
-			text = text.slice(this.prefix.length); // 移除前缀
+	exec(message: Message | string, args?: (string | number)[]) {
+		let text: string;
+		if (message instanceof Message) {
+			text = message.text;
+		} else text = message;
+
+		if (typeof message === "string" || text.startsWith(this.prefix)) { // 如果以前缀开头
+			if (typeof message !== "string") text = text.slice(this.prefix.length); // 移除前缀
 			let command: string | null = null;
 			for (let com of this.commands.keys()) { // O(n)获取前缀最长的指令
 				if (text.startsWith(com)) { // 前缀匹配到了
@@ -42,14 +56,14 @@ export class CommandManager {
 
 			const coms = this.commands.get(command)!;
 
-			let args = CommandParser.parse(text, {
+			let params = args || CommandParser.parse(text, {
 				argStart: command.length + 1
 			})
 			for (let com of coms) {
 				try {
-					com.handler(message, args);
+					com.handler(message instanceof Message ? message : null, params);
 				} catch (e) {
-					console.error(`Command execute error:`, e);
+					logger.error(`Command execute error:`, e);
 				}
 			}
 

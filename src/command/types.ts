@@ -4,7 +4,7 @@ export type Command = {
 	/** 指令名 */
 	name: string;
 	/** 指令处理 */
-	handler: (message: Message, args: CommandArgs) => void;
+	handler: (message: Message | null, args: CommandArgs) => void;
 }
 
 
