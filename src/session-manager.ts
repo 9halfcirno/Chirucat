@@ -1,5 +1,15 @@
 import sqlite from "better-sqlite3"
 import { uuid } from "./utils/uuid";
+import type { SessionType } from "./protocols/session";
+
+export type SessionPlatformInfo = {
+	/** 会话平台id */
+	id: string;
+	/** 平台名 */
+	platform: string;
+	/** 会话类型 */
+	type: SessionType;
+}
 
 export class SessionManager {
 	db: sqlite.Database;
@@ -53,5 +63,27 @@ export class SessionManager {
 		});
 
 		return getOrCreate(platform, type, id);
+	}
+
+	/**
+	 * 通过会话id查找该会话所有平台字段
+	 * @param id 会话id
+	 */
+	query(id: string): SessionPlatformInfo | null {
+		const row = this.db.prepare(
+			'SELECT platform_id, platform_type, platform_name FROM session_map WHERE uuid = ?'
+		).get(id) as {
+			platform_id: string,
+			platform_name: string,
+			platform_type: SessionType
+			} | undefined;
+		if (!row) {
+			return null;
+		}
+		return {
+			id: row.platform_id,
+			type: row.platform_type,
+			platform: row.platform_name
+		}
 	}
 }
