@@ -29,8 +29,12 @@ export class Plugin {
 	}
 
 	async unload() {
+		// 先卸载模块, 再卸载上下文
 		if (!this.module) return;
 		if (this.module.unload) await this.module.unload();
+
+		if (!this.context) return;
+		this.context.destroy();
 		this.module = null;
 	}
 }

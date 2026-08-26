@@ -9,6 +9,12 @@ import { ValidationError } from "../errors/validation-error";
 import { PluginContextFactory } from "./contexts/factory";
 import type { Bot } from "../bot/bot";
 import type { Message } from "../entity/message";
+import type { BotActions } from "../protocols/actions";
+import type { AdapterContext } from "./contexts/adapter-context";
+import type { BotState } from "../bot/types";
+import Logger from "../utils/logger";
+
+const logger = new Logger("PluginManager");
 
 export class PluginManager {
 	loader = new PluginLoader();
@@ -55,7 +61,7 @@ export class PluginManager {
 					manifest.path = pluginDir;
 					manifests.set(manifest.id, manifest);
 				} catch (e) {
-					console.error(e);
+					logger.error(e);
 
 				}
 			}
@@ -70,7 +76,16 @@ export class PluginManager {
 		}
 	}
 
-	async load(...ids: string[]) {
+	async load(state: BotState["plugins"]): Promise<void>;
+	async load(...ids: string[]): Promise<void>;
+	async load(arg: BotState["plugins"] | string, ...rest: string[]) {
+		// 参数归一化
+		let ids: string[] = [];
+		if (typeof arg !== "string") {
+			ids = Object.entries(arg).filter(([key, state]) => state === true).map(([k, v]) => k)
+		} else ids.push(arg, ...rest);
+		logger.log(ids);
+		
 		for (let id of ids) {
 			if (!this.pluginIds.has(id)) throw new Error(`插件 ${id} 未被索引`)
 			// 获取清单
@@ -88,8 +103,8 @@ export class PluginManager {
 
 			await plugin.init();
 
-			console.log(`Plugin: 成功载入插件: ${manifest.name || "???"}(${manifest.id})`);
-			
+			logger.log(`Plugin: 成功载入插件: ${manifest.name || "???"}(${manifest.id})`);
+
 		}
 	}
 
@@ -101,5 +116,14 @@ export class PluginManager {
 		for (const plugin of this.plugins.values()) {
 			plugin.context.handleMessage(msg);
 		}
+	}
+
+	handleAction(action: BotActions, adapter: string, extra?: Record<string, any>) {
+		let adapterPlugin = this.plugins.get(adapter);
+		if (!adapterPlugin || adapterPlugin.manifest.type !== "adapter") {
+			logger.error(`Plugin: 已加载插件中找不到id为 ${adapter} 的适配器插件!`);
+			return;
+		}
+		(adapterPlugin.context as AdapterContext).handleAction(action, extra);
 	}
 }
