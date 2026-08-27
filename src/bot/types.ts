@@ -2,6 +2,8 @@ import type { BotActions } from "../protocols/actions";
 
 export type BotConfig = {
 	id: string;
+	/** Bot名字 */
+	name?: string;
 	/** Bot目录 */
 	path: string;
 }

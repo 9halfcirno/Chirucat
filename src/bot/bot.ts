@@ -12,6 +12,7 @@ import type { BotActions } from "../protocols/actions";
 // 虽然不知道继承Emitter有什么用吧
 export class Bot extends EventEmitter {
 	id: string;
+	name: string | null = null;
 	path: string;
 	message = new MessageHandler(this);
 	command = new CommandManager({});
@@ -21,7 +22,7 @@ export class Bot extends EventEmitter {
 		super();
 		this.path = config.path;
 		this.id = config.id;
-
+		this.name = config.name || null;
 	}
 
 	get state() {
