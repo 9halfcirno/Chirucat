@@ -1,21 +1,129 @@
 /**
- * 日志查看页面 (占位)
+ * 日志查看页面
  *
- * TODO: 接入后端日志接口 (轮询或 WebSocket 推送)。
+ * 通过 SSE (GET /api/get_log_stream) 接收实时日志流:
+ * - 连接建立后服务器先回放最近历史, 再实时推送
+ * - EventSource 断线自动重连, 页面只负责展示状态
+ *
+ * 渲染优化:
+ * - 每行是单个 div + 纯文本, 不拆成多个 span
+ * - rAF 批量渲染 + DocumentFragment, 避免逐条 DOM 写入
+ * - 行数上限, 超出丢弃最旧的行
+ * - 用户上滚查看历史时暂停自动滚动, 回到底部恢复跟随
  */
+let source = null;   // EventSource 实例, destroy 时关闭
+let listEl = null;   // 日志列表容器
+let follow = true;   // 是否跟随最新日志
+let queue = [];      // 待渲染的日志条目
+let rafId = null;    // 批量渲染调度句柄
+
+/** 日志行数上限: 长时间运行也不会累积过多 DOM */
+const MAX_LINES = 2000;
+
 export default {
 	id: "logs",
 	title: "日志",
 	icon: "📋",
+	styles: ["/js/pages/logs/logs.css"],
 
 	render(container) {
-		container.innerHTML = `
-			<h1>日志</h1>
-			<p class="muted">查看运行日志 (开发中)</p>
-			<div class="card">
-				<p>暂无日志</p>
-			</div>
-			<p class="muted">TODO: 实时日志流</p>
-		`;
+		container.classList.add("logs-page");
+
+		const h1 = document.createElement("div");
+		h1.textContent = "日志";
+
+		const tip = document.createElement("p");
+		tip.className = "muted";
+		tip.textContent = "实时日志流 (SSE)";
+
+		const status = document.createElement("div");
+		status.className = "logs-status connecting";
+		status.textContent = "连接中";
+
+		listEl = document.createElement("div");
+		listEl.className = "log-list";
+		listEl.setAttribute("role", "log");
+
+		// 空态占位, 第一条日志到达时移除
+		const empty = document.createElement("p");
+		empty.className = "muted logs-empty";
+		empty.textContent = "暂无日志";
+		listEl.appendChild(empty);
+
+		container.append(h1, status, listEl);
+
+		// 滚动跟随: 接近底部才自动滚动, 上滚即暂停
+		listEl.addEventListener("scroll", () => {
+			const nearBottom = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight < 24;
+			follow = nearBottom;
+		});
+
+		const setStatus = (state, text) => {
+			status.className = `logs-status ${state}`;
+			status.textContent = text;
+		};
+
+		source = new EventSource("/api/get_log_stream");
+		source.addEventListener("open", () => setStatus("on", "已连接"));
+		source.addEventListener("error", () => setStatus("connecting", "重连中…"));
+		source.addEventListener("log", (e) => {
+			try {
+				enqueue(JSON.parse(e.data));
+			} catch (err) {
+				console.warn("[logs] 解析日志条目失败:", err);
+			}
+		});
+	},
+
+	destroy() {
+		source?.close();
+		source = null;
+		listEl = null;
+		follow = true;
+		if (rafId != null) {
+			cancelAnimationFrame(rafId);
+			rafId = null;
+		}
+		queue = [];
 	},
 };
+
+/** 入队一条日志, 统一在下一帧批量渲染 */
+function enqueue(entry) {
+	queue.push(entry);
+	if (rafId != null) return;
+	rafId = requestAnimationFrame(flush);
+}
+
+/** 批量渲染排队中的日志 */
+function flush() {
+	rafId = null;
+	const list = listEl;
+	if (!list) {
+		queue = [];
+		return;
+	}
+
+	const frag = document.createDocumentFragment();
+	for (const entry of queue) {
+		const line = document.createElement("div");
+		const level = entry.level ?? "info";
+		line.className = `log-line level-${level}`;
+		// 单行纯文本, 避免拆成多个 span
+		line.textContent = `[${entry.time}] [${level.toUpperCase()}] [${entry.name}] ${entry.message}`;
+		frag.appendChild(line);
+	}
+	queue = [];
+
+	// 移除空态占位
+	list.querySelector(".logs-empty")?.remove();
+
+	list.appendChild(frag);
+
+	// 行数上限, 丢弃最旧的行
+	while (list.childElementCount > MAX_LINES) {
+		list.removeChild(list.firstElementChild);
+	}
+
+	if (follow) list.scrollTop = list.scrollHeight;
+}

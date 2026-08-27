@@ -44,8 +44,10 @@ body {
 
 	/* 遮罩定位基准 */
 	position: relative;
-	/* 防止长内容撑破 grid 轨道 */
+	/* 防止长内容撑破 grid 轨道: min-height:0 让 1fr 轨道可收缩,
+	   否则内部百分比高度链失效, 内容会撑大 body */
 	min-width: 0;
+	min-height: 0;
 }
 
 /* 页面内容容器: SPA 框架渲染目标 */

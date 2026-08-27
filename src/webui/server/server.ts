@@ -139,7 +139,7 @@ export class WebUIServer {
 		return (
 			typeof candidate.path === "string" &&
 			typeof candidate.method === "string" &&
-			typeof candidate.handler === "function"
+			(typeof candidate.handler === "function" || typeof candidate.stream === "function")
 		);
 	}
 
@@ -156,6 +156,26 @@ export class WebUIServer {
 		this.logger.log(`注册 API: ${api.method.toUpperCase()} ${routePath} (${file})`);
 
 		const routeMethod = method as (typeof supportedMethods)[number];
+
+		// 流式 API (SSE): 直接交给处理器, 由处理器负责连接完整生命周期
+		const stream = api.stream;
+		if (stream) {
+			this.app[routeMethod](routePath, (req, res) => {
+				try {
+					void stream({ core: this.core, req, res });
+				} catch (err) {
+					this.logger.error(`API ${routePath} 处理流式请求时出错`, err);
+					if (res.headersSent) {
+						res.end();
+					} else {
+						res.status(500).json({ error: "Internal Server Error" });
+					}
+				}
+			});
+			return;
+		}
+
+		// 普通 JSON API
 		this.app[routeMethod](routePath, async (_req, res) => {
 			try {
 				// if (!this.core) {
@@ -164,7 +184,7 @@ export class WebUIServer {
 				// 	return;
 				// }
 
-				const result: unknown = await api.handler(this.core);
+				const result: unknown = await api.handler?.(this.core);
 				if (result === undefined) {
 					res.status(204).end();
 				} else if (typeof result === "string") {

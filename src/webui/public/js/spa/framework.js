@@ -14,6 +14,7 @@
  *   id: "bots",                 // 页面唯一标识, 同时作为 hash 路由段
  *   title: "机器人",            // 页面名, 用于按钮悬停提示
  *   icon: "/img/icons/bot.svg", // 侧边栏按钮图标 (SVG 资源路径)
+ *   styles: ["/js/pages/bots/bots.css"], // 可选: 页面专属样式表, 进入时动态加载, 离开时移除
  *   async render(container) {   // 可选: 渲染页面内容到 container (框架提供的页面子容器)
  *     container.textContent = "hello";
  *   },
@@ -31,6 +32,42 @@
  * ```
  */
 import { createOverlay } from "./overlay.js";
+
+/**
+ * 动态加载一组页面样式表
+ *
+ * 为每个 URL 创建 <link rel="stylesheet"> 并插入 <head>, 所有样式加载完成
+ * (或失败) 后 resolve。样式加载失败不阻塞页面渲染, 只记录警告。返回的 link
+ * 元素由框架在页面切换离开时移除, 避免页面样式互相残留。
+ *
+ * @param {string[]} urls 样式表 URL (页面模块的 styles 字段)
+ * @returns {Promise<HTMLLinkElement[]>} 本次创建的 link 元素
+ */
+function loadStyles(urls) {
+	const links = urls.map((href) => {
+		const link = document.createElement("link");
+		link.rel = "stylesheet";
+		link.href = href;
+		document.head.appendChild(link);
+		return link;
+	});
+	return Promise.all(
+		links.map(
+			(link) =>
+				new Promise((resolve) => {
+					link.addEventListener("load", () => resolve(link), { once: true });
+					link.addEventListener(
+						"error",
+						() => {
+							console.warn(`[SPA] 加载页面样式失败: ${link.href}`);
+							resolve(link); // 样式缺失不阻塞页面渲染
+						},
+						{ once: true }
+					);
+				})
+		)
+	);
+}
 
 /**
  * 创建 SPA 应用
@@ -61,7 +98,7 @@ export function createApp(options = {}) {
 	/** @type {Map<string, HTMLButtonElement>} */
 	const buttons = new Map();
 
-	/** @type {{ id: string, page: object } | null} 当前打开的页面 */
+	/** @type {{ id: string, page: object, links: HTMLLinkElement[] } | null} 当前打开的页面 */
 	let current = null;
 	/** 导航序号: 递增, 用于丢弃被后续导航取代的过期加载结果 */
 	let navSeq = 0;
@@ -172,21 +209,32 @@ export function createApp(options = {}) {
 		await overlay.show();
 		if (seq !== navSeq) return; // 淡入期间已被更新的导航取代
 
+		/** @type {HTMLLinkElement[]} 本次导航动态加载的页面样式 */
+		let links = [];
 		try {
 			// 按需加载页面模块 (动态 import, 这是"等待加载"的主要来源)
 			const mod = await def.load();
 			const page = mod.default ?? mod;
 			if (seq !== navSeq) return; // 加载期间已被更新的导航取代
 
-			// 卸载旧页面
+			// 动态加载页面专属样式: 渲染前确保样式就位, 避免无样式闪烁 (FOUC)
+			links = Array.isArray(page.styles) ? await loadStyles(page.styles) : [];
+			if (seq !== navSeq) {
+				// 样式加载期间已被更新的导航取代: 移除刚创建的 link, 防止残留
+				for (const link of links) link.remove();
+				return;
+			}
+
+			// 卸载旧页面 (含其动态加载的样式)
 			if (current) {
 				try {
 					current.page.destroy?.();
 				} catch (err) {
 					console.error(`[SPA] 卸载页面 ${current.id} 时出错:`, err);
 				}
+				for (const link of current.links ?? []) link.remove();
 			}
-			current = { id, page };
+			current = { id, page, links };
 
 			// 渲染新页面: 每次导航使用独立子容器, 过期的渲染结果只会写入
 			// 已脱离文档的节点, 不会污染当前页面的内容
@@ -207,6 +255,8 @@ export function createApp(options = {}) {
 				p.textContent = String(err?.message ?? err);
 				box.append(h, p);
 				root.appendChild(box);
+				// 渲染失败: 一并移除本次已加载的样式, 避免页面样式残留
+				for (const link of links) link.remove();
 				current = null;
 			}
 		} finally {

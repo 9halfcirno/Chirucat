@@ -27,6 +27,13 @@ app.register({
 });
 
 app.register({
+	id: "plugins",
+	title: "插件",
+	icon: "/img/icons/plugin.svg",
+	load: () => import("./js/pages/plugins/plugins.js"),
+});
+
+app.register({
 	id: "logs",
 	title: "日志",
 	icon: "/img/icons/log.svg",

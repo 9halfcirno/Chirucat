@@ -10,6 +10,7 @@ export default {
 	id: "home",
 	title: "首页",
 	icon: "🏠",
+	styles: ["/js/pages/home/home.css"],
 
 	async render(container) {
 		const h1 = document.createElement("h1");

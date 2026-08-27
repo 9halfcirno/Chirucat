@@ -1,0 +1,74 @@
+/* ---- 日志页面 ---- */
+/* 页面纵向布局: 日志列表占满剩余高度并内部滚动 */
+.logs-page {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	height: 100%;
+}
+
+/* 连接状态: 圆点用伪元素, 不用额外 span */
+.logs-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 0.85em;
+	color: #888;
+}
+
+.logs-status::before {
+	content: "";
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #f0ad4e; /* 连接中/重连中: 黄 */
+}
+
+.logs-status.on::before {
+	background: #5cb85c; /* 已连接: 绿 */
+}
+
+.logs-status.off::before {
+	background: #d9534f; /* 已断开: 红 */
+}
+
+/* 日志列表: 深色终端风格, 内部滚动 */
+.log-list {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+
+	background: rgba(20, 24, 32, 0.92);
+	border-radius: 12px;
+	padding: 12px 16px;
+	font-family: Consolas, Monaco, "Courier New", monospace;
+	font-size: 0.5em;
+	line-height: 1.7;
+	color: #cfd6e4;
+}
+
+.log-line {
+	white-space: pre-wrap;
+	word-break: break-all;
+}
+
+/* 日志级别配色 */
+.log-line.level-debug {
+	color: #8b95a7;
+}
+
+.log-line.level-info {
+	color: #d4e6ff;
+}
+
+.log-line.level-warn {
+	color: #f0ad4e;
+}
+
+.log-line.level-error {
+	color: #ff7b72;
+}
+
+.logs-empty {
+	margin: 0;
+}

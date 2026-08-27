@@ -68,7 +68,7 @@ body {
 	box-shadow: var(--glass-shadow);
 
 	/* 顶部导航下方开始, 与内容区间距 24px */
-	margin: 24px 0 24px 24px;
+	margin: 24px 12px 24px 24px;
 
 	align-items: center;
 
@@ -84,7 +84,7 @@ body {
 	border-radius: 24px;
 	border: var(--glass-border);
 	/* 与导航胶囊间距及屏幕四边统一留 24px */
-	margin: 24px;
+	margin: 12px;
 }
 
 .main-nav-btn:hover {
@@ -95,4 +95,37 @@ body {
 .main-nav-btn.active {
 	background-color: rgba(74, 144, 217, 0.35);
 	box-shadow: inset 0 0 0 2px rgba(74, 144, 217, 0.6);
+}
+
+/* ---- 滚动条: 半透明圆头线条 (覆盖浏览器默认样式) ---- */
+* {
+	/* Firefox: 细滚动条 + 半透明滑块 */
+	scrollbar-width: thin;
+	scrollbar-color: rgba(128, 128, 128, 0.35) transparent;
+}
+
+/* WebKit (Chrome/Edge/Safari): 细线条滑块 */
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: rgba(128, 128, 128, 0.35);
+	border-radius: 999px;
+	/* 透明边框 + content-box: 滑块内缩 2px, 不贴容器边缘 */
+	border: 2px solid transparent;
+	background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: rgba(128, 128, 128, 0.55);
+}
+
+::-webkit-scrollbar-corner {
+	background: transparent;
 }

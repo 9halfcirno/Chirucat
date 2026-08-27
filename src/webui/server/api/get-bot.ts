@@ -12,6 +12,7 @@ const api: WebUIAPI = {
 			bots: bots.values().toArray().map(bot => {
 				return {
 					id: bot.id,
+					name: bot.name,
 					state: bot.state
 				}
 			})
