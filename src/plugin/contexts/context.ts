@@ -13,6 +13,7 @@ import type { MessageCallbackEntry, PluginCommandAPI, PluginMessageAPI } from ".
 export class PluginContext {
 	protected _bot: Bot;
 
+	logger: Logger;
 	message: PluginMessageAPI;
 
 	private _onMessageCallback: MessageCallbackEntry[] = [];
@@ -21,6 +22,7 @@ export class PluginContext {
 
 	constructor(bot: Bot, manifest: PluginManifest) {
 		this._bot = bot;
+		this.logger = new Logger(`Plugin ${manifest.id}`);
 		this.message = new MessageAPI((entry) => {
 			this._onMessageCallback.push(entry);
 		});
@@ -71,7 +73,8 @@ export class PluginContext {
 	/**
 	 * 清理插件副作用
 	 */
-	destroy() {
+	dispose() {
+		this._onMessageCallback = []; // 置空;
 		// 清理指令
 		for (let com of this._commands.values()) {
 			this._bot.command.unregister(com)

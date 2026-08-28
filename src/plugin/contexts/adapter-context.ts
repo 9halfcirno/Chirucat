@@ -55,4 +55,9 @@ export class AdapterContext extends PluginContext {
 			handler(action, extra)
 		}
 	}
+
+	override dispose(): void {
+		super.dispose();
+		this.actionHandlers = [];
+	}
 }

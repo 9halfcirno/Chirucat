@@ -1,5 +1,7 @@
+import fs from "fs/promises";
 import path from "path";
 import { PluginManager } from "../plugin/manager";
+import { BotStateFile } from "./state-file";
 import { MessageHandler } from "./message-handler";
 import type { BotConfig, BotState } from "./types";
 import type { BotEventMeta, BotEvents } from "../protocols/events";
@@ -11,6 +13,7 @@ import type { BotActions } from "../protocols/actions";
 
 // 虽然不知道继承Emitter有什么用吧
 export class Bot extends EventEmitter {
+	private _inited = false;
 	id: string;
 	name: string | null = null;
 	path: string;
@@ -18,25 +21,73 @@ export class Bot extends EventEmitter {
 	command = new CommandManager({});
 	plugin = new PluginManager(this);
 
-	constructor(config: BotConfig, readonly core: Core, private _state: BotState) {
+	private _state: BotState;
+	private stateFile: BotStateFile;
+
+	/** Bot 是否处于运行中(已启动且未停止) */
+	running = false;
+
+	constructor(config: BotConfig, readonly core: Core, state: BotState) {
 		super();
 		this.path = config.path;
 		this.id = config.id;
 		this.name = config.name || null;
+		this.stateFile = new BotStateFile(path.join(this.path, "state.json"), state);
+		this._state = this.stateFile.proxy;
 	}
+
 
 	get state() {
 		return this._state;
 	}
 
+	/**
+	 * 开启Bot, 并设置状态为true(显式写回state.json)
+	 */
 	async start() {
-		await this.plugin.scan("plugins", path.join(this.path, "plugins"));
+		if (this.running) return; // 幂等
+		this._state.enable = true;
+		await this.saveState();
 
-		await this.plugin.load(this._state.plugins) // 用bot state加载插件
+		await this.plugin.scan({ global: "plugins", bot: path.join(this.path, "plugins") });
+		await this.plugin.syncState();
+		this.running = true;
 	}
 
+	/**
+	 * 关闭Bot: 卸载全部启用插件, 设置状态为false(显式写回state.json)
+	 */
 	async stop() {
-		// TODO
+		if (!this.running) return; // 幂等
+		this.running = false; // 先置位, 防止重入
+		for (const plugin of [...this.plugin.enabledPlugins]) {
+			await this.plugin.unload(plugin.id);
+		}
+		this._state.enable = false;
+		await this.saveState();
+	}
+
+	/**
+	 * 显式保存状态到 state.json。
+	 * 对 state 的修改只更新内存, 不会自动落盘; 需要持久化时必须调用本方法。
+	 */
+	async saveState() {
+		await this.stateFile.save();
+	}
+
+	/**
+	 * 从状态文件重读状态, 并让插件启停收敛到新状态
+	 */
+	async syncState() {
+		await this.stateFile.reload();
+		await this.plugin.syncState();
+	}
+
+	/**
+	 * 仅从状态文件重读, 不收敛插件(供 BotManager.syncState 等批量收敛场景使用)
+	 */
+	async reloadState() {
+		await this.stateFile.reload();
 	}
 
 	dispatch(event: BotEvents, meta: BotEventMeta) {

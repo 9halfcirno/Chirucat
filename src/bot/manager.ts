@@ -52,9 +52,11 @@ export class BotManager {
 	}
 
 	async start(...ids: string[]) {
-		// TODO: 没传参启动所有
+		// 未指定id时, 启动所有 enable 状态的Bot
 		if (ids.length === 0) {
-
+			ids = [...this.bots.values()]
+				.filter(bot => bot.state.enable)
+				.map(bot => bot.id);
 		}
 		for (let id of ids) {
 			if (!this.bots.has(id)) throw new Error(`Bot ${id} 不存在`)
@@ -64,6 +66,48 @@ export class BotManager {
 			await bot.start();
 			logger.log(`Bot: Bot ${id} 启动成功`);
 			
+		}
+	}
+
+	async stop(...ids: string[]) {
+		if (ids.length === 0) {
+			ids = [...this.bots.values()]
+				.filter(bot => bot.state.enable)
+				.map(bot => bot.id);
+		}
+		for (let id of ids) {
+			if (!this.bots.has(id)) throw new Error(`Bot ${id} 不存在`)
+
+			const bot = this.bots.get(id)!;
+
+			await bot.stop();
+			logger.log(`Bot: Bot ${id} 停止成功`);
+
+		}
+	}
+
+	/**
+	 * 同步所有Bot的启停状态: 让运行状态收敛到各Bot的state.json(enable)
+	 * - 先重读各Bot的state.json
+	 * - enable=true 且未运行 → 启动
+	 * - enable=false 且运行中 → 停止
+	 */
+	async syncState() {
+		for (const bot of this.bots.values()) {
+			// 先重读文件, 使内存状态与 state.json 一致
+			await bot.reloadState();
+
+			if (bot.state.enable) {
+				if (!bot.running) {
+					await bot.start();
+					logger.log(`Bot: Bot ${bot.id} 启动成功`);
+				}
+			} else {
+				if (bot.running) {
+					await bot.stop();
+					logger.log(`Bot: Bot ${bot.id} 已停止`);
+				}
+			}
 		}
 	}
 }

@@ -49,7 +49,7 @@ export class Core {
 
 		
 		await this.bot.scan(path.join(root, "bots")) // 扫描bot目录
-
+		await this.bot.syncState();
 
 	}
 }
