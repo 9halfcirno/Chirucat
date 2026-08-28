@@ -9,6 +9,22 @@ import { root } from "../../utils/root";
 import type { Core } from "../../core";
 import type { WebUIAPI } from "./types";
 
+/**
+ * handler 抛出的自定义错误对象, 用于向前端返回带 HTTP 状态码的错误响应。
+ * 形如 { err: "错误信息", code: 400 }, 其中 code 作为 HTTP 状态码。
+ */
+interface APIError {
+	err: string;
+	code: number;
+}
+
+/** 判断抛出的对象是否为 { err, code } 形式的 API 错误 */
+function isAPIError(err: unknown): err is APIError {
+	if (!err || typeof err !== "object") return false;
+	const candidate = err as Record<string, unknown>;
+	return typeof candidate.err === "string" && typeof candidate.code === "number";
+}
+
 /** WebUI 服务器配置选项 */
 export interface WebUIServerOptions {
 	/** 监听端口, 默认 7636 */
@@ -184,7 +200,7 @@ export class WebUIServer {
 				// 	return;
 				// }
 
-				const result: unknown = await api.handler?.(this.core);
+				const result: unknown = await api.handler?.(_req, this.core);
 				if (result === undefined) {
 					res.status(204).end();
 				} else if (typeof result === "string") {
@@ -194,6 +210,17 @@ export class WebUIServer {
 				}
 			} catch (err) {
 				this.logger.error(`API ${routePath} 处理请求时出错`, err);
+
+				// handler 可抛出 { err, code } 对象, 将 code 作为 HTTP 状态码, 原样返回给前端
+				if (isAPIError(err)) {
+					const status =
+						Number.isInteger(err.code) && err.code >= 400 && err.code <= 599
+							? err.code
+							: 500;
+					res.status(status).json({ err: err.err, code: status });
+					return;
+				}
+
 				res.status(500).json({ error: "Internal Server Error" });
 			}
 		});

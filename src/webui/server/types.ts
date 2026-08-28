@@ -9,8 +9,8 @@ export interface WebUIAPI {
 	/** 是否鉴权 */
 	auth: boolean;
 
-	/** 普通 JSON 处理器 (与 stream 二选一) */
-	handler?(ctx?: Core): Record<string, any> | string;
+	/** 普通 JSON 处理器 (与 stream 二选一)。可抛出 { err, code } 对象定制错误响应, code 作为 HTTP 状态码 */
+	handler?(req: Request, ctx?: Core): Record<string, any> | string | Promise<string> | Promise<Record<string, any>>;
 	/** 流式处理器 (SSE 等), 负责管理连接的完整生命周期 (与 handler 二选一) */
 	stream?(ctx: StreamContext): void | Promise<void>;
 }

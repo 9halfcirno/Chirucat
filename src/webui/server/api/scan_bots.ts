@@ -1,12 +1,17 @@
+import path from "path";
 import type { WebUIAPI } from "../types";
+import { root } from "../../../utils/root";
 
 const api: WebUIAPI = {
-	path: "get_bot_list",
+	path: "scan_bots",
 	method: "GET",
 	auth: true,
 
-	handler(core) {
+	async handler(_, core) {
 		if (!core) return [];
+
+		await core.bot.scan(path.join(root, "bots"));
+
 		const bots = core.bot.bots;
 		return {
 			bots: bots.values().toArray().map(bot => {
