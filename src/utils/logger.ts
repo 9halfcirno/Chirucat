@@ -152,7 +152,7 @@ export default class Logger {
             : level === "warn" ? console.warn
             : level === "debug" ? console.debug
             : console.log;
-        consoleFn(`[${this.name}][${time}][${level.toUpperCase()}]`, ...args);
+        consoleFn(`[${time}][${level.toUpperCase()}][${this.name}]`, ...args);
 
         // 写入日志流（供文件 / WebUI 等订阅者使用）
         this.stream?.push({

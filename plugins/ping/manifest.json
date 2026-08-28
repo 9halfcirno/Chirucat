@@ -3,7 +3,7 @@
 	"version": "0.0.0",
 	"name": "Ping",
 	"author": "9halfcirno",
-	"main": "index.js",
+	"main": "index.ts",
 	"dependencies": {
 		"des": "any"
 	}

@@ -1,19 +1,30 @@
 /* ---- 机器人页面: bot 卡片列表 ---- */
 /* bot 卡片容器: flex 布局, 自动换行, 卡片间距统一 */
 .bot-list {
-	display: flex;
-	flex-wrap: wrap;
+	display: grid;
 	gap: 16px;
-	align-items: stretch;
+	/* 默认：单行 1 个，占满全宽 */
+	grid-template-columns: 1fr;
+}
+
+/* 屏幕足够放下 2 个卡片时（假设临界点为 600px） */
+@media (min-width: 600px) {
+	.bot-list {
+		/* 每排 2 个，且平分剩余空间 */
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+
+/* 屏幕足够放下 3 个卡片时（假设临界点为 900px） */
+@media (min-width: 900px) {
+	.bot-list {
+		/* 每排 3 个，且平分剩余空间 */
+		grid-template-columns: repeat(3, 1fr);
+	}
 }
 
 .bot-card {
-	/* 弹性宽度: 每行放不下时自动换行 */
-	flex: 1 1 280px;
-	max-width: 100%;
 	box-sizing: border-box;
-
-	/* 卡片内部纵向排列 */
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
@@ -66,4 +77,17 @@
 	background: rgba(136, 136, 136, 0.15);
 	border: 1px solid rgba(136, 136, 136, 0.45);
 	color: #777;
+}
+
+.bot-refresh-btn {
+	all: unset;
+	display: block;
+	width: 2rem;
+	height: 2rem;
+	margin-left: auto;
+}
+
+.bot-refresh-btn img {
+	width: 100%;
+	height: 100%;
 }

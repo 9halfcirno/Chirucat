@@ -11,16 +11,21 @@ export default {
 	styles: ["/js/pages/bots/bots.css"],
 
 	async render(container) {
-		const h1 = document.createElement("div");
-		h1.textContent = "机器人";
 
 		const tip = document.createElement("p");
 		tip.className = "muted";
 		tip.textContent = "管理机器人实例";
 
-		container.append(h1, tip);
+		container.append(tip);
 
-		// bot 卡片容器: flex 布局, 卡片自动换行
+		const refresh = document.createElement("button");
+		refresh.classList.add("bot-refresh-btn");
+		let svg = document.createElement("img");
+		svg.src = "/img/icons/refresh.svg";
+		refresh.append(svg)
+		container.append(refresh);
+
+		// bot 卡片容器
 		const list = document.createElement("div");
 		list.className = "bot-list";
 		container.appendChild(list);
@@ -72,7 +77,7 @@ function createBotCard(bot) {
 	const enabled = Boolean(bot.state?.enable);
 	const badge = document.createElement("span");
 	badge.className = enabled ? "badge badge-on" : "badge badge-off";
-	badge.textContent = enabled ? "已启用" : "已停用";
+	badge.textContent = enabled ? "已启用" : "未启用";
 	head.appendChild(badge);
 
 	// id 标识
@@ -80,14 +85,7 @@ function createBotCard(bot) {
 	id.className = "bot-card-id";
 	id.textContent = bot.id;
 
-	// 启用的插件列表
-	const plugins = Object.entries(bot.state?.plugins ?? {})
-		.filter(([, on]) => on)
-		.map(([name]) => name);
-	const pluginsEl = document.createElement("p");
-	pluginsEl.className = "muted bot-card-plugins";
-	pluginsEl.textContent = plugins.length > 0 ? `启用插件: ${plugins.join("、")}` : "未启用插件";
 
-	card.append(head, id, pluginsEl);
+	card.append(head, id);
 	return card;
 }
