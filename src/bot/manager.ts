@@ -22,6 +22,7 @@ export class BotManager {
 		await dirCheck(botDir);
 
 
+		const seen = new Set<string>();	// 本次扫描到的Bot id
 		const dirs = await fs.readdir(botDir);
 		for (let dir of dirs) {
 			try {
@@ -42,11 +43,19 @@ export class BotManager {
 				) as BotState
 
 				const bot = new Bot(config, this.core, state);
+				seen.add(bot.id);
 
 				this.bots.set(bot.id, bot);
 
 			} catch (e) {
 
+			}
+		}
+
+		// 清理悬空条目: 目录中已消失且未运行的Bot(运行中的Bot可能持有异步流程引用, 不清理)
+		for (const [id, bot] of [...this.bots]) {
+			if (!seen.has(id) && !bot.running) {
+				this.bots.delete(id);
 			}
 		}
 	}

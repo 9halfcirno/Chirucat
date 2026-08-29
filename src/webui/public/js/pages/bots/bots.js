@@ -44,7 +44,7 @@ export default {
 		const load = async (fromRefresh = false) => {
 			refresh.classList.add("loading");
 			try {
-				const res = await fetch("/api/get_bot_list");
+				const res = await fetch("/api/scan_bots");
 				if (!res.ok) throw new Error(`HTTP ${res.status}`);
 				const data = await res.json();
 				const bots = Array.isArray(data.bots) ? data.bots : [];
