@@ -11,7 +11,9 @@ import type { WebUIServer } from "./webui/server/server";
 const logger = new Logger("Core")
 
 export class Core {
-	
+	config: CoreOption = {
+		webui: true
+	};
 	bot = new BotManager(this)
 	user: UserManager | null = null;
 	session: SessionManager | null = null;
@@ -19,19 +21,7 @@ export class Core {
 	webui: WebUIServer | null = null;
 
 	constructor(config?: CoreOption) {
-		config = Object.assign({
-			webui: true
-		}, config)
-
-		if (config.webui) {
-			import("./webui/server/server").then(module => {
-				const server = module.WebUIServer;
-				const webui = new server({ core: this })
-				this.webui = webui;
-			}).catch(e => {
-				logger.error(`初始化WebUI失败: ${e.message}`, e)
-			})
-		}
+		this.config = Object.assign(this.config, config)
 	}
 
 	async init() {
@@ -45,6 +35,15 @@ export class Core {
 		this.user.init()
 		this.session.init()
 
+		if (this.config.webui) {
+			await import("./webui/server/server").then(module => {
+				const server = module.WebUIServer;
+				const webui = new server({ core: this })
+				this.webui = webui;
+			}).catch(e => {
+				logger.error(`初始化WebUI失败: ${e.message}`, e)
+			})
+		}
 		await this.webui?.start();
 
 		

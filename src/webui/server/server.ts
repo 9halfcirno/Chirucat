@@ -96,7 +96,7 @@ export class WebUIServer {
 				resolve();
 				return;
 			}
-
+			this.server.closeAllConnections();
 			this.server.close(() => {
 				this.logger.log("WebUI 服务器已停止");
 				resolve();
