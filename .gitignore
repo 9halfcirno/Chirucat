@@ -1,5 +1,5 @@
 node_modules/
-bots/chirucat/plugins/qq-adapter/
+bots/
 data/
 .codewhale/
 src/webui/public/img/bg.jpg

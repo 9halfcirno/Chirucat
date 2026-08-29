@@ -1,7 +1,0 @@
-{
-	"enable": true,
-	"plugins": {
-		"ping": true,
-		"qq-adapter": true
-	}
-}
