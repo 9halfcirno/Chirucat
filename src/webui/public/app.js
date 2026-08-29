@@ -5,6 +5,7 @@
  * 新增页面时, 在这里调用 app.register() 即可, 侧边栏按钮会自动生成。
  */
 import { createApp } from "./js/spa/framework.js";
+import toast from "./js/spa/toast.js";
 
 const app = createApp({
 	main: document.getElementById("main"),
@@ -72,4 +73,17 @@ if (navToggle && mainNav) {
 
 	// 导航切换后自动收起抽屉 (侧边栏按钮/前进后退都会改 hash)
 	window.addEventListener("hashchange", () => setNavOpen(false));
+}
+
+
+window.onerror = (e, source) => {
+	toast(`Error: ${e} file: ${source}`, {
+		type: "error"
+	})
+}
+
+window.onunhandledrejection = (e) => {
+	toast(`Error: ${e.reason}`, {
+		type: "error"
+	})
 }

@@ -3,56 +3,77 @@
  *
  * 调用后端 GET /api/get_bot_list 获取机器人列表, 以卡片形式展示。
  * 卡片容器使用 flex 布局 (见 layout.css 的 .bot-list)。
+ * 页面头部右侧提供圆形刷新按钮, 点击后重新拉取列表, 并通过 Toast 提示结果。
  */
+import toast from "../../spa/toast.js";
 export default {
 	id: "bots",
 	title: "机器人",
-	icon: "🤖",
 	styles: ["/js/pages/bots/bots.css"],
 
 	async render(container) {
 
+		// 页面头部: 左侧说明文字, 右侧圆形刷新按钮
+		const head = document.createElement("div");
+		head.className = "bots-head";
+
 		const tip = document.createElement("p");
 		tip.className = "muted";
 		tip.textContent = "管理机器人实例";
-
-		container.append(tip);
+		head.append(tip);
 
 		const refresh = document.createElement("button");
+		refresh.type = "button";
 		refresh.classList.add("bot-refresh-btn");
-		let svg = document.createElement("img");
-		svg.src = "/img/icons/refresh.svg";
-		refresh.append(svg)
-		container.append(refresh);
+		refresh.title = "刷新机器人列表";
+		refresh.setAttribute("aria-label", "刷新机器人列表");
+		const icon = document.createElement("img");
+		icon.src = "/img/icons/refresh.svg";
+		icon.alt = "";
+		refresh.append(icon);
+		head.append(refresh);
+
+		container.append(head);
 
 		// bot 卡片容器
 		const list = document.createElement("div");
 		list.className = "bot-list";
 		container.appendChild(list);
 
-		try {
-			const res = await fetch("/api/get_bot_list");
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			const data = await res.json();
-			const bots = Array.isArray(data.bots) ? data.bots : [];
+		// 拉取并渲染机器人列表; 刷新按钮点击时重复调用
+		const load = async (fromRefresh = false) => {
+			refresh.classList.add("loading");
+			try {
+				const res = await fetch("/api/get_bot_list");
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				const data = await res.json();
+				const bots = Array.isArray(data.bots) ? data.bots : [];
 
-			if (bots.length === 0) {
-				const empty = document.createElement("p");
-				empty.className = "muted";
-				empty.textContent = "暂无机器人, 在 bots/ 目录下创建";
-				list.replaceChildren(empty);
-				return;
-			}
+				if (bots.length === 0) {
+					const empty = document.createElement("p");
+					empty.className = "muted";
+					empty.textContent = "暂无机器人, 在 bots/ 目录下创建";
+					list.replaceChildren(empty);
+					if (fromRefresh) toast("机器人列表已刷新");
+					return;
+				}
 
-			for (const bot of bots) {
-				list.appendChild(createBotCard(bot));
+				list.replaceChildren(...bots.map(createBotCard));
+				if (fromRefresh) toast("机器人列表已刷新");
+			} catch (err) {
+				// const box = document.createElement("div");
+				// box.className = "page-error";
+				// box.textContent = `获取机器人列表失败: ${err.message}`;
+				// list.replaceChildren(box);
+				if (fromRefresh) toast(`刷新失败: ${err.message}`, { type: "error", duration: 5000 });
+			} finally {
+				refresh.classList.remove("loading");
 			}
-		} catch (err) {
-			const box = document.createElement("div");
-			box.className = "page-error";
-			box.textContent = `获取机器人列表失败: ${err.message}`;
-			list.replaceChildren(box);
-		}
+		};
+
+		refresh.addEventListener("click", () => load(true));
+
+		await load();
 	},
 };
 
@@ -69,16 +90,56 @@ function createBotCard(bot) {
 	const head = document.createElement("div");
 	head.className = "bot-card-head";
 
-	const name = document.createElement("span");
+	const name = document.createElement("div");
 	name.className = "bot-card-name";
 	name.textContent = bot.name || bot.id;
 	head.appendChild(name);
 
 	const enabled = Boolean(bot.state?.enable);
-	const badge = document.createElement("span");
+	const badge = document.createElement("button");
+	badge.type = "button";
 	badge.className = enabled ? "badge badge-on" : "badge badge-off";
-	badge.textContent = enabled ? "已启用" : "未启用";
+	badge.title = enabled ? "点击停用" : "点击启用";
+	badge.setAttribute("aria-label", badge.title);
+	badge.setAttribute("aria-pressed", String(enabled));
 	head.appendChild(badge);
+
+	let handling = false;
+	badge.onclick = async () => {
+		if (handling || badge.disabled) return;
+		handling = true;
+		badge.classList.add("loading");
+		badge.disabled = true;
+
+		const next = !badge.classList.contains("badge-on");
+		try {
+			const res = await fetch("/api/set_bot_state", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ id: bot.id, state: next }),
+			}).then((r) => r.json());
+
+			if (res.success) {
+				badge.classList.toggle("badge-on", next);
+				badge.classList.toggle("badge-off", !next);
+				const label = next ? "点击停用" : "点击启用";
+				badge.title = label;
+				badge.setAttribute("aria-label", label);
+				badge.setAttribute("aria-pressed", String(next));
+				toast((bot.name ?? bot.id) + (next ? "已启用" : "已停用"));
+			} else {
+				toast(`设置状态失败: ${res.err || "未知错误"}`, { type: "error", duration: 5000 });
+			}
+		} catch (err) {
+			toast(`设置Bot状态失败: ${err.message}`, { type: "error", duration: 5000 });
+		} finally {
+			handling = false;
+			badge.classList.remove("loading");
+			badge.disabled = false;
+		}
+	};
 
 	// id 标识
 	const id = document.createElement("code");
