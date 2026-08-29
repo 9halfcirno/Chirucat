@@ -1,8 +1,8 @@
 import path from "path";
 import { BotManager } from "./bot/manager";
-import { UserManager } from "./user-manager";
+import { UserManager } from "./internal/user-manager";
 import { root } from "./utils/root";
-import { SessionManager } from "./session-manager";
+import { SessionManager } from "./internal/session-manager";
 import type { CoreOption } from "./types";
 import Logger from "./utils/logger";
 import { dirCheck } from "./utils/dir-check";

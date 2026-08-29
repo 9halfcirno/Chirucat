@@ -1,6 +1,6 @@
 import sqlite from "better-sqlite3"
-import { uuid } from "./utils/uuid";
-import type { SessionType } from "./protocols/session";
+import { uuid } from "../utils/uuid";
+import type { SessionType } from "../protocols/session";
 
 export type SessionPlatformInfo = {
 	/** 会话平台id */

@@ -1,5 +1,5 @@
 import sqlite from "better-sqlite3";
-import { uuid } from "./utils/uuid";
+import { uuid } from "../utils/uuid";
 
 export type UserPlatformInfo = {
 	/** 用户平台id */

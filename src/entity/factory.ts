@@ -1,7 +1,7 @@
 import type { Bot } from "../bot/bot";
 import type { BotEventMeta, BotEvents } from "../protocols/events";
-import type { SessionManager } from "../session-manager";
-import type { UserManager } from "../user-manager";
+import type { SessionManager } from "../internal/session-manager";
+import type { UserManager } from "../internal/user-manager";
 import { Message } from "./message";
 
 const EntityFactory = {

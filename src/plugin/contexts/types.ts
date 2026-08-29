@@ -3,8 +3,8 @@ import type { Message } from "../../entity/message";
 import type { BotActions } from "../../protocols/actions";
 import type { BotEvents } from "../../protocols/events";
 import type { SessionType } from "../../protocols/session";
-import type { SessionPlatformInfo } from "../../session-manager";
-import type { UserPlatformInfo } from "../../user-manager";
+import type { SessionPlatformInfo } from "../../internal/session-manager";
+import type { UserPlatformInfo } from "../../internal/user-manager";
 
 export type PluginMessageCallback = (message: Message) => unknown;
 
