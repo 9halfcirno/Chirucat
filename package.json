@@ -11,6 +11,7 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
+    "app": "tsx src/app.ts",
     "test": "tsx test.ts",
     "webui": "tsx src/webui/server/server.ts"
   },
@@ -19,7 +20,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^26.1.1",
     "@types/ws": "^8.18.1",
-    "tsx": "^4.23.1"
+    "tsx": "^4.23.4"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

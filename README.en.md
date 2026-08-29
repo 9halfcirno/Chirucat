@@ -71,7 +71,7 @@ Then enable the plugins you want in the bot's `state.json`:
 In the project folder, run:
 
 ```bash
-npm test
+npm run app
 ```
 
 Your bot is now running according to the config.

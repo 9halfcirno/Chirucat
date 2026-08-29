@@ -74,7 +74,7 @@ npm install
 在项目文件夹执行：
 
 ```bash
-npm test
+npm run app
 ```
 
 机器人就按配置跑起来了。

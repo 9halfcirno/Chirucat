@@ -52,4 +52,9 @@ export class Core {
 		await this.bot.syncState();
 
 	}
+
+	async close() {
+		await this.bot.stop(); // 关闭bot
+		await this.webui?.close() // 停止webui
+	}
 }

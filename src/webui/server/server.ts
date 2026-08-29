@@ -146,6 +146,7 @@ export class WebUIServer {
 
 			this.registerAPI(api, file);
 		}
+		this.logger.log(`后端API端点注册完成`)
 	}
 
 	/** 校验模块默认导出是否为合法的 WebUIAPI 定义 */
@@ -169,7 +170,7 @@ export class WebUIServer {
 		}
 
 		const routePath = `/api/${api.path.replace(/^\/+/, "")}`;
-		this.logger.log(`注册 API: ${api.method.toUpperCase()} ${routePath} (${file})`);
+		// this.logger.log(`注册 API: ${api.method.toUpperCase()} ${routePath} (${file})`);
 
 		const routeMethod = method as (typeof supportedMethods)[number];
 
