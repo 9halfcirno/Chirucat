@@ -11,7 +11,7 @@
 	align-items: center;
 	justify-content: center;
 
-	background: rgba(240, 248, 255, 0.55);
+	background: rgba(240, 248, 255, 0.5);
 	backdrop-filter: blur(2px);
 
 	/* 淡入淡出: 默认透明, 显示时由 overlay.js 加 .spa-overlay-visible

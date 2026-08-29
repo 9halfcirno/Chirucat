@@ -25,6 +25,7 @@ body {
 #top-nav .brand {
 	font-size: 1.05em;
 	font-weight: 600;
+	/* height: 75%; */
 	letter-spacing: 0.02em;
 	color: rgba(0, 0, 0, 0.75);
 }
@@ -80,7 +81,7 @@ body {
 	/* background-color: var(--glass-bg); */
 	backdrop-filter: blur(var(--glass-blur));
 	box-shadow: var(--glass-shadow);
-	background-color: rgba(255, 255, 255, 0.6);
+	background-color: rgba(255, 255, 255, 0.4);
 	border-radius: 24px;
 	border: var(--glass-border);
 	/* 与导航胶囊间距及屏幕四边统一留 24px */

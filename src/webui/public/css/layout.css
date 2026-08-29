@@ -26,6 +26,7 @@ body {
 	display: flex;
 	align-items: center;
 	min-height: 56px;
+	max-height: 20%;
 	box-sizing: border-box;
 	padding: 0 24px;
 }
