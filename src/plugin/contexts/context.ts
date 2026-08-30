@@ -1,7 +1,7 @@
 import type { Bot } from "../../bot/bot";
 import type { Command } from "../../command/types";
 import type { Entity } from "../../entity/entity";
-import type { Message } from "../../entity/message";
+import { Message } from "../../entity/message";
 import type { BotActions } from "../../protocols/actions";
 import type { PluginManifest } from "../types";
 import { MessageAPI } from "./apis/message";
@@ -38,7 +38,8 @@ export class PluginContext {
 		this.message = new MessageAPI((entry) => {
 			this._onMessageCallback.push(entry);
 		});
-		this._storageRoot = path.join(root, bot.path, "data", "plugins", manifest.id);
+		// bot.path 为绝对路径, resolve 会从其重置; 若为相对路径则以 root 为基准
+		this._storageRoot = path.resolve(root, bot.path, "data", "plugins", manifest.id);
 		this.fs = new FileSystemAPI(this._storageRoot);
 		this._kv = new KVStore(path.join(this._storageRoot, ".kv.db"));
 		this.kv = this._kv;
@@ -56,6 +57,9 @@ export class PluginContext {
 			this._commands.delete(command);
 			this._bot.command.unregister(command);
 		},
+		exec: (message: Message | string, args?: (string | number)[]) => {
+			return message instanceof Message ? this._bot.command.exec(message) : this._bot.command.exec(message, args || []);
+		}
 	}
 
 	/**

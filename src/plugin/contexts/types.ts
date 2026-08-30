@@ -33,8 +33,29 @@ export interface PluginMessageAPI {
 }
 
 export interface PluginCommandAPI {
+	/**
+	 * 注册指令
+	 * @param name 指令名, 可包含空格
+	 * @param handler 指令回调
+	 */
 	register(name: string, handler: Command["handler"]): Command;
+	/**
+	 * 注销指令
+	 * @param command 要注销的指令
+	 */
 	unregister(command: Command): void
+	/**
+	 * 使用纯文本和参数触发指令
+	 * @param name 指令名
+	 * @param args 参数
+	 */
+	exec(name: string, args: (string | number)[]): boolean;
+	/**
+	 * 对消息进行匹配
+	 * @param message 进行匹配的消息
+	 * @returns true为匹配到指令, false为未匹配
+	 */
+	exec(message: Message): boolean;
 }
 
 export interface PluginFileSystemAPI {
