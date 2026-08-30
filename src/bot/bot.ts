@@ -10,10 +10,12 @@ import type { Core } from "../core";
 import { CommandManager } from "../command/manager";
 import EventEmitter from "events";
 import type { BotActions } from "../protocols/actions";
+import Logger from "../utils/logger";
 
 // 虽然不知道继承Emitter有什么用吧
 export class Bot extends EventEmitter {
 	private _inited = false;
+	logger: Logger;
 	id: string;
 	name: string | null = null;
 	path: string;
@@ -29,6 +31,7 @@ export class Bot extends EventEmitter {
 
 	constructor(config: BotConfig, readonly core: Core, state: BotState) {
 		super();
+		this.logger = new Logger(`Bot ${config.id}`)
 		this.path = config.path;
 		this.id = config.id;
 		this.name = config.name || null;
