@@ -42,6 +42,12 @@ export class BotManager {
 					})
 				) as BotState
 
+				// 已存在的实例不重建: 重建会丢失 running 等运行态, 仅更新注册表对账
+				if (this.bots.has(config.id)) {
+					seen.add(config.id);
+					continue;
+				}
+
 				const bot = new Bot(config, this.core, state);
 				seen.add(bot.id);
 
