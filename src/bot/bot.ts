@@ -58,7 +58,7 @@ export class Bot extends EventEmitter {
 	}
 
 	/**
-	 * 关闭Bot: 卸载全部启用插件, 设置状态为false(显式写回state.json)
+	 * 关闭Bot: 卸载全部启用插件, 设置状态为false
 	 */
 	async stop() {
 		if (!this.running) return; // 幂等
@@ -67,7 +67,6 @@ export class Bot extends EventEmitter {
 			await this.plugin.unload(plugin.id);
 		}
 		this._state.enable = false;
-		await this.saveState();
 	}
 
 	/**

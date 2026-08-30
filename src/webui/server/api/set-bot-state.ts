@@ -13,14 +13,16 @@ export default {
 	auth: true,
 	path: "set_bot_state",
 	
-	handler(req, core) {
+	async handler(req, core) {
 		if (!core) throw { err: "WebUI未连接到核心", code: 503 }
 		let id = `${req.body.id}`;
 		if (!core.bot.bots.has(id)) throw { code: 404, err: "目标Bot不存在" };
 		let state = !!req.body.state; // 转布尔
-
+		let bot = core.bot.bots.get(id)!;
 		try {
-			state ? core.bot.start(id) : core.bot.stop(id);
+			await (state ? bot.start() : bot.stop());
+			await bot.saveState()
+			
 		} catch (e) {
 
 			throw { code: 500, err: `更改Bot状态失败: ${(e as Error).message}` }
