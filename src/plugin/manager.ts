@@ -15,6 +15,7 @@ import type { AdapterContext } from "./contexts/adapter-context";
 import type { BotState } from "../bot/types";
 import Logger from "../utils/logger";
 import { dirCheck } from "../utils/dir-check";
+import { dfs } from "../utils/dfs";
 
 const logger = new Logger("PluginManager");
 
@@ -41,6 +42,34 @@ export class PluginManager {
 	async scan(paths: { global: string, bot: string }) {
 		await this.scanDir(paths.global, "global", this.globalPlugins);
 		await this.scanDir(paths.bot, "bot", this.botPlugins);
+		this.checkDependencyCycles();
+	}
+
+	/** 解析插件的依赖插件列表(已注册的); 缺失依赖直接报错并跳过 */
+	private getDependencyPlugins(plugin: Plugin): Plugin[] {
+		const deps: Plugin[] = [];
+		for (const depId of Object.keys(plugin.manifest.dependencies ?? {})) {
+			const dep = this.resolve(depId);
+			if (!dep) {
+				logger.error(`Plugin: 插件 ${plugin.id} 的依赖 ${depId} 未注册`);
+				continue;
+			}
+			deps.push(dep);
+		}
+		return deps;
+	}
+
+	/** 全图循环检测: 以每个插件为根跑一次dfs, 发现环就warn(不阻断扫描) */
+	private checkDependencyCycles() {
+		// 环上节点只报告一次
+		const reported = new Set<string>();
+		for (const plugin of [...this.globalPlugins.values(), ...this.botPlugins.values()]) {
+			if (reported.has(plugin.id)) continue;
+			const cycle = dfs(plugin, p => p.id, p => this.getDependencyPlugins(p));
+			if (!cycle) continue;
+			cycle.forEach(p => reported.add(p.id));
+			logger.warn(`Plugin: 检测到插件依赖循环: ${cycle.map(p => p.id).join(" -> ")}`);
+		}
 	}
 
 	/** 扫描单个插件目录并同步到对应注册表 */
@@ -121,6 +150,15 @@ export class PluginManager {
 		if (plugin.status === "enabled") return; // 幂等
 		if (plugin.status === "loading" || plugin.status === "unloading") throw new StateError(`插件 ${id} 正在切换状态, 请稍后再试`)
 
+		// 依赖环预检: 存在循环则拒绝加载
+		const cycle = dfs(plugin, p => p.id, p => this.getDependencyPlugins(p));
+		if (cycle) throw new StateError(`插件依赖存在循环, 拒绝加载: ${cycle.map(p => p.id).join(" -> ")}`);
+
+		// 先按依赖顺序递归加载依赖(缺失依赖已在 getDependencyPlugins 中报错并跳过)
+		for (const dep of this.getDependencyPlugins(plugin)) {
+			await this.load(dep.id);
+		}
+
 		// 前置loading: 覆盖整个加载流程(含模块构建), 防止scan清理悬空条目时误删
 		plugin.status = "loading";
 		try {
@@ -149,12 +187,29 @@ export class PluginManager {
 	 */
 	async unload(...ids: string[]) {
 		for (let id of ids) {
-			const plugin = this.resolve(id);
-			if (!plugin || plugin.status === "disabled" || plugin.status === "registered") continue; // 幂等
-			await plugin.disable(true);
-
-			logger.log(`Plugin: 已卸载插件: ${plugin.id}`);
+			await this.unloadTree(id, []);
 		}
+	}
+
+	/** 递归卸载: 先卸载依赖该插件的插件, 再卸载自身 */
+	private async unloadTree(id: string, stack: string[]): Promise<void> {
+		if (stack.includes(id)) return; // 依赖环防御, 防止无限递归
+
+		for (const dependent of this.getDependents(id)) {
+			await this.unloadTree(dependent.id, [...stack, id]);
+		}
+
+		const plugin = this.resolve(id);
+		if (!plugin || plugin.status === "disabled" || plugin.status === "registered") return; // 幂等
+		await plugin.disable(true);
+
+		logger.log(`Plugin: 已卸载插件: ${plugin.id}`);
+	}
+
+	/** 依赖指定插件的插件列表(跨 global/bot 注册表) */
+	private getDependents(id: string): Plugin[] {
+		return [...this.globalPlugins.values(), ...this.botPlugins.values()]
+			.filter(p => p.manifest.dependencies?.[id]);
 	}
 
 	/**
@@ -177,7 +232,12 @@ export class PluginManager {
 				logger.warn(`Plugin: 期望启用但未注册的插件: ${id}`);
 				continue;
 			}
-			await this.load(id);
+			try {
+				await this.load(id);
+			} catch (e) {
+				// 单个插件加载失败(如依赖循环)不阻断状态收敛, 记录后继续
+				logger.error(`Plugin: 插件 ${id} 加载失败: ${e instanceof Error ? e.message : e}`);
+			}
 		}
 	}
 
