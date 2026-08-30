@@ -111,12 +111,10 @@ export class BotManager {
 			if (bot.state.enable) {
 				if (!bot.running) {
 					await bot.start();
-					logger.log(`Bot: Bot ${bot.id} 启动成功`);
 				}
 			} else {
 				if (bot.running) {
 					await bot.stop();
-					logger.log(`Bot: Bot ${bot.id} 已停止`);
 				}
 			}
 		}
