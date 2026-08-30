@@ -105,6 +105,11 @@ export class LogStream {
         return [...this.history];
     }
 
+    /** 清空历史缓冲（不影响已订阅的实时推送） */
+    clear(): void {
+        this.history.length = 0;
+    }
+
     /** 写入一条日志（由 Logger 内部调用） */
     push(entry: LogEntry): void {
         if (this.history.length >= this.capacity) {

@@ -16,6 +16,52 @@
 	color: #888;
 }
 
+/* 状态行: 连接状态在左, 圆形清理按钮在右 */
+.logs-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+/* 圆形清理按钮: 与侧边栏导航按钮同风格 */
+.logs-clear-btn {
+	all: unset;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.25em;
+	height: 2.25em;
+	flex-shrink: 0;
+	border-radius: 50%;
+	border: 1px solid transparent;
+	background: transparent;
+	color: rgba(0, 0, 0, 0.75);
+	cursor: pointer;
+	transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.logs-clear-btn:hover {
+	background-color: rgba(255, 255, 255, 0.25);
+}
+
+.logs-clear-btn:focus-visible {
+	outline: 2px solid rgba(74, 144, 217, 0.7);
+	outline-offset: 2px;
+}
+
+.logs-clear-btn img {
+	width: 1.2em;
+	height: 1.2em;
+	pointer-events: none;
+}
+
+/* 清理请求进行中: 禁用点击 + 半透明 */
+.logs-clear-btn.loading {
+	pointer-events: none;
+	opacity: 0.5;
+}
+
 .logs-status::before {
 	content: "";
 	width: 8px;

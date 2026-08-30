@@ -11,6 +11,7 @@
  * - 行数上限, 超出丢弃最旧的行
  * - 用户上滚查看历史时暂停自动滚动, 回到底部恢复跟随
  */
+import toast from "../../spa/toast.js";
 let source = null;   // EventSource 实例, destroy 时关闭
 let listEl = null;   // 日志列表容器
 let follow = true;   // 是否跟随最新日志
@@ -40,6 +41,21 @@ export default {
 		status.className = "logs-status connecting";
 		status.textContent = "连接中";
 
+		// 状态行: 左侧连接状态, 右侧圆形清理按钮
+		const head = document.createElement("div");
+		head.className = "logs-head";
+
+		const clearBtn = document.createElement("button");
+		clearBtn.type = "button";
+		clearBtn.className = "logs-clear-btn";
+		clearBtn.title = "清理日志";
+		clearBtn.setAttribute("aria-label", "清理日志");
+		const icon = document.createElement("img");
+		icon.src = "/img/icons/delete.svg";
+		icon.alt = ""; // 装饰性图标, 悬停提示由按钮 title 提供
+		clearBtn.append(icon);
+		head.append(status, clearBtn);
+
 		listEl = document.createElement("div");
 		listEl.className = "log-list";
 		listEl.setAttribute("role", "log");
@@ -50,7 +66,7 @@ export default {
 		empty.textContent = "暂无日志";
 		listEl.appendChild(empty);
 
-		container.append(h1, status, listEl);
+		container.append(h1, head, listEl);
 
 		// 滚动跟随: 接近底部才自动滚动, 上滚即暂停
 		listEl.addEventListener("scroll", () => {
@@ -62,6 +78,24 @@ export default {
 			status.className = `logs-status ${state}`;
 			status.textContent = text;
 		};
+
+		// 清理日志: 调后端清空历史缓冲, 同时清空页面上已渲染与排队中的行
+		clearBtn.addEventListener("click", async () => {
+			if (clearBtn.disabled) return;
+			clearBtn.disabled = true;
+			clearBtn.classList.add("loading");
+			try {
+				const res = await fetch("/api/clear_logs", { method: "POST" });
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				toast("日志已清理");
+			} catch (err) {
+				toast(`清理后端日志缓存失败: ${err.message}`, { type: "error", duration: 5000 });
+			} finally {
+				clearLogList();
+				clearBtn.disabled = false;
+				clearBtn.classList.remove("loading");
+			}
+		});
 
 		source = new EventSource("/api/get_log_stream");
 		source.addEventListener("open", () => setStatus("on", "已连接"));
@@ -87,6 +121,27 @@ export default {
 		queue = [];
 	},
 };
+
+/** 清空页面上的日志列表: 丢弃排队与已渲染的行, 恢复空态 */
+function clearLogList() {
+	// 丢弃尚未渲染的排队条目, 避免清理后又被补绘
+	if (rafId != null) {
+		cancelAnimationFrame(rafId);
+		rafId = null;
+	}
+	queue = [];
+
+	const list = listEl;
+	if (!list) return;
+	list.replaceChildren();
+	const empty = document.createElement("p");
+	empty.className = "muted logs-empty";
+	empty.textContent = "暂无日志";
+	list.appendChild(empty);
+
+	follow = true;
+	list.scrollTop = 0;
+}
 
 /** 入队一条日志, 统一在下一帧批量渲染 */
 function enqueue(entry) {
