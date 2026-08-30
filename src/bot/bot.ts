@@ -55,6 +55,8 @@ export class Bot extends EventEmitter {
 		await this.plugin.scan({ global: "plugins", bot: path.join(this.path, "plugins") });
 		await this.plugin.syncState();
 		this.running = true;
+		this.logger.log(`${this.name || this.id} 启动成功`);
+
 	}
 
 	/**
@@ -67,6 +69,7 @@ export class Bot extends EventEmitter {
 			await this.plugin.unload(plugin.id);
 		}
 		this._state.enable = false;
+		this.logger.log(`${this.name || this.id} 停止成功`);
 	}
 
 	/**

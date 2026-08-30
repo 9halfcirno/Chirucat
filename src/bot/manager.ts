@@ -78,9 +78,7 @@ export class BotManager {
 
 			const bot = this.bots.get(id)!;
 
-			await bot.start();
-			logger.log(`Bot: Bot ${id} 启动成功`);
-			
+			await bot.start();			
 		}
 	}
 
@@ -96,8 +94,6 @@ export class BotManager {
 			const bot = this.bots.get(id)!;
 
 			await bot.stop();
-			logger.log(`Bot: Bot ${id} 停止成功`);
-
 		}
 	}
 
