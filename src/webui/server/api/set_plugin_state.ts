@@ -22,7 +22,7 @@ export default {
 		if (!core.bot.bots.has(bot)) throw { code: 404, err: "目标Bot不存在" };
 		bot = core.bot.bots.get(bot)!;
 
-		if (!(bot instanceof Bot)) throw { code: 418, err: "天呐!这几乎使不可能的, 你要知道这只是为了让ts进行类型收窄"};
+		if (!(bot instanceof Bot)) throw { code: 418, err: "天呐!这几乎是不可能的, 你要知道这只是为了让ts进行类型收窄"};
 		if (!bot.running) throw { code: 503, err: "目标Bot未启动" };
 
 		let id = `${req.body.id}`;

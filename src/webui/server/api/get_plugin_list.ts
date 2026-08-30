@@ -22,7 +22,7 @@ export default {
 		if (typeof bot === "string") {
 			if (!core.bot.bots.has(bot)) throw { code: 404, err: "找不到目标Bot" }
 			bot = core.bot.bots.get(bot);
-			if (!(bot instanceof Bot)) throw { code: 418, err: "天呐!这几乎使不可能的, 你要知道这只是为了让ts进行类型收窄"};
+			if (!(bot instanceof Bot)) throw { code: 418, err: "天呐!这几乎是不可能的, 你要知道这只是为了让ts进行类型收窄"};
 			return {
 				plugins: {
 					global: bot.plugin.globalPlugins.values().map(p => p.manifest).toArray(),
