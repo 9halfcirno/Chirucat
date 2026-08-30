@@ -89,6 +89,31 @@ ctx.command.unregister(command);
 
 指令默认前缀为 `/`。只有未匹配到指令的消息才会进入插件消息回调。
 
+### KV 存储 API（`ctx.kv`）
+
+每个插件的 KV 数据保存在独立文件 `bot/data/plugins/<插件id>/.kv.db`，按 bot + 插件隔离，卸载后数据文件保留（可手动删除）。
+
+值统一 JSON 序列化后存储，支持 `string / number / boolean / null / object / array`：
+
+```ts
+// 写入
+ctx.kv.set("count", 42);
+ctx.kv.set("config", { prefix: "/", enabled: true });
+
+// 读取（泛型 + 默认值）
+const count = ctx.kv.get<number>("count", 0);
+const config = ctx.kv.get<{ prefix: string }>("config");
+
+// 查询与删除
+ctx.kv.has("count"); // true
+ctx.kv.delete("count"); // 返回是否删除成功
+ctx.kv.clear(); // 清空全部
+ctx.kv.keys(); // 全部键
+ctx.kv.entries(); // 全部键值对
+```
+
+常用场景：插件状态持久化（计数器、开关、用户数据）、配置缓存。
+
 ## 适配器插件
 
 适配器负责把平台事件转换为框架事件，并处理框架下发的动作：

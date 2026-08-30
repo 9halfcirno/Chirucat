@@ -8,13 +8,25 @@ import { MessageAPI } from "./apis/message";
 import Logger from "../../utils/logger";
 
 const logger = new Logger("PluginContext");
-import type { MessageCallbackEntry, PluginCommandAPI, PluginMessageAPI } from "./types";
+import type { MessageCallbackEntry, PluginCommandAPI, PluginFileSystemAPI, PluginKVAPI, PluginMessageAPI } from "./types";
+import { FileSystemAPI } from "./apis/fs";
+import { KVStore } from "./apis/kv";
+import path from "node:path";
+import { root } from "../../utils/root";
 
 export class PluginContext {
 	protected _bot: Bot;
 
 	logger: Logger;
 	message: PluginMessageAPI;
+	fs: PluginFileSystemAPI;
+	kv: PluginKVAPI;
+
+	/** 内部持有的 KV 存储实例, 供 dispose 关闭连接 */
+	private _kv: KVStore;
+
+	/** 插件存储根目录: bot/data/plugins/<插件id> */
+	private _storageRoot: string;
 
 	private _onMessageCallback: MessageCallbackEntry[] = [];
 
@@ -26,6 +38,10 @@ export class PluginContext {
 		this.message = new MessageAPI((entry) => {
 			this._onMessageCallback.push(entry);
 		});
+		this._storageRoot = path.join(root, bot.path, "data", "plugins", manifest.id);
+		this.fs = new FileSystemAPI(this._storageRoot);
+		this._kv = new KVStore(path.join(this._storageRoot, ".kv.db"));
+		this.kv = this._kv;
 	}
 
 	command: PluginCommandAPI = {
@@ -79,5 +95,7 @@ export class PluginContext {
 		for (let com of this._commands.values()) {
 			this._bot.command.unregister(com)
 		}
+		// 关闭 KV 数据库连接
+		this._kv.close();
 	}
 }
