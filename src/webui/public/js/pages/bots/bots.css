@@ -13,8 +13,9 @@
 	margin: 0;
 }
 
-/* 圆形刷新按钮: 与侧边栏导航按钮 (main-nav-btn) 同风格 */
-.bot-refresh-btn {
+/* 圆形按钮: 与侧边栏导航按钮 (main-nav-btn) 同风格 */
+/* 按钮从右向左排列: 创建按钮 (order 2) 在最右, 刷新按钮 (order 1) 在其左 */
+.bot-btn {
 	all: unset;
 	display: inline-flex;
 	align-items: center;
@@ -28,16 +29,23 @@
 	color: rgba(0, 0, 0, 0.75);
 	cursor: pointer;
 	transition: background-color 0.15s ease, box-shadow 0.15s ease;
+	order: 2;
 }
 
-.bot-refresh-btn:hover {
+.bot-btn:hover {
 	background-color: rgba(255, 255, 255, 0.25);
 }
 
-.bot-refresh-btn img {
+.bot-btn img {
 	width: 1.2em;
 	height: 1.2em;
 	pointer-events: none;
+}
+
+/* 刷新按钮: 排在创建按钮左侧, 并把按钮组整体推到最右 */
+.bot-refresh-btn {
+	order: 0;
+	margin-left: auto;
 }
 
 /* 刷新进行中: 图标旋转反馈 */
@@ -191,6 +199,7 @@
 }
 
 @keyframes badge-pulse {
+
 	0%,
 	100% {
 		opacity: 0.85;

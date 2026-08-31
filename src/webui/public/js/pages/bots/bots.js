@@ -22,15 +22,27 @@ export default {
 		tip.textContent = "管理机器人实例";
 		head.append(tip);
 
+		const add = document.createElement("botton");
+		add.type = "bptton";
+		add.classList.add("bot-btn");
+		add.title = "创建机器人";
+		add.setAttribute("aria-label", "创建机器人");
+		const addIcon = document.createElement("img");
+		addIcon.src = "/img/icons/add.svg";
+		addIcon.alt = "";
+		add.append(addIcon);
+		head.append(add);
+
 		const refresh = document.createElement("button");
 		refresh.type = "button";
+		refresh.classList.add("bot-btn");
 		refresh.classList.add("bot-refresh-btn");
 		refresh.title = "刷新机器人列表";
 		refresh.setAttribute("aria-label", "刷新机器人列表");
-		const icon = document.createElement("img");
-		icon.src = "/img/icons/refresh.svg";
-		icon.alt = "";
-		refresh.append(icon);
+		const refreshIcon = document.createElement("img");
+		refreshIcon.src = "/img/icons/refresh.svg";
+		refreshIcon.alt = "";
+		refresh.append(refreshIcon);
 		head.append(refresh);
 
 		container.append(head);
