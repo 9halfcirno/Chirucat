@@ -110,6 +110,6 @@ export class Bot extends EventEmitter {
 	 * @param extra 额外数据, 应从对应event.extra取
 	 */
 	async action(action: BotActions, adapter: string, extra?: Record<string, any>) {
-		this.plugin.handleAction(action, adapter, extra);
+		await this.plugin.handleAction(action, adapter, extra);
 	}
 }

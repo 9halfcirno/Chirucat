@@ -50,9 +50,9 @@ export class AdapterContext extends PluginContext {
 		},
 	}
 
-	handleAction(action: BotActions, extra?: Record<string, any>) {
+	async handleAction(action: BotActions, extra?: Record<string, any>) {
 		for (let handler of this.actionHandlers) {
-			handler(action, extra)
+			await handler(action, extra)
 		}
 	}
 

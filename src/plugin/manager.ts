@@ -251,12 +251,12 @@ export class PluginManager {
 		}
 	}
 
-	handleAction(action: BotActions, adapter: string, extra?: Record<string, any>) {
+	async handleAction(action: BotActions, adapter: string, extra?: Record<string, any>) {
 		const adapterPlugin = this.enabledPlugins.find(p => p.id === adapter && p.manifest.type === "adapter");
 		if (!adapterPlugin) {
 			logger.error(`Plugin: 已启用插件中找不到id为 ${adapter} 的适配器插件!`);
 			return;
 		}
-		(adapterPlugin.context as AdapterContext).handleAction(action, extra);
+		await (adapterPlugin.context as AdapterContext).handleAction(action, extra);
 	}
 }
