@@ -126,8 +126,8 @@ export class WebUIServer {
 		}
 
 		for (const file of files) {
-			// 只加载 .ts 模块文件, 跳过 .d.ts 和 index 入口
-			if (!file.endsWith(".ts") || file.endsWith(".d.ts") || file === "index.ts") {
+			// 只加载模块文件, 跳过 .d.ts 和 index 入口
+			if (!file.endsWith(".ts") || !file.endsWith(".js") || file.endsWith(".d.ts") || file === "index.ts") {
 				continue;
 			}
 
