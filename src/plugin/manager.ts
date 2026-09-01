@@ -111,8 +111,7 @@ export class PluginManager {
 				// 运行中的插件不替换实例, 仅更新清单
 				existing.manifest = manifest;
 			} else {
-				const context = PluginContextFactory.create(manifest, this.bot);
-				registry.set(id, new Plugin({ manifest, scope, context }));
+				registry.set(id, new Plugin({ manifest, scope }));
 			}
 		}
 
@@ -169,8 +168,9 @@ export class PluginManager {
 				plugin.module = loaded.default;
 			}
 
-			// 启用插件(上下文在scan时已创建)
-			await plugin.enable();
+			// 启用插件
+			const context = PluginContextFactory.create(plugin.manifest, this.bot);
+			await plugin.enable(context);
 
 			logger.log(`Plugin: 成功载入插件: ${plugin.manifest.name || "???"}(${plugin.id})`);
 		} catch (e) {
