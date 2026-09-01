@@ -2,5 +2,5 @@ node_modules/
 bots/
 data/
 .codewhale/
-src/webui/public/img/
+src/webui/public/img/bg.jpg
 dist
