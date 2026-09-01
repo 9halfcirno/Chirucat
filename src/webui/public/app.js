@@ -3,8 +3,15 @@
  *
  * 注册各个页面并启动 SPA 框架。
  * 新增页面时, 在这里调用 app.register() 即可, 侧边栏按钮会自动生成。
+ *
+ * 鉴权流程:
+ * - 进入页面先请求 /api/auth/verify 查询登录状态
+ * - 已登录 (或无密码): 直接显示主界面 (main-nav + main) 并启动 SPA
+ * - 未登录: 隐藏主界面, 正中显示登录卡片; 登录成功后主界面从上方滑入
+ * - 任意 API 返回 401 (token 过期/换密码被吊销): 全局切回登录态
  */
 import { createApp } from "./js/spa/framework.js";
+import * as auth from "./js/spa/auth.js";
 import toast from "./js/spa/toast.js";
 
 const app = createApp({
@@ -48,7 +55,74 @@ app.register({
 	load: () => import("./js/pages/settings/settings.js"),
 });
 
-app.start();
+// ---- 鉴权流程 ----
+
+const loginView = document.getElementById("login-view");
+const loginForm = document.getElementById("login-form");
+const loginPassword = document.getElementById("login-password");
+const loginSubmit = document.getElementById("login-submit");
+const loginError = document.getElementById("login-error");
+
+/** 进入主界面: 隐藏登录卡片, 主界面从上方滑入 (由 CSS transition 驱动) */
+function showMain() {
+	loginView.hidden = true;
+	document.body.classList.remove("auth-pending");
+	document.body.classList.add("authed");
+}
+
+/** 回到登录态: 隐藏主界面, 正中显示登录卡片 */
+function showLogin() {
+	document.body.classList.remove("authed");
+	loginView.hidden = false;
+}
+
+/** 设置/清除登录卡片上的错误提示 */
+function setLoginError(message) {
+	if (!message) {
+		loginError.textContent = "";
+		loginError.hidden = true;
+		return;
+	}
+	loginError.textContent = message;
+	loginError.hidden = false;
+}
+
+loginForm.addEventListener("submit", async (e) => {
+	e.preventDefault();
+	const password = loginPassword.value;
+	if (!password || loginSubmit.disabled) return;
+
+	loginSubmit.disabled = true;
+	setLoginError("");
+	try {
+		await auth.login(password);
+		loginPassword.value = "";
+		showMain();
+		app.start();
+	} catch (err) {
+		setLoginError(err.message);
+		loginPassword.select();
+	} finally {
+		loginSubmit.disabled = false;
+	}
+});
+
+// token 过期/被吊销后, 任意 API 返回 401 -> 全局切回登录态
+auth.onUnauthorized(() => {
+	if (!document.body.classList.contains("authed")) return;
+	showLogin();
+	toast("登录已过期, 请重新登录", { type: "error" });
+});
+
+// 启动: 先查鉴权状态, 再决定显示主界面还是登录卡片
+(async () => {
+	if (await auth.verifyAuth()) {
+		showMain();
+		app.start();
+	} else {
+		showLogin();
+	}
+})();
 
 // ---- 窄屏侧边栏抽屉: 顶部按钮展开/收起, 点外部或导航后自动收起 ----
 const navToggle = document.getElementById("nav-toggle");

@@ -152,3 +152,123 @@ body {
 		background: rgba(0, 0, 0, 0.25);
 	}
 }
+
+/* ---- 鉴权状态: 通过鉴权前主界面隐藏, 登录成功后滑入 ---- */
+#main-nav,
+#main {
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+/* 主内容区从上方滑入; 侧边栏只淡入 (不设 transform, 避免与窄屏抽屉的 translateX 冲突) */
+#main {
+	transform: translateY(-18px);
+}
+
+body.authed #main-nav,
+body.authed #main {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+body.authed #main {
+	transform: translateY(0);
+}
+
+/* ---- 登录卡片: 全屏居中 ---- */
+#login-view {
+	position: fixed;
+	inset: 0;
+	z-index: 50;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+	box-sizing: border-box;
+}
+
+/* hidden 属性需显式覆盖: 否则 #login-view 的 display:flex 特异性更高, hidden 会失效 */
+#login-view[hidden] {
+	display: none;
+}
+
+.login-card {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	max-width: 320px;
+	padding: 40px 32px;
+	border-radius: 16px;
+	background: var(--glass-bg);
+	backdrop-filter: blur(var(--glass-blur));
+	border: var(--glass-border);
+	box-shadow: var(--glass-shadow);
+	box-sizing: border-box;
+}
+
+.login-logo {
+	width: 56px;
+	height: 56px;
+	object-fit: contain;
+}
+
+.login-title {
+	margin: 0;
+	font-size: 1.3em;
+	font-weight: 600;
+	color: rgba(0, 0, 0, 0.8);
+}
+
+.login-subtitle {
+	margin: 0 0 8px;
+	font-size: 0.9em;
+	color: rgba(0, 0, 0, 0.55);
+}
+
+.login-input {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 10px 12px;
+	border-radius: 8px;
+	border: 1px solid rgba(0, 0, 0, 0.15);
+	background: rgba(255, 255, 255, 0.5);
+	font-size: 1em;
+	color: rgba(0, 0, 0, 0.85);
+	outline: none;
+	transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.login-input:focus {
+	border-color: rgba(0, 0, 0, 0.35);
+	background: rgba(255, 255, 255, 0.75);
+}
+
+.login-btn {
+	width: 100%;
+	padding: 10px 0;
+	border-radius: 8px;
+	border: none;
+	background: rgba(0, 0, 0, 0.75);
+	color: #fff;
+	font-size: 1em;
+	cursor: pointer;
+	transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.login-btn:hover {
+	background: rgba(0, 0, 0, 0.85);
+}
+
+.login-btn:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+
+.login-error {
+	margin: 0;
+	font-size: 0.85em;
+	color: #a94442;
+}

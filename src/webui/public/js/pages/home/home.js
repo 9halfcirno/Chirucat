@@ -23,6 +23,7 @@ import { createMemPanel } from "./panels/mem-panel.js";
 import { createCpuPanel } from "./panels/cpu-panel.js";
 import { createProcessPanel } from "./panels/process-panel.js";
 import { formatUptime } from "./format.js";
+import { apiFetch } from "../../spa/auth.js";
 
 const REFRESH_TIME = 5_000;
 
@@ -70,7 +71,7 @@ export default {
 		const refresh = async () => {
 			// ---- 服务器存活 (/api/health): 只更新状态条 ----
 			try {
-				const healthRes = await fetch("/api/health");
+				const healthRes = await apiFetch("/api/health");
 				if (!healthRes.ok) throw new Error(`HTTP ${healthRes.status}`);
 				const health = await healthRes.json();
 
@@ -89,7 +90,7 @@ export default {
 
 			// ---- 性能数据 (/api/get_state): 失败时只在板块区域写错误信息, 不清空已有板块 ----
 			try {
-				const stateRes = await fetch("/api/get_state");
+				const stateRes = await apiFetch("/api/get_state");
 				if (!stateRes.ok) throw new Error(`HTTP ${stateRes.status}`);
 				const state = await stateRes.json();
 

@@ -12,6 +12,7 @@
  * - 用户上滚查看历史时暂停自动滚动, 回到底部恢复跟随
  */
 import toast from "../../spa/toast.js";
+import { apiFetch } from "../../spa/auth.js";
 let source = null;   // EventSource 实例, destroy 时关闭
 let listEl = null;   // 日志列表容器
 let follow = true;   // 是否跟随最新日志
@@ -24,7 +25,6 @@ const MAX_LINES = 2000;
 export default {
 	id: "logs",
 	title: "日志",
-	icon: "📋",
 	styles: ["/js/pages/logs/logs.css"],
 
 	render(container) {
@@ -85,7 +85,7 @@ export default {
 			clearBtn.disabled = true;
 			clearBtn.classList.add("loading");
 			try {
-				const res = await fetch("/api/clear_logs", { method: "POST" });
+				const res = await apiFetch("/api/clear_logs", { method: "POST" });
 				if (!res.ok) throw new Error(`HTTP ${res.status}`);
 				toast("日志已清理");
 			} catch (err) {

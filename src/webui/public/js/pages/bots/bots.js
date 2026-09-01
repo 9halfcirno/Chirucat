@@ -125,7 +125,7 @@ function createBotCard(bot) {
 
 		const next = !badge.classList.contains("badge-on");
 		try {
-			const res = await fetch("/api/set_bot_state", {
+			const res = await apiFetch("/api/set_bot_state", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
