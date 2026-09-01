@@ -30,7 +30,7 @@ export class Message extends Entity {
 	}
 
 	reply(message: MessageBlock[] | string) {
-		this.action({
+		return this.action({
 			type: "message.send",
 			session: this.session.id,
 			message

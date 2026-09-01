@@ -25,7 +25,7 @@ export class Entity {
 
 	action(action: BotActions) {
 		if (this.bot) {
-			this.bot.action(action, this.meta.adapter, this.extra)
+			return this.bot.action(action, this.meta.adapter, this.extra)
 		}
 	}
 }
