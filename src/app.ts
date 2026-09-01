@@ -1,7 +1,14 @@
+import path from "path";
 import { Core } from "./core";
 import Logger from "./utils/logger";
+import { root } from "./utils/root";
+import { readJSONOrCreate } from "./utils/readJSON";
+import type { CoreOption } from "./types";
 
 const logger = new Logger("App");
+
+/** 全局配置文件目录 */
+const CONFIGS_DIR = path.join(root, "configs");
 
 /** 关闭核心的超时时间(ms):超过后视为关闭失败,强制退出 */
 const CLOSE_TIMEOUT = 10_000;
@@ -72,9 +79,25 @@ async function appStart() {
 	process.once("SIGTERM", () => void exit(0));
 
 	try {
-		core = new Core({
-			webui: true
-		})
+		// 读取 configs/ 下的配置, 组装成 CoreOption 后传给 Core
+		// 配置文件缺失时自动生成默认配置, 避免用户误删后无法启动
+		const coreRes = await readJSONOrCreate<CoreOption>(path.join(CONFIGS_DIR, "core.json"), { webui: true });
+		if (coreRes.created) logger.log("配置文件缺失, 已生成默认配置: configs/core.json");
+		const coreOption = coreRes.config;
+
+		if (coreOption.webui !== false) {
+			// webui 未显式关闭时, 把 webui.json 作为 WebUI 子配置一并传入
+			const webuiRes = await readJSONOrCreate(path.join(CONFIGS_DIR, "webui.json"), {
+				password: "chirucat",
+				port: 7636,
+				host: "127.0.0.1",
+			});
+			if (webuiRes.created) logger.log("配置文件缺失, 已生成默认配置: configs/webui.json");
+			coreOption.webuiOption = webuiRes.config;
+		}
+		logger.log(`已加载配置: configs/core.json${coreOption.webuiOption ? ", configs/webui.json" : ""}`);
+
+		core = new Core(coreOption);
 		await core.init();
 		logger.log("Chirucat 核心启动成功")
 	} catch (e) {

@@ -12,7 +12,7 @@ const logger = new Logger("Core")
 
 export class Core {
 	config: CoreOption = {
-		webui: true
+		webui: true,
 	};
 	bot = new BotManager(this)
 	user: UserManager | null = null;
@@ -38,7 +38,10 @@ export class Core {
 		if (this.config.webui) {
 			await import("./webui/server/server").then(module => {
 				const server = module.WebUIServer;
-				const webui = new server({ core: this })
+				const webui = new server({
+					core: this,
+					...this.config.webuiOption
+				 })
 				this.webui = webui;
 			}).catch(e => {
 				logger.error(`初始化WebUI失败: ${e.message}`, e)
