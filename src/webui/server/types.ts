@@ -1,6 +1,15 @@
 import type { Core } from "../../core";
 import type { Request, Response } from "express";
 
+export type WebUIConfig = {
+	/** WebUI密码 */
+	password?: string;
+	/** Webui监听地址, 默认7636 */
+	port?: number;
+	/** WebUI主机, 默认127.0.0.1 */
+	host?: string;
+}
+
 export interface WebUIAPI {
 	/** 注册端点 */
 	path: string;

@@ -3,8 +3,9 @@ import path from "path";
 import { pathToFileURL } from "url";
 import type { Server as HttpServer } from "http";
 import express from "express";
-import type { ErrorRequestHandler, Express } from "express";
+import type { ErrorRequestHandler, Express, NextFunction, Request, RequestHandler, Response } from "express";
 import Logger from "../../utils/logger";
+import { AUTH_COOKIE, TOKEN_TTL_MS, readAuthToken, safeEqualPassword, signToken, verifyToken } from "./auth";
 import { root } from "../../utils/root";
 import type { Core } from "../../core";
 import type { WebUIAPI } from "./types";
@@ -27,6 +28,8 @@ function isAPIError(err: unknown): err is APIError {
 
 /** WebUI 服务器配置选项 */
 export interface WebUIServerOptions {
+	/** WebUI密码 */
+	password?: string;
 	/** 监听端口, 默认 7636 */
 	port?: number;
 	/** 监听地址, 默认 127.0.0.1, 仅本机可访问 */
@@ -56,6 +59,8 @@ export class WebUIServer {
 	private readonly staticDir: string;
 	private readonly apiDir: string;
 	private readonly core?: Core;
+	/** WebUI 密码; 未设置 (undefined/空串) 时所有 API 直接放行 */
+	private readonly password?: string;
 
 	constructor(options: WebUIServerOptions = {}) {
 		this.port = options.port ?? 7636;
@@ -63,6 +68,7 @@ export class WebUIServer {
 		this.staticDir = options.staticDir ?? path.join(root, "src", "webui", "public");
 		this.apiDir = options.apiDir ?? path.join(root, "src", "webui", "server", "api");
 		options.core && (this.core = options.core);
+		options.password && (this.password = options.password);
 
 		this.setupMiddleware();
 	}
@@ -160,6 +166,26 @@ export class WebUIServer {
 		);
 	}
 
+	/**
+	 * 鉴权中间件: 仅对 auth:true 的 API 生效。
+	 * - 未配置密码: 直接放行
+	 * - 已配置密码: 从 HttpOnly Cookie 取 token, 验签失败返回 401
+	 */
+	private authRequired(): RequestHandler {
+		return (req: Request, res: Response, next: NextFunction) => {
+			if (!this.password) {
+				next();
+				return;
+			}
+			const token = readAuthToken(req);
+			if (!token || !verifyToken(token, this.password)) {
+				res.status(401).json({ err: "未登录或登录已过期", code: 401 });
+				return;
+			}
+			next();
+		};
+	}
+
 	/** 将单个 API 定义注册为 express 路由 */
 	private registerAPI(api: WebUIAPI, file: string): void {
 		const supportedMethods = ["get", "post", "put", "delete", "patch", "options", "head"] as const;
@@ -173,11 +199,13 @@ export class WebUIServer {
 		// this.logger.log(`注册 API: ${api.method.toUpperCase()} ${routePath} (${file})`);
 
 		const routeMethod = method as (typeof supportedMethods)[number];
+		// 声明 auth:true 的 API 在 handler 之前先过鉴权中间件
+		const middlewares: RequestHandler[] = api.auth ? [this.authRequired()] : [];
 
 		// 流式 API (SSE): 直接交给处理器, 由处理器负责连接完整生命周期
 		const stream = api.stream;
 		if (stream) {
-			this.app[routeMethod](routePath, (req, res) => {
+			this.app[routeMethod](routePath, ...middlewares, (req, res) => {
 				try {
 					void stream({ core: this.core, req, res });
 				} catch (err) {
@@ -193,7 +221,7 @@ export class WebUIServer {
 		}
 
 		// 普通 JSON API
-		this.app[routeMethod](routePath, async (_req, res) => {
+		this.app[routeMethod](routePath, ...middlewares, async (_req, res) => {
 			try {
 				// if (!this.core) {
 				// 	this.logger.error(`API ${routePath} 需要 core 实例, 但 WebUIServer 未配置 core`);
@@ -235,6 +263,41 @@ export class WebUIServer {
 				name: "Chirucat WebUI",
 				time: Date.now(),
 			});
+		});
+
+		// ---- 鉴权端点 (白名单, 不挂鉴权中间件) ----
+
+		// 登录: 校验密码后以 HttpOnly Cookie 下发 JWT (有效期 48h)
+		this.app.post("/api/auth/login", (req, res) => {
+			if (!this.password) {
+				res.status(403).json({ err: "未配置密码, 无需登录", code: 403 });
+				return;
+			}
+			const body = (req.body ?? {}) as { password?: unknown };
+			const password = typeof body.password === "string" ? body.password : "";
+			if (!password) {
+				res.status(400).json({ err: "缺少密码", code: 400 });
+				return;
+			}
+			if (!safeEqualPassword(this.password, password)) {
+				res.status(401).json({ err: "密码错误", code: 401 });
+				return;
+			}
+			const token = signToken(this.password);
+			res.cookie(AUTH_COOKIE, token, {
+				httpOnly: true, // JS 不可读, 防 XSS 窃取
+				sameSite: "strict", // 防 CSRF
+				path: "/",
+				maxAge: TOKEN_TTL_MS,
+			});
+			res.json({ ok: true });
+		});
+
+		// 鉴权状态查询: 前端进入页面时调用; 无密码时恒为已登录
+		this.app.get("/api/auth/verify", (req, res) => {
+			const token = readAuthToken(req);
+			const authed = !this.password || (token !== null && verifyToken(token, this.password) !== null);
+			res.json({ authed });
 		});
 
 		// 未匹配的 /api 路由统一返回 JSON 404
