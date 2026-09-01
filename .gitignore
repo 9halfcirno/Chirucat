@@ -4,3 +4,4 @@ data/
 .codewhale/
 src/webui/public/img/bg.jpg
 dist
+/configs/
