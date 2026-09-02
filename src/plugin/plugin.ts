@@ -65,7 +65,7 @@ export class Plugin {
 
 		this.status = "unloading";
 		try {
-			if (this.module?.unload) await this.module.unload();
+			if (this.module?.unload) await this.module.unload(this.context!);
 		} catch (e) {
 			// unload 失败也让插件尝试清理
 			try {
