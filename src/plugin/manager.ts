@@ -45,18 +45,28 @@ export class PluginManager {
 		this.checkDependencyCycles();
 	}
 
-	/** 解析插件的依赖插件列表(已注册的); 缺失依赖直接报错并跳过 */
+	/** 解析插件的依赖插件列表(仅已注册的; 缺失依赖提示后跳过)。
+	 * 供依赖图遍历(环检测/按序加载)使用, 缺失拦截职责在 load 的预检, 不在本方法 */
 	private getDependencyPlugins(plugin: Plugin): Plugin[] {
 		const deps: Plugin[] = [];
 		for (const depId of Object.keys(plugin.manifest.dependencies ?? {})) {
 			const dep = this.resolve(depId);
 			if (!dep) {
-				logger.error(`Plugin: 插件 ${plugin.id} 的依赖 ${depId} 未注册`);
+				logger.warn(`Plugin: 插件 ${plugin.id} 的依赖 ${depId} 未注册`);
 				continue;
 			}
 			deps.push(dep);
 		}
 		return deps;
+	}
+
+	/** 收集 manifest 中声明但未注册的依赖 id(缺失依赖) */
+	private getMissingDependencies(plugin: Plugin): string[] {
+		const missing: string[] = [];
+		for (const depId of Object.keys(plugin.manifest.dependencies ?? {})) {
+			if (!this.resolve(depId)) missing.push(depId);
+		}
+		return missing;
 	}
 
 	/** 全图循环检测: 以每个插件为根跑一次dfs, 发现环就warn(不阻断扫描) */
@@ -153,7 +163,13 @@ export class PluginManager {
 		const cycle = dfs(plugin, p => p.id, p => this.getDependencyPlugins(p));
 		if (cycle) throw new StateError(`插件依赖存在循环, 拒绝加载: ${cycle.map(p => p.id).join(" -> ")}`);
 
-		// 先按依赖顺序递归加载依赖(缺失依赖已在 getDependencyPlugins 中报错并跳过)
+		// 依赖缺失预检: 直接依赖未注册则拒绝加载(传递依赖由递归 load 逐层拦截)
+		const missing = this.getMissingDependencies(plugin);
+		if (missing.length) {
+			throw new StateError(`插件 ${id} 的依赖未注册: ${missing.join(", ")}`);
+		}
+
+		// 先按依赖顺序递归加载依赖
 		for (const dep of this.getDependencyPlugins(plugin)) {
 			await this.load(dep.id);
 		}
