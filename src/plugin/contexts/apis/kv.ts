@@ -8,11 +8,13 @@ import type { PluginKVAPI } from "../types";
  * 数据按 bot + 插件隔离, 值统一 JSON 序列化后存入 TEXT 列
  */
 export class KVStore implements PluginKVAPI {
-	db: sqlite.Database;
+	db: sqlite.Database | null = null;
 
 	private _closed = false;
+	file: string;
 
 	constructor(file: string) {
+		this.file = file;
 		// 目录不存在时 sqlite 无法创建文件, 先保证目录存在
 		fs.mkdirSync(path.dirname(file), { recursive: true });
 		this.db = new sqlite(file, {});
@@ -21,7 +23,10 @@ export class KVStore implements PluginKVAPI {
 		this.init();
 	}
 
-	private init() {
+	init() {
+		// 目录不存在时 sqlite 无法创建文件, 先保证目录存在
+		fs.mkdirSync(path.dirname(this.file), { recursive: true });
+		this.db = new sqlite(this.file, {});
 		this.db.exec(`
 			CREATE TABLE IF NOT EXISTS kv (
 				key TEXT PRIMARY KEY,
@@ -32,7 +37,7 @@ export class KVStore implements PluginKVAPI {
 	}
 
 	get<T = unknown>(key: string, defaultValue?: T): T | undefined {
-		const row = this.db.prepare(
+		const row = this.db!.prepare(
 			'SELECT value FROM kv WHERE key = ?'
 		).get(key) as { value: string } | undefined;
 
@@ -45,7 +50,7 @@ export class KVStore implements PluginKVAPI {
 		if (text === undefined) {
 			throw new TypeError(`KV set: 值不可 JSON 序列化 (key="${key}")`);
 		}
-		this.db.prepare(`
+		this.db!.prepare(`
 			INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?)
 			ON CONFLICT(key) DO UPDATE SET
 				value = excluded.value,
@@ -54,24 +59,24 @@ export class KVStore implements PluginKVAPI {
 	}
 
 	has(key: string): boolean {
-		return !!this.db.prepare('SELECT 1 FROM kv WHERE key = ?').get(key);
+		return !!this.db!.prepare('SELECT 1 FROM kv WHERE key = ?').get(key);
 	}
 
 	delete(key: string): boolean {
-		return this.db.prepare('DELETE FROM kv WHERE key = ?').run(key).changes > 0;
+		return this.db!.prepare('DELETE FROM kv WHERE key = ?').run(key).changes > 0;
 	}
 
 	clear(): void {
-		this.db.exec('DELETE FROM kv');
+		this.db!.exec('DELETE FROM kv');
 	}
 
 	keys(): string[] {
-		const rows = this.db.prepare('SELECT key FROM kv').all() as { key: string }[];
+		const rows = this.db!.prepare('SELECT key FROM kv').all() as { key: string }[];
 		return rows.map(r => r.key);
 	}
 
 	entries(): [string, unknown][] {
-		const rows = this.db.prepare('SELECT key, value FROM kv').all() as { key: string; value: string }[];
+		const rows = this.db!.prepare('SELECT key, value FROM kv').all() as { key: string; value: string }[];
 		return rows.map(r => [r.key, JSON.parse(r.value)]);
 	}
 
@@ -81,6 +86,6 @@ export class KVStore implements PluginKVAPI {
 	close(): void {
 		if (this._closed) return;
 		this._closed = true;
-		this.db.close();
+		this.db!.close();
 	}
 }
