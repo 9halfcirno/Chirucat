@@ -93,7 +93,7 @@ npm run app
 
 ## 给开发者
 
-想为 Chirucat 开发插件或适配器？请阅读[插件开发指南](docs/PLUGIN_DEV.md)。
+想为 Chirucat 开发插件或适配器？请阅读[插件开发指南](docs/plugin/index.md)。
 
 ## 未来计划
 

@@ -90,7 +90,7 @@ To bring a bot onto a chat platform, install the corresponding **adapter** plugi
 
 ## For Developers
 
-Want to build plugins or adapters for Chirucat? Read the [Plugin Development Guide](docs/PLUGIN_DEV.md).
+Want to build plugins or adapters for Chirucat? Read the [Plugin Development Guide](docs/plugin/index.md).
 
 ## Roadmap
 
