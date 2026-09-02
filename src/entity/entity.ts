@@ -1,7 +1,6 @@
 import type { Bot } from "../bot/bot";
 import type { BotActions } from "../protocols/actions";
 import type { BotEventMeta, BotEvents } from "../protocols/events";
-import type { Session } from "../session/session";
 import { uuid } from "../utils/uuid";
 
 export class Entity {
@@ -13,8 +12,6 @@ export class Entity {
 
 	/** 事件携带的额外数据 */
 	extra: Record<string, any>;
-
-	session: Session | null = null;
 
 	constructor(event: BotEvents, readonly meta: BotEventMeta, protected bot?: Bot) {
 		this.type = event.type;
