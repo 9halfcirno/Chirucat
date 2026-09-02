@@ -6,6 +6,7 @@
  * 页面头部右侧提供圆形刷新按钮, 点击后重新拉取列表, 并通过 Toast 提示结果。
  */
 import toast from "../../spa/toast.js";
+import { apiFetch } from "../../spa/auth.js";
 export default {
 	id: "bots",
 	title: "机器人",
@@ -56,7 +57,7 @@ export default {
 		const load = async (fromRefresh = false) => {
 			refresh.classList.add("loading");
 			try {
-				const res = await fetch("/api/scan_bots");
+				const res = await apiFetch("/api/scan_bots");
 				if (!res.ok) throw new Error(`HTTP ${res.status}`);
 				const data = await res.json();
 				const bots = Array.isArray(data.bots) ? data.bots : [];
