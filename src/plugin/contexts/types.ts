@@ -99,6 +99,8 @@ export interface PluginFileSystemAPI {
 
 
 export interface PluginKVAPI {
+	/** 初始化kv存储, 需显式调用 */
+	init(): void;
 	/**
 	 * 读取键值
 	 * @param key 键

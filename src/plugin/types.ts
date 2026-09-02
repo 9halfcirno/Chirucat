@@ -40,7 +40,7 @@ export type PluginOption = {
 export type PluginModule = {
 	init(ctx: PluginContext): void | Promise<void>;
 
-	unload?(): void | Promise<void>;
+	unload?(ctx: PluginContext): void | Promise<void>;
 
 	/**
 	 * 生命周期异常钩子: enable/disable 流程抛错时调用, 让插件尝试清理自身资源
