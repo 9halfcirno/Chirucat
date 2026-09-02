@@ -15,9 +15,9 @@
 
 该对象有以下方法:
 
-- `dispatch(event: BotEvent)`: 向Bot发送一个事件, 实现平台 -> Bot
+- `dispatch(event: BotEvent)`: 向Bot发送一个事件, 实现平台 -> Bot ([事件指路](../../events/index.md))
 
-- `onAction(handler: (action: BotAction, extra: Record<string, any>) => void)`: 注册Bot动作处理, 以实现Bot -> 平台通信
+- `onAction(handler: (action: BotAction, extra: Record<string, any>) => void)`: 注册Bot动作处理, 以实现Bot -> 平台通信 ([Action指路](../../actions/index.md))
 
 ## 用户和会话信息转换
 
