@@ -12,7 +12,6 @@
   "main": "index.js",
   "scripts": {
     "app": "tsx src/app.ts",
-    "test": "tsx test.ts",
     "webui": "tsx src/webui/server/server.ts"
   },
   "devDependencies": {
