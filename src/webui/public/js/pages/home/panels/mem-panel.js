@@ -1,27 +1,22 @@
 /**
  * 首页仪表盘: 内存板块
  *
- * 堆内存 / 进程 RSS / 系统内存, 各自带占用条。
+ * 进程 RSS / 系统内存, 各自带占用条。
  */
 import { createPanel, createBar } from "../widgets.js";
 import { formatBytes } from "../format.js";
 
-/** 内存板块: 堆内存 / 进程 RSS / 系统内存, 各自带占用条 */
+/** 内存板块: 进程 RSS / 系统内存, 各自带占用条 */
 export function createMemPanel() {
 	const { section, body, setFoot } = createPanel("内存");
 
-	const heap = createMemRow("堆内存");
 	const rss = createMemRow("进程 RSS");
 	const sysMem = createMemRow("系统内存");
-	body.append(heap.row, rss.row, sysMem.row);
+	body.append(rss.row, sysMem.row);
 
 	const update = (state) => {
 		const mem = state.memory ?? {};
 		const sys = state.system ?? {};
-
-		// 堆内存
-		updateMemRow(heap, `${formatBytes(mem.heapUsed)} / ${formatBytes(mem.heapTotal)}`,
-			mem.heapTotal > 0 ? mem.heapUsed / mem.heapTotal : null);
 
 		// 进程 RSS (占系统内存比例)
 		const rssRatio = sys.totalmem > 0 ? mem.rss / sys.totalmem : null;

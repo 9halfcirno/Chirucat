@@ -7,7 +7,7 @@ import { createPanel } from "../widgets.js";
 
 /** 机器人板块: 运行数 + 每个 bot 的状态点列表 (不用占用条) */
 export function createBotPanel() {
-	const { section, body, setFoot } = createPanel("机器人");
+	const { section, body } = createPanel("机器人");
 
 	// 主数值: 运行中 / 总数 (数值单独占 span, 避免整体赋值误删单位)
 	const main = document.createElement("div");
@@ -53,12 +53,10 @@ export function createBotPanel() {
 			for (const li of itemMap.values()) li.remove();
 			itemMap.clear();
 			showEmpty("WebUI 独立运行, 未连接核心");
-			setFoot("-");
 			return;
 		}
 
 		mainText.textContent = `${core.runningBotCount} / ${core.botCount}`;
-		setFoot(`已启用插件 ${core.enabledPluginCount} / ${core.pluginCount}`);
 
 		const bots = (core.bots ?? [])
 			.slice()
