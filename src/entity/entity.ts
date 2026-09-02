@@ -16,7 +16,7 @@ export class Entity {
 
 	session: Session | null = null;
 
-	constructor(event: BotEvents, readonly meta: BotEventMeta, private bot?: Bot) {
+	constructor(event: BotEvents, readonly meta: BotEventMeta, protected bot?: Bot) {
 		this.type = event.type;
 		this.time = event.time;
 		this.platform = event.platform;

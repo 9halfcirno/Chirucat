@@ -24,7 +24,8 @@ export class Message extends Entity {
 		}
 		this.sender = {
 			id: event.senderId,
-			name: event.senderName
+			name: event.senderName,
+			unionId: this.bot?.core.user?.getUnion(event.senderId) ?? null
 		}
 
 	}

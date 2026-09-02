@@ -150,4 +150,37 @@ export class UserManager {
 			id: row.platform_id
 		};
 	}
+
+	/**
+	 * 根据账号 ID（账号 UUID）查询其对应的内部组 ID（internal id）。
+	 * 若该账号在 internal_map 中尚无记录，则会为其分配一个新的内部组 ID 作为默认值（即独立成组）。
+	 * @param accountId 账号 ID（账号 UUID，即 get() 的返回值）
+	 * @returns 内部组 ID（internal id）；若账号不存在则返回 null
+	 */
+	getUnion(accountId: string): string | null {
+		// 账号不存在则返回默认值 null（避免向 internal_map 写入孤立记录触发外键约束报错）
+		const exists = this.db.prepare(
+			'SELECT 1 FROM account_map WHERE uuid = ?'
+		).get(accountId);
+		if (!exists) return null;
+
+		// 查询账号当前的内部组 ID
+		const row = this.db.prepare(
+			'SELECT internal_id FROM internal_map WHERE uuid = ?'
+		).get(accountId) as { internal_id: string } | undefined;
+		if (row) return row.internal_id;
+
+		// 账号尚无内部组 ID，分配一个新的内部组 ID 作为默认值
+		const defaultInternalId = uuid();
+		this.db.prepare(
+			'INSERT OR IGNORE INTO internal_map (uuid, internal_id) VALUES (?, ?)'
+		).run(accountId, defaultInternalId);
+
+		// 再次查询返回（防止并发冲突时 INSERT 被 IGNORE 导致拿不到实际值）
+		const result = this.db.prepare(
+			'SELECT internal_id FROM internal_map WHERE uuid = ?'
+		).get(accountId) as { internal_id: string };
+
+		return result.internal_id;
+	}
 }
