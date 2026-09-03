@@ -8,7 +8,7 @@ import { MessageAPI } from "./apis/message";
 import Logger from "../../utils/logger";
 
 const logger = new Logger("PluginContext");
-import type { MessageCallbackEntry, PluginCommandAPI, PluginFileSystemAPI, PluginKVAPI, PluginMessageAPI } from "./types";
+import type { MessageCallbackEntry, PluginBotAPI, PluginCommandAPI, PluginFileSystemAPI, PluginKVAPI, PluginMessageAPI } from "./types";
 import { FileSystemAPI } from "./apis/fs";
 import { KVStore } from "./apis/kv";
 import path from "node:path";
@@ -43,8 +43,14 @@ export class PluginContext {
 		this.fs = new FileSystemAPI(this._storageRoot);
 		this._kv = new KVStore(path.join(this._storageRoot, ".kv.db"));
 		this.kv = this._kv;
+
+		this.bot = {
+			id: this._bot.id,
+			name: this._bot.name
+		}
 	}
 
+	bot: PluginBotAPI;
 	command: PluginCommandAPI = {
 		register: (name, handler) => {
 			const command: Command = { name, handler };

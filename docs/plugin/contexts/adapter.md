@@ -13,7 +13,7 @@
 
 该对象非`Bot`实例, 而是对Bot核心方法的封装
 
-该对象有以下方法:
+该对象在基础信息的基础上还有以下方法:
 
 - `dispatch(event: BotEvent)`: 向Bot发送一个事件, 实现平台 -> Bot ([事件指路](../../events/index.md))
 

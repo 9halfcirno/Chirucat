@@ -135,7 +135,13 @@ export interface PluginKVAPI {
 
 
 export type ActionHandler = (action: BotActions, extra?: Record<string, any>) => any;
+
 export interface PluginBotAPI {
+	id: string; // Bot ID
+	name: string | null; // Bot名字
+}
+
+export interface AdapterPluginBotAPI extends PluginBotAPI{
 	dispatch(event: BotEvents): void;
 	onAction: (handler: ActionHandler) => void;
 }
