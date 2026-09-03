@@ -209,3 +209,165 @@
 		opacity: 0.45;
 	}
 }
+
+/* ---- 创建机器人对话框 (dialogbox.js) ---- */
+
+/* 全屏遮罩: 点击空白处关闭; z-index 高于 SPA 遮罩(100)与登录卡(50)
+   默认透明, .dialog-open 时过渡到不透明 (时长与 dialogbox.js 的 CLOSE_MS=180 一致) */
+.dialog-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 200;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+	box-sizing: border-box;
+	background: rgba(0, 0, 0, 0.35);
+	opacity: 0;
+	transition: opacity 0.18s ease;
+}
+
+.dialog-backdrop.dialog-open {
+	opacity: 1;
+}
+
+/* 居中卡片: 与登录卡同款毛玻璃风格; 入场时从下方上浮并轻微放大 */
+.dialog-card {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	width: 100%;
+	max-width: 380px;
+	padding: 24px;
+	box-sizing: border-box;
+	border-radius: 16px;
+	background: var(--glass-bg);
+	backdrop-filter: blur(var(--glass-blur));
+	border: var(--glass-border);
+	box-shadow: var(--glass-shadow);
+	transform: translateY(10px) scale(0.96);
+	opacity: 0;
+	transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.dialog-open .dialog-card {
+	transform: none;
+	opacity: 1;
+}
+
+.dialog-title {
+	margin: 0;
+	font-size: 1.15em;
+	font-weight: 600;
+	color: rgba(0, 0, 0, 0.9);
+}
+
+/* 说明与提示: 比标签浅一级但仍保持可读;
+   毛玻璃白卡上不用全局 .muted 的 #888 (太浅易与输入框内容混淆) */
+.dialog-desc {
+	margin: 0;
+	font-size: 0.85em;
+	color: rgba(0, 0, 0, 0.62);
+}
+
+.dialog-hint {
+	margin: 0;
+	font-size: 0.8em;
+	color: rgba(0, 0, 0, 0.55);
+}
+
+/* 字段: 标签在上, 输入框在下 */
+.dialog-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 4px;
+}
+
+/* 字段名: 深色加粗, 与灰色提示明显区分 */
+.dialog-label {
+	font-size: 0.9em;
+	font-weight: 600;
+	color: rgba(0, 0, 0, 0.85);
+}
+
+.dialog-required {
+	color: #d9534f;
+	font-style: normal;
+}
+
+.dialog-input {
+	padding: 9px 12px;
+	border-radius: 8px;
+	border: 1px solid rgba(0, 0, 0, 0.15);
+	background: rgba(255, 255, 255, 0.5);
+	font-size: 0.95em;
+	color: rgba(0, 0, 0, 0.9);
+	outline: none;
+	transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.dialog-input:focus {
+	border-color: rgba(0, 0, 0, 0.35);
+	background: rgba(255, 255, 255, 0.75);
+}
+
+/* 占位符: 比输入内容更浅, 但不过淡以免误读 */
+.dialog-input::placeholder {
+	color: rgba(0, 0, 0, 0.38);
+}
+
+/* 错误提示: 展示后端返回的 err */
+.dialog-error {
+	margin: 2px 0 0;
+	font-size: 0.85em;
+	color: #a94442;
+}
+
+/* 按钮组: 取消在左, 创建在右 */
+.dialog-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.dialog-btn {
+	padding: 8px 18px;
+	border-radius: 8px;
+	border: none;
+	font-size: 0.95em;
+	cursor: pointer;
+	transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+/* 次要按钮: 透明底灰字 */
+.dialog-cancel {
+	background: rgba(0, 0, 0, 0.06);
+	color: rgba(0, 0, 0, 0.65);
+}
+
+.dialog-cancel:hover {
+	background: rgba(0, 0, 0, 0.12);
+}
+
+/* 主按钮: 深底白字, 与登录按钮一致 */
+.dialog-submit {
+	background: rgba(0, 0, 0, 0.75);
+	color: #fff;
+}
+
+.dialog-submit:hover {
+	background: rgba(0, 0, 0, 0.85);
+}
+
+.dialog-submit:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+
+/* 提交中: 透明度脉冲反馈 (复用启停徽章的脉冲动画) */
+.dialog-submit.loading {
+	animation: badge-pulse 1s ease-in-out infinite;
+}

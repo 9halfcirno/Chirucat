@@ -1,5 +1,6 @@
 import path from "path";
 import { BotManager } from "./bot/manager";
+import { BotHelper } from "./helpers/bot-helper";
 import { UserManager } from "./internal/user-manager";
 import { root } from "./utils/root";
 import { SessionManager } from "./internal/session-manager";
@@ -15,6 +16,7 @@ export class Core {
 		webui: true,
 	};
 	bot = new BotManager(this)
+	botHelper = new BotHelper(this)
 	user: UserManager | null = null;
 	session: SessionManager | null = null;
 

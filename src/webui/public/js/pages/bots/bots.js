@@ -7,6 +7,7 @@
  */
 import toast from "../../spa/toast.js";
 import { apiFetch } from "../../spa/auth.js";
+import { openCreateBotDialog, closeCreateBotDialog } from "./dialogbox.js";
 export default {
 	id: "bots",
 	title: "机器人",
@@ -23,8 +24,8 @@ export default {
 		tip.textContent = "管理机器人实例";
 		head.append(tip);
 
-		const add = document.createElement("botton");
-		add.type = "bptton";
+		const add = document.createElement("button");
+		add.type = "button";
 		add.classList.add("bot-btn");
 		add.title = "创建机器人";
 		add.setAttribute("aria-label", "创建机器人");
@@ -33,6 +34,9 @@ export default {
 		addIcon.alt = "";
 		add.append(addIcon);
 		head.append(add);
+
+		// 点击 + 打开创建对话框; 创建成功后由回调触发重拉列表
+		add.addEventListener("click", () => openCreateBotDialog({ onDone: () => load(true) }));
 
 		const refresh = document.createElement("button");
 		refresh.type = "button";
@@ -65,7 +69,7 @@ export default {
 				if (bots.length === 0) {
 					const empty = document.createElement("p");
 					empty.className = "muted";
-					empty.textContent = "暂无机器人, 在 bots/ 目录下创建";
+					empty.textContent = "暂无机器人, 点击右上角 + 创建";
 					list.replaceChildren(empty);
 					if (fromRefresh) toast("机器人列表已刷新");
 					return;
@@ -87,6 +91,11 @@ export default {
 		refresh.addEventListener("click", () => load(true));
 
 		await load();
+	},
+
+	destroy() {
+		// 页面切换走时关闭可能还开着的创建对话框, 避免残留
+		closeCreateBotDialog();
 	},
 };
 
