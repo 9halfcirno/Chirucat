@@ -28,7 +28,7 @@ export default {
 			throw { code: 500, err: `更改Bot状态失败: ${(e as Error).message}` }
 		}
 
-		return { success: true }
+		return { success: true, state: bot.running }
 
 
 	},

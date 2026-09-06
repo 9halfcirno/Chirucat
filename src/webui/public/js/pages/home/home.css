@@ -16,11 +16,6 @@
 	color: rgba(0, 0, 0, 0.75);
 }
 
-/* 状态点异常变体 (连接失败/服务异常): 红点带光晕, 与 .dot.on 同级视觉 */
-.dot.error {
-	background: #d9534f;
-	box-shadow: 0 0 0 3px rgba(217, 83, 79, 0.22);
-}
 
 /* ---- 板块网格: 宽屏 2x2, 窄屏单列 ---- */
 .panel-grid {
@@ -148,19 +143,6 @@
 	min-width: 0;
 }
 
-/* 状态点: 绿=运行中 (带光晕), 灰=已停止 */
-.dot {
-	width: 9px;
-	height: 9px;
-	border-radius: 50%;
-	flex-shrink: 0;
-	background: rgba(136, 136, 136, 0.45);
-}
-
-.dot.on {
-	background: #5cb85c;
-	box-shadow: 0 0 0 3px rgba(92, 184, 92, 0.22);
-}
 
 .bot-state-name {
 	font-weight: 500;

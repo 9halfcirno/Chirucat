@@ -8,6 +8,9 @@
 import toast from "../../spa/toast.js";
 import { apiFetch } from "../../spa/auth.js";
 import { openCreateBotDialog, closeCreateBotDialog } from "./dialogbox.js";
+import { createDialogWindow } from "../../spa/components/dialog-window.js";
+import { createIconButton } from "../../spa/components/icon-button.js";
+import { createDotSwitch } from "../../spa/components/dot-switch.js";
 export default {
 	id: "bots",
 	title: "机器人",
@@ -24,30 +27,20 @@ export default {
 		tip.textContent = "管理机器人实例";
 		head.append(tip);
 
-		const add = document.createElement("button");
-		add.type = "button";
-		add.classList.add("bot-btn");
-		add.title = "创建机器人";
-		add.setAttribute("aria-label", "创建机器人");
-		const addIcon = document.createElement("img");
-		addIcon.src = "/img/icons/add.svg";
-		addIcon.alt = "";
-		add.append(addIcon);
+		const add = createIconButton("/img/icons/add.svg", () => {
+			let dialog = createDialogWindow("创建机器人", "", [], true);
+			document.body.append(dialog);
+		})
+		add.title = "添加机器人";
+		add.setAttribute("aria-label", "添加机器人")
 		head.append(add);
 
-		// 点击 + 打开创建对话框; 创建成功后由回调触发重拉列表
-		add.addEventListener("click", () => openCreateBotDialog({ onDone: () => load(true) }));
+		// add.addEventListener("click", () => openCreateBotDialog({ onDone: () => load(true) }));
 
-		const refresh = document.createElement("button");
-		refresh.type = "button";
-		refresh.classList.add("bot-btn");
+		const refresh = createIconButton("/img/icons/refresh.svg", () => load(true))
 		refresh.classList.add("bot-refresh-btn");
 		refresh.title = "刷新机器人列表";
 		refresh.setAttribute("aria-label", "刷新机器人列表");
-		const refreshIcon = document.createElement("img");
-		refreshIcon.src = "/img/icons/refresh.svg";
-		refreshIcon.alt = "";
-		refresh.append(refreshIcon);
 		head.append(refresh);
 
 		container.append(head);
@@ -88,14 +81,10 @@ export default {
 			}
 		};
 
-		refresh.addEventListener("click", () => load(true));
-
 		await load();
 	},
 
 	destroy() {
-		// 页面切换走时关闭可能还开着的创建对话框, 避免残留
-		closeCreateBotDialog();
 	},
 };
 
@@ -117,51 +106,41 @@ function createBotCard(bot) {
 	name.textContent = bot.name || bot.id;
 	head.appendChild(name);
 
-	const enabled = Boolean(bot.state?.enable);
-	const badge = document.createElement("button");
-	badge.type = "button";
-	badge.className = enabled ? "badge badge-on" : "badge badge-off";
-	badge.title = enabled ? "点击停用" : "点击启用";
-	badge.setAttribute("aria-label", badge.title);
-	badge.setAttribute("aria-pressed", String(enabled));
-	head.appendChild(badge);
 
-	let handling = false;
-	badge.onclick = async () => {
-		if (handling || badge.disabled) return;
-		handling = true;
-		badge.classList.add("loading");
-		badge.disabled = true;
+	// !!!屎山警告!!!
+	// 	我也不知道这块状态是怎么变的, 单纯一次就好了
 
-		const next = !badge.classList.contains("badge-on");
+	let enabled = Boolean(bot.state?.enable);
+	const dotSwh = createDotSwitch(async () => {
 		try {
 			const res = await apiFetch("/api/set_bot_state", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
 				},
-				body: JSON.stringify({ id: bot.id, state: next }),
+				body: JSON.stringify({ id: bot.id, state: !enabled }),
 			}).then((r) => r.json());
 
 			if (res.success) {
-				badge.classList.toggle("badge-on", next);
-				badge.classList.toggle("badge-off", !next);
-				const label = next ? "点击停用" : "点击启用";
-				badge.title = label;
-				badge.setAttribute("aria-label", label);
-				badge.setAttribute("aria-pressed", String(next));
-				toast((bot.name ?? bot.id) + (next ? "已启用" : "已停用"));
+				const label = res.state ? "点击停用" : "点击启用";
+				dotSwh.title = label;
+				dotSwh.setAttribute("aria-label", label);
+				dotSwh.setAttribute("aria-pressed", String(res.state));
+				enabled = res.state;
+				toast((bot.name ?? bot.id) + (res.state ? "已启用" : "已停用"));
 			} else {
 				toast(`设置状态失败: ${res.err || "未知错误"}`, { type: "error", duration: 5000 });
 			}
+			return res.state;
 		} catch (err) {
 			toast(`设置Bot状态失败: ${err.message}`, { type: "error", duration: 5000 });
-		} finally {
-			handling = false;
-			badge.classList.remove("loading");
-			badge.disabled = false;
 		}
-	};
+	}, enabled);
+	dotSwh.title = enabled ? "点击停用" : "点击启用";
+	dotSwh.setAttribute("aria-label", dotSwh.title);
+	dotSwh.setAttribute("aria-pressed", String(enabled));
+	head.appendChild(dotSwh);
+
 
 	// id 标识
 	const id = document.createElement("code");
