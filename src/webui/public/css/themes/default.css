@@ -6,6 +6,8 @@
 	--glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 
 	--main-nav-btn-size: 5cqw;
+
+	--dialog-glass-blur: 2px;
 }
 
 body {
@@ -77,8 +79,6 @@ body {
 }
 
 #main {
-	/* 与导航栏同款毛玻璃: 半透明 + 背景模糊 + 细边框 */
-	/* background-color: var(--glass-bg); */
 	backdrop-filter: blur(var(--glass-blur));
 	box-shadow: var(--glass-shadow);
 	background-color: rgba(255, 255, 255, 0.4);
@@ -96,6 +96,56 @@ body {
 .main-nav-btn.active {
 	background-color: rgba(74, 144, 217, 0.35);
 	box-shadow: inset 0 0 0 2px rgba(74, 144, 217, 0.6);
+}
+
+.icon-btn {
+	flex-shrink: 0;
+	border-radius: 50%;
+	border: 1px solid transparent;
+	background: transparent;
+	color: rgba(0, 0, 0, 0.75);
+	transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.icon-btn:hover {
+	background-color: rgba(124, 120, 120, 0.25);
+}
+
+.dialog-window-base {
+	background-color: rgba(255, 255, 255, 0.35);
+	backdrop-filter: blur(var(--dialog-glass-blur));
+}
+
+.dialog-window {
+	backdrop-filter: blur(var(--glass-blur));
+	box-shadow: var(--glass-shadow);
+	background-color: rgba(255, 255, 255, 0.4);
+	border-radius: 24px;
+	border: var(--glass-border);
+	padding: 16px;
+}
+
+.dialog-window header {
+	border-bottom: 2px solid rgba(128, 128, 128, 0.5);
+}
+
+.dialog-window header span {
+	font-size: 1.2em;
+	font-weight: bold;
+}
+
+.dot {
+	background: rgba(136, 136, 136, 0.45);
+}
+
+.dot.on {
+	background: #5cb85c;
+	box-shadow: 0 0 0 3px rgba(92, 184, 92, 0.22);
+}
+
+.dot.error {
+	background: #d9534f;
+	box-shadow: 0 0 0 3px rgba(217, 83, 79, 0.22);
 }
 
 /* ---- 滚动条: 半透明圆头线条 (覆盖浏览器默认样式) ---- */
