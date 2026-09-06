@@ -107,18 +107,15 @@ function createBotCard(bot) {
 	head.appendChild(name);
 
 
-	// !!!屎山警告!!!
-	// 	我也不知道这块状态是怎么变的, 单纯一次就好了
-
 	let enabled = Boolean(bot.state?.enable);
-	const dotSwh = createDotSwitch(async () => {
+	const dotSwh = createDotSwitch(async (_, state) => {
 		try {
 			const res = await apiFetch("/api/set_bot_state", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
 				},
-				body: JSON.stringify({ id: bot.id, state: !enabled }),
+				body: JSON.stringify({ id: bot.id, state }),
 			}).then((r) => r.json());
 
 			if (res.success) {
@@ -126,7 +123,6 @@ function createBotCard(bot) {
 				dotSwh.title = label;
 				dotSwh.setAttribute("aria-label", label);
 				dotSwh.setAttribute("aria-pressed", String(res.state));
-				enabled = res.state;
 				toast((bot.name ?? bot.id) + (res.state ? "已启用" : "已停用"));
 			} else {
 				toast(`设置状态失败: ${res.err || "未知错误"}`, { type: "error", duration: 5000 });
