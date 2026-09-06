@@ -1,6 +1,6 @@
 /**
  * 
- * @param {(e: PointerEvent, state: boolean) => (Promise<boolean> | boolean)} onclick 开关被点击后的回调, 返回值确定开关状态
+ * @param {(e: PointerEvent, state: boolean) => (Promise<boolean> | boolean)} onclick 开关被点击后的回调, 传入的状态为目标状态, 返回值确定开关状态
  * @param {boolean} state 定义开关的默认状态, 无指定则为true(启用)
  */
 export function createDotSwitch(onclick, state = true) {
