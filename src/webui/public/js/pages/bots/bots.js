@@ -7,10 +7,10 @@
  */
 import toast from "../../spa/toast.js";
 import { apiFetch } from "../../spa/auth.js";
-import { openCreateBotDialog, closeCreateBotDialog } from "./dialogbox.js";
 import { createDialogWindow } from "../../spa/components/dialog-window.js";
 import { createIconButton } from "../../spa/components/icon-button.js";
 import { createDotSwitch } from "../../spa/components/dot-switch.js";
+import { createAddForm, submitAddForm } from "./add-bot-form.js";
 export default {
 	id: "bots",
 	title: "机器人",
@@ -26,23 +26,6 @@ export default {
 		tip.className = "muted";
 		tip.textContent = "管理机器人实例";
 		head.append(tip);
-
-		const add = createIconButton("/img/icons/add.svg", () => {
-			let dialog = createDialogWindow("创建机器人", "", [], true);
-			document.body.append(dialog);
-		})
-		add.title = "添加机器人";
-		add.setAttribute("aria-label", "添加机器人")
-		head.append(add);
-
-		// add.addEventListener("click", () => openCreateBotDialog({ onDone: () => load(true) }));
-
-		const refresh = createIconButton("/img/icons/refresh.svg", () => load(true))
-		refresh.classList.add("bot-refresh-btn");
-		refresh.title = "刷新机器人列表";
-		refresh.setAttribute("aria-label", "刷新机器人列表");
-		head.append(refresh);
-
 		container.append(head);
 
 		// bot 卡片容器
@@ -71,15 +54,69 @@ export default {
 				list.replaceChildren(...bots.map(createBotCard));
 				if (fromRefresh) toast("机器人列表已刷新");
 			} catch (err) {
-				// const box = document.createElement("div");
-				// box.className = "page-error";
-				// box.textContent = `获取机器人列表失败: ${err.message}`;
-				// list.replaceChildren(box);
+
 				if (fromRefresh) toast(`刷新失败: ${err.message}`, { type: "error", duration: 5000 });
 			} finally {
 				refresh.classList.remove("loading");
 			}
 		};
+
+		/**
+		 * 打开"创建机器人"对话框。
+		 * "确定"按钮与表单内 Enter 共用 onCreate: 提交成功后关闭对话框、toast
+		 * 提示并刷新列表; 失败时错误已展示在表单内, 对话框保持打开供修改重试。
+		 */
+		const openCreateBotDialog = () => {
+			const form = createAddForm();
+
+			let dialog = null;
+			let submitting = false; // Enter 与按钮双入口共用, 防止重复提交
+
+			const onCreate = async () => {
+				if (submitting) return;
+				submitting = true;
+				try {
+					const result = await submitAddForm(form);
+					if (!result.ok) return; // 错误已展示在表单错误区
+					dialog.closeDialog();
+					toast(`机器人 "${result.name || result.id}" 已创建`);
+					await load(); // 刷新列表, 让新卡片立即出现
+				} finally {
+					submitting = false;
+				}
+			};
+
+			dialog = createDialogWindow("创建机器人", form, [{
+				name: "确定",
+				onclick: onCreate,
+			}, {
+				name: "取消",
+				onclick: () => dialog.closeDialog(),
+			}], true);
+			document.body.append(dialog);
+
+			// Enter 快捷提交 (与点"确定"等价)
+			form.addEventListener("keydown", (e) => {
+				if (e.key !== "Enter") return;
+				e.preventDefault();
+				void onCreate();
+			});
+
+			// 打开后聚焦 id 输入框, 便于直接输入
+			form.querySelector('[name="id"]')?.focus();
+		};
+
+		// 页面右上角: "+" 创建按钮 + 刷新按钮
+		const add = createIconButton("/img/icons/add.svg", openCreateBotDialog);
+		add.title = "添加机器人";
+		add.setAttribute("aria-label", "添加机器人");
+		head.append(add);
+
+		const refresh = createIconButton("/img/icons/refresh.svg", () => load(true))
+		refresh.classList.add("bot-refresh-btn");
+		refresh.title = "刷新机器人列表";
+		refresh.setAttribute("aria-label", "刷新机器人列表");
+		head.append(refresh);
 
 		await load();
 	},
@@ -143,6 +180,11 @@ function createBotCard(bot) {
 	id.className = "bot-card-id";
 	id.textContent = bot.id;
 
+	card.onclick = (e) => {
+		if (e.target === dotSwh) return;
+		let dialog = createDialogWindow("Bot信息", `Id: ${bot.id}</br>Name: ${bot.name || "???"}`, [], true);
+		document.body.append(dialog);
+	}
 
 	card.append(head, id);
 	return card;
