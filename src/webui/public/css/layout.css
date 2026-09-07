@@ -303,11 +303,11 @@ body.authed #main {
 .dialog-window {
 	opacity: 1;
 
-	min-width: 3em;
+	min-width: 36%;
 	min-height: 2em;
 
 	margin: auto;
-	flex: 0.5;
+	max-width: 80%;
 
 	display: flex;
 	flex-direction: column;
@@ -332,16 +332,36 @@ body.authed #main {
 	flex-direction: row-reverse;
 	min-height: 1em;
 	margin-top: 8px;
+	gap: 8px;
 	align-items: center;
 }
 
-.dialog-window-btn {
-	all: unset;
+/* ---- 对话框内表单控件 (与 .dialog-window 配套, 供各页面复用) ---- */
+.dialog-field {
+	margin-top: 10px;
+}
 
-	border: 2px solid;
+.dialog-field:first-child {
+	margin-top: 0;
+}
 
-	padding-left: 0.2em;
-	padding-right: 0.2em;
+.dialog-label {
+	display: block;
+	margin-bottom: 4px;
+}
+
+.dialog-input {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 8px 10px;
+}
+
+.dialog-hint {
+	margin: 4px 0 0;
+}
+
+.dialog-error {
+	margin: 10px 0 0;
 }
 
 .dot {

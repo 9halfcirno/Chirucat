@@ -1,3 +1,4 @@
+import { createButton } from "./button.js";
 import { createIconButton } from "./icon-button.js";
 
 /**
@@ -24,15 +25,30 @@ export function createDialogWindow(title, inner, btns, cancelable) {
 	header.append(titleSpan);
 
 	if (cancelable) {
-		base.onclick = (e) => {
-			if (e.target === base) {
-				base.remove();
-			}
-		}
-		let clsBtn = createIconButton("/img/icons/cancel.svg", () => {
+		// 统一的关闭出口: 移除键盘监听后再删除节点, 避免多次打开时监听器泄漏
+		const onKeydown = (e) => {
+			if (e.key === "Escape") close();
+		};
+		const close = () => {
+			document.removeEventListener("keydown", onKeydown);
 			base.remove();
+		};
+
+		// 点击遮罩自身关闭 (点窗口内部不关)
+		base.onclick = (e) => {
+			if (e.target === base) close();
+		};
+		// Esc 关闭 (仅 cancelable 对话框; 生命周期随对话框, 不会串到下一个对话框)
+		document.addEventListener("keydown", onKeydown);
+
+		let clsBtn = createIconButton("/img/icons/cancel.svg", () => {
+			close();
 		})
 		header.append(clsBtn);
+
+		// 暴露给外部编程式关闭 (如创建成功后关闭): 需走 close 以清理 Esc 监听器,
+		// 直接 base.remove() 会留下监听器泄漏
+		base.closeDialog = close;
 	}
 
 	if (inner) {
@@ -46,23 +62,20 @@ export function createDialogWindow(title, inner, btns, cancelable) {
 		win.append(innerDiv);
 	}
 
+	let footer = document.createElement("footer");
 	if (btns.length > 0) {
 		let btnBar = document.createElement("div");
 		btnBar.classList.add("dialog-window-btns");
-		win.append(btnBar);
+		footer.append(btnBar);
 
 		for (let btn of btns) {
-			let btnEle = document.createElement("button");
-			btnEle.innerHTML = btn.name || "";
-			btnEle.classList.add("dialog-window-btn");
+			let btnEle = createButton(btn.name || "", btn.onclick || null);
 			btnBar.append(btnEle);
-
-			if (btn.onclick) {
-				btnEle.onclick = (e) => {
-					btn.onclick && btn.onclick(e, this)
-				}
-			}
 		}
+	}
+
+	if (footer.childElementCount > 0) {
+		win.append(footer);
 	}
 
 	return base;

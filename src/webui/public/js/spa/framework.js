@@ -85,6 +85,8 @@ export function createApp(options = {}) {
 	const root = options.root ?? document.getElementById("page-view");
 	const nav = options.nav ?? document.getElementById("main-nav");
 
+	nav.onselectstart = (e) => { e.preventDefault(); return false };
+
 	if (!main || !root || !nav) {
 		throw new Error("SPA 初始化失败: 页面需要 #main / #page-view / #main-nav 三个元素");
 	}

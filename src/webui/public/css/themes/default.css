@@ -122,16 +122,68 @@ body {
 	background-color: rgba(255, 255, 255, 0.4);
 	border-radius: 24px;
 	border: var(--glass-border);
-	padding: 16px;
+	padding: 12px 16px;
+
 }
 
 .dialog-window header {
-	border-bottom: 2px solid rgba(128, 128, 128, 0.5);
+	border-bottom: 1px solid rgba(128, 128, 128, 0.5);
 }
 
 .dialog-window header span {
 	font-size: 1.2em;
 	font-weight: bold;
+}
+
+.dialog-window-inner {
+	min-height: 1em;
+	padding-bottom: 4px;
+	padding-top: 4px;
+}
+
+.dialog-window footer {
+	border-top: 1px solid rgba(128, 128, 128, 0.5);
+}
+
+.dialog-window footer .btn {
+	font-size: 0.9em;
+}
+
+
+.dialog-label {
+	font-size: 0.9em;
+	color: rgba(0, 0, 0, 0.7);
+}
+
+.dialog-required {
+	font-style: normal;
+	color: #d9534f;
+}
+
+.dialog-input {
+	box-sizing: border-box;
+	border-radius: 999px;
+	border: 1px solid rgba(0, 0, 0, 0.15);
+	background: rgba(255, 255, 255, 0.5);
+	font-size: 0.95em;
+	color: rgba(0, 0, 0, 0.85);
+	outline: none;
+	transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.dialog-input:focus {
+	border-color: rgba(0, 0, 0, 0.35);
+	background: rgba(255, 255, 255, 0.75);
+}
+
+.dialog-hint {
+	font-size: 0.8em;
+	color: #888;
+}
+
+.dialog-error {
+	font-size: 0.85em;
+	color: #a94442;
 }
 
 .dot {
@@ -153,6 +205,20 @@ body {
 	/* Firefox: 细滚动条 + 半透明滑块 */
 	scrollbar-width: thin;
 	scrollbar-color: rgba(128, 128, 128, 0.35) transparent;
+}
+
+.btn {
+	background: none;
+	border-radius: 999px;
+	border: 2px solid rgba(124, 120, 120, 0.5);
+	box-shadow: var(--glass-shadow);
+	background: transparent;
+	color: rgba(0, 0, 0, 0.75);
+	transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn:hover {
+	background-color: rgba(128, 128, 128, 0.35);
 }
 
 /* WebKit (Chrome/Edge/Safari): 细线条滑块 */
