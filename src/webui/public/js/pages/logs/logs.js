@@ -13,6 +13,7 @@
  */
 import toast from "../../spa/toast.js";
 import { apiFetch } from "../../spa/auth.js";
+import { createIconButton } from "../../spa/components/icon-button.js";
 let source = null;   // EventSource 实例, destroy 时关闭
 let listEl = null;   // 日志列表容器
 let follow = true;   // 是否跟随最新日志
@@ -45,15 +46,19 @@ export default {
 		const head = document.createElement("div");
 		head.className = "logs-head";
 
-		const clearBtn = document.createElement("button");
-		clearBtn.type = "button";
-		clearBtn.className = "logs-clear-btn";
+		const clearBtn = createIconButton("/img/icons/delete.svg", async () => {
+			try {
+				const res = await apiFetch("/api/clear_logs", { method: "POST" });
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				toast("日志已清理");
+			} catch (err) {
+				toast(`清理后端日志缓存失败: ${err.message}`, { type: "error", duration: 5000 });
+			} finally {
+				clearLogList();
+			}
+		})
 		clearBtn.title = "清理日志";
 		clearBtn.setAttribute("aria-label", "清理日志");
-		const icon = document.createElement("img");
-		icon.src = "/img/icons/delete.svg";
-		icon.alt = ""; // 装饰性图标, 悬停提示由按钮 title 提供
-		clearBtn.append(icon);
 		head.append(status, clearBtn);
 
 		listEl = document.createElement("div");
@@ -79,23 +84,6 @@ export default {
 			status.textContent = text;
 		};
 
-		// 清理日志: 调后端清空历史缓冲, 同时清空页面上已渲染与排队中的行
-		clearBtn.addEventListener("click", async () => {
-			if (clearBtn.disabled) return;
-			clearBtn.disabled = true;
-			clearBtn.classList.add("loading");
-			try {
-				const res = await apiFetch("/api/clear_logs", { method: "POST" });
-				if (!res.ok) throw new Error(`HTTP ${res.status}`);
-				toast("日志已清理");
-			} catch (err) {
-				toast(`清理后端日志缓存失败: ${err.message}`, { type: "error", duration: 5000 });
-			} finally {
-				clearLogList();
-				clearBtn.disabled = false;
-				clearBtn.classList.remove("loading");
-			}
-		});
 
 		source = new EventSource("/api/get_log_stream");
 		source.addEventListener("open", () => setStatus("on", "已连接"));
