@@ -4,7 +4,7 @@
  * @param {number} size 图标尺寸
  * @param {(event: MouseEvent) => (void | Promise<void>)} onclick 点击回调
  */
-export function createIconButton(src, onclick) {
+export function createIconButton(src, onclick = null) {
 	const btn = document.createElement("button");
 	const image = document.createElement("img");
 	image.src = src; // 设定图片url
@@ -18,7 +18,7 @@ export function createIconButton(src, onclick) {
 		try {
 			btn.disabled = true;
 
-			await onclick(e); // 触发回调
+			onclick && await onclick(e); // 触发回调
 		} catch (e) {
 			throw e; // 再抛
 		} finally {

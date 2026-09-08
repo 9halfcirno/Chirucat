@@ -199,69 +199,31 @@ body.authed #main {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 12px;
 	width: 100%;
 	max-width: 320px;
-	padding: 40px 32px;
-	border-radius: 16px;
-	background: var(--glass-bg);
-	backdrop-filter: blur(var(--glass-blur));
-	border: var(--glass-border);
-	box-shadow: var(--glass-shadow);
-	box-sizing: border-box;
 }
 
 .login-logo {
-	width: 56px;
+	width: 100%;
 	height: 56px;
 	object-fit: contain;
 }
 
 .login-title {
 	margin: 0;
-	font-size: 1.3em;
-	font-weight: 600;
-	color: rgba(0, 0, 0, 0.8);
 }
 
 .login-subtitle {
 	margin: 0 0 8px;
-	font-size: 0.9em;
-	color: rgba(0, 0, 0, 0.55);
 }
 
 .login-input {
 	width: 100%;
 	box-sizing: border-box;
-	padding: 10px 12px;
-	border-radius: 8px;
-	border: 1px solid rgba(0, 0, 0, 0.15);
-	background: rgba(255, 255, 255, 0.5);
-	font-size: 1em;
-	color: rgba(0, 0, 0, 0.85);
-	outline: none;
-	transition: border-color 0.15s ease, background-color 0.15s ease;
-}
-
-.login-input:focus {
-	border-color: rgba(0, 0, 0, 0.35);
-	background: rgba(255, 255, 255, 0.75);
 }
 
 .login-btn {
 	width: 100%;
-	padding: 10px 0;
-	border-radius: 8px;
-	border: none;
-	background: rgba(0, 0, 0, 0.75);
-	color: #fff;
-	font-size: 1em;
-	cursor: pointer;
-	transition: background-color 0.15s ease, opacity 0.15s ease;
-}
-
-.login-btn:hover {
-	background: rgba(0, 0, 0, 0.85);
 }
 
 .login-btn:disabled {
@@ -271,8 +233,6 @@ body.authed #main {
 
 .login-error {
 	margin: 0;
-	font-size: 0.85em;
-	color: #a94442;
 }
 
 .icon-btn {
