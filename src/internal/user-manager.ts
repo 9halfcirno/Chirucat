@@ -80,6 +80,19 @@ export class UserManager {
 		return getOrCreate(platform, id);
 	}
 
+	has(platform: string, id: string) {
+		let has = this.db.transaction((p: string, id: string) => {
+			let res = this.db.prepare(`
+				SELECT EXISTS (SELECT 1 FROM account_map WHERE platform_name = ? AND platform_id = ?) AS is_exist
+			`).get(platform, id) as { is_exist: boolean } | undefined;
+			
+			if (!res?.is_exist) return false;
+			return true;
+		})
+
+		return has(platform, id)
+	}
+
 	/**
 	 * 将一个账号（通过账号 UUID 指定）绑定到指定的内部组 ID。
 	 * 如果该内部组 ID 尚未出现，则操作会此隐式创建该组。

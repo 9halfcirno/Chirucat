@@ -37,8 +37,8 @@ export class SessionManager {
 	 * @param type 会话类型
 	 * @param id 平台会话 id
 	 */
-	get(platform: string, type: string, id: string): string {
-		const getOrCreate = this.db.transaction((platformName: string, platformType: string, platformId: string) => {
+	get(platform: string, type: SessionType, id: string): string {
+		const getOrCreate = this.db.transaction((platformName: string, platformType: SessionType, platformId: string) => {
 			// 1. 先尝试直接查询
 			const row = this.db.prepare(
 				'SELECT uuid FROM session_map WHERE platform_name = ? AND platform_type = ? AND platform_id = ?'
@@ -63,6 +63,19 @@ export class SessionManager {
 		});
 
 		return getOrCreate(platform, type, id);
+	}
+
+	has(platform: string, type: SessionType, id: string) {
+		let has = this.db.transaction((p: string, t: SessionType, id: string) => {
+			let res = this.db.prepare(`
+				SELECT EXISTS (SELECT 1 FROM session_map WHERE platform_name = ? AND platform_type = ? AND platform_id = ?) AS is_exist
+			`).get(p, t, id) as { is_exist: boolean } | undefined;
+
+			if (!res?.is_exist) return false;
+			return true;
+		})
+
+		return has(platform, type, id)
 	}
 
 	/**
