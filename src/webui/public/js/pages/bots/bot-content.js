@@ -19,10 +19,10 @@ export function createBotContent(bot) {
 	const buttons = new Map();
 	let currentPage = null;
 
-	addPage(botNav, botMain, bot, "./bot-pages/info.js")
-	addPage(botNav, botMain, bot, "./bot-pages/plugins.js")
-	addPage(botNav, botMain, bot, "./bot-pages/setting.js")
-
+	Promise.resolve()
+		.then(() => addPage(botNav, botMain, bot, "./bot-pages/info.js"))
+		.then(() => addPage(botNav, botMain, bot, "./bot-pages/plugins.js"))
+		.then(() => addPage(botNav, botMain, bot, "./bot-pages/setting.js"))
 
 	async function addPage(nav, main, bot, url) {
 		/**
