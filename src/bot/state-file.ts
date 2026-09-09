@@ -4,7 +4,7 @@ import json5 from "json5";
 import Logger from "../utils/logger";
 import type { BotState } from "./types";
 
-const logger = new Logger("BotState");
+const logger = new Logger("Bot State");
 
 const DEFAULT_STATE: BotState = { enable: false, plugins: {} };
 

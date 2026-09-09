@@ -4,6 +4,9 @@ import type { Core } from "../core";
 import type { BotConfig } from "../bot/types";
 import { root } from "../utils/root";
 import { dirCheck } from "../utils/dir-check";
+import Logger from "../utils/logger";
+
+const logger = new Logger("Bot Helper")
 
 /**
  * Bot id 是否合法。
@@ -52,7 +55,7 @@ export class BotHelper {
 			path.join(dir, "state.json"),
 			JSON.stringify({ enable: false, plugins: {} }, null, "\t") + "\n"
 		);
-
+		logger.log(`已创建Bot ${config.id}, 路径: ${dir}`);
 		await this.core.bot.scan(botsDir);
 		return dir;
 	}
@@ -74,6 +77,7 @@ export class BotHelper {
 
 		await fs.rm(dir, { recursive: true, force: true });
 		this.core.bot.bots.delete(id);
+		logger.log(`已删除Bot ${id}, 路径: ${dir}`)
 		return true;
 	}
 }
