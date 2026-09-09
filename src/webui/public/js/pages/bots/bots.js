@@ -11,10 +11,11 @@ import { createDialogWindow } from "../../spa/components/dialog-window.js";
 import { createIconButton } from "../../spa/components/icon-button.js";
 import { createDotSwitch } from "../../spa/components/dot-switch.js";
 import { createAddForm, submitAddForm } from "./add-bot-form.js";
+import { createBotContent } from "./bot-content.js";
 export default {
 	id: "bots",
 	title: "机器人",
-	styles: ["/js/pages/bots/bots.css"],
+	styles: ["/js/pages/bots/bots.css", "/js/pages/bots/bot-div.css"],
 
 	async render(container) {
 
@@ -182,7 +183,11 @@ function createBotCard(bot) {
 
 	card.onclick = (e) => {
 		if (e.target === dotSwh) return;
-		let dialog = createDialogWindow("Bot信息", `Id: ${bot.id}</br>Name: ${bot.name || "???"}`, [], true);
+		let dialog = createDialogWindow(
+			"Bot信息", 
+			createBotContent(bot),
+			[],
+			true);
 		document.body.append(dialog);
 	}
 
