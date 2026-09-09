@@ -35,9 +35,9 @@ export function createDialogWindow(title, inner, btns, cancelable) {
 		};
 
 		// 点击遮罩自身关闭 (点窗口内部不关)
-		base.onclick = (e) => {
-			if (e.target === base) close();
-		};
+		// base.onclick = (e) => {
+		// 	if (e.target === base) close();
+		// };
 		// Esc 关闭 (仅 cancelable 对话框; 生命周期随对话框, 不会串到下一个对话框)
 		document.addEventListener("keydown", onKeydown);
 
