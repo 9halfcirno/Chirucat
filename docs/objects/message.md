@@ -60,5 +60,6 @@
 {
 	type: "mention";
 	id: string; // 提及用户的账号uuid
+	name?: string; // 提及用户的昵称
 }
 ```
