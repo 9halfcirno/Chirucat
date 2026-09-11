@@ -421,3 +421,154 @@ body.authed #main {
 		opacity: 0.45;
 	}
 }
+
+/* ---- 图表公共组件 (折线图 / 饼图) ---- */
+
+.chart-empty {
+	margin: 0;
+	font-size: 0.9em;
+	opacity: 0.6;
+}
+
+/* 平滑折线图 */
+.line-chart {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+}
+
+.line-chart-plot {
+	position: relative;
+	flex: 1 1 0;
+	min-height: 0;
+}
+
+.line-chart-plot .chart-empty {
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.line-chart-svg {
+	display: block;
+}
+
+.line-chart-axis {
+	display: flex;
+	justify-content: space-between;
+	padding: 4px 6px 0;
+	font-size: 0.75em;
+	opacity: 0.55;
+	flex-shrink: 0;
+}
+
+.line-chart-tick {
+	white-space: nowrap;
+}
+
+.line-chart-tooltip {
+	position: absolute;
+	left: 0;
+	top: 0;
+	pointer-events: none;
+	padding: 4px 8px;
+	border-radius: 6px;
+	background: rgba(30, 41, 59, 0.9);
+	color: #fff;
+	font-size: 0.8em;
+	white-space: nowrap;
+	z-index: 5;
+	transition: all;
+}
+
+.line-chart-tooltip[hidden] {
+	display: none;
+}
+
+.line-chart-cursor {
+	stroke: #3b82f6;
+	stroke-width: 1;
+	stroke-dasharray: 4 4;
+	pointer-events: none;
+}
+
+.line-chart-line {
+	fill: none;
+	stroke: #3b82f6;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.line-chart-dot {
+	fill: #fff;
+	stroke: #3b82f6;
+	stroke-width: 1.5;
+}
+
+/* 饼图 */
+.pie-chart {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+}
+
+.pie-chart .chart-empty {
+	padding: 12px 0;
+}
+
+.pie-chart-svg {
+	width: min(160px, 100%);
+	height: auto;
+}
+
+.pie-chart-slice {
+	stroke: rgba(255, 255, 255, 0.65);
+	stroke-width: 0.5;
+	transition: opacity 0.15s ease;
+}
+
+.pie-chart-slice:hover {
+	opacity: 0.82;
+}
+
+.pie-chart-legend {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	font-size: 0.85em;
+}
+
+.pie-chart-legend li {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	align-items: center;
+	gap: 8px;
+}
+
+.pie-chart-swatch {
+	width: 10px;
+	height: 10px;
+	border-radius: 3px;
+	flex-shrink: 0;
+}
+
+.pie-chart-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.pie-chart-pct {
+	opacity: 0.6;
+	font-variant-numeric: tabular-nums;
+}
