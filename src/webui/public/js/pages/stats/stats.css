@@ -1,0 +1,163 @@
+/* 统计: 数据看板 */
+
+.stats-page {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	color: rgba(0, 0, 0, 0.75);
+}
+
+/* ---- 时间范围切换 ---- */
+.stats-bar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.stats-range {
+	appearance: none;
+	padding: 6px 14px;
+	border-radius: 999px;
+	border: var(--glass-border, 1px solid rgba(255, 255, 255, 0.3));
+	background: var(--glass-bg, rgba(255, 255, 255, 0.2));
+	color: inherit;
+	font: inherit;
+	font-size: 0.9em;
+	cursor: pointer;
+	transition: background 0.15s, color 0.15s;
+}
+
+.stats-range:hover {
+	background: rgba(255, 255, 255, 0.45);
+}
+
+.stats-range.active {
+	background: #3b82f6;
+	border-color: transparent;
+	color: #fff;
+}
+
+/* ---- 概览卡片 ---- */
+.stats-cards {
+	display: grid;
+	gap: 12px;
+	grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.stats-card {
+	padding: 14px 16px;
+	border-radius: 12px;
+	border: var(--glass-border, 1px solid rgba(255, 255, 255, 0.3));
+	background: var(--glass-bg, rgba(255, 255, 255, 0.2));
+	backdrop-filter: blur(var(--glass-blur, 10px));
+}
+
+.stats-card-value {
+	font-size: 1.5em;
+	font-weight: 600;
+	line-height: 1.2;
+}
+
+.stats-card-label {
+	margin-top: 4px;
+	font-size: 0.85em;
+	opacity: 0.6;
+}
+
+/* ---- 提示与空状态 ---- */
+.stats-notice {
+	margin: 0;
+	padding: 10px 14px;
+	border-radius: 10px;
+	background: rgba(245, 158, 11, 0.15);
+	font-size: 0.88em;
+}
+
+.stats-empty {
+	margin: 0;
+	font-size: 0.9em;
+	opacity: 0.6;
+}
+
+.stats-error {
+	margin: 0;
+	font-size: 0.9em;
+	color: #dc2626;
+}
+
+/* ---- 趋势图 (平滑折线图由公共组件绘制, 这里只定义容器) ---- */
+.stats-h3 {
+	margin: 0;
+	font-size: 1em;
+	font-weight: 600;
+}
+
+.stats-chart {
+	height: 200px;
+	padding: 12px;
+	border-radius: 12px;
+	border: var(--glass-border, 1px solid rgba(255, 255, 255, 0.3));
+	background: var(--glass-bg, rgba(255, 255, 255, 0.2));
+	box-sizing: border-box;
+}
+
+/* ---- 排行与占比 ---- */
+.stats-ranks {
+	display: grid;
+	gap: 16px;
+	grid-template-columns: 1fr;
+}
+
+@media (min-width: 720px) {
+	.stats-ranks {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+
+.stats-rank {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 0;
+	padding: 14px 16px;
+	border-radius: 12px;
+	border: var(--glass-border, 1px solid rgba(255, 255, 255, 0.3));
+	background: var(--glass-bg, rgba(255, 255, 255, 0.2));
+}
+
+.stats-rank h3 {
+	margin: 0;
+	font-size: 0.95em;
+	font-weight: 600;
+}
+
+.stats-rank-row {
+	display: grid;
+	grid-template-columns: minmax(60px, 34%) 1fr auto;
+	align-items: center;
+	gap: 10px;
+	font-size: 0.88em;
+}
+
+.stats-rank-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.stats-rank-track {
+	height: 6px;
+	border-radius: 999px;
+	background: rgba(0, 0, 0, 0.08);
+	overflow: hidden;
+}
+
+.stats-rank-fill {
+	height: 100%;
+	border-radius: 999px;
+	background: #3b82f6;
+}
+
+.stats-rank-count {
+	opacity: 0.6;
+}

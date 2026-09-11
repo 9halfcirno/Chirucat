@@ -28,10 +28,24 @@ app.register({
 });
 
 app.register({
+	id: "stats",
+	title: "统计",
+	icon: "/img/icons/stats.svg",
+	load: () => import("./js/pages/stats/stats.js"),
+});
+
+app.register({
 	id: "bots",
 	title: "机器人",
 	icon: "/img/icons/bot.svg",
 	load: () => import("./js/pages/bots/bots.js"),
+});
+
+app.register({
+	id: "users",
+	title: "用户管理",
+	icon: "/img/icons/user.svg",
+	load: () => import("./js/pages/users/users.js"),
 });
 
 app.register({
