@@ -95,6 +95,18 @@ async function appStart() {
 			if (webuiRes.created) logger.log("配置文件缺失, 已生成默认配置: configs/webui.json");
 			coreOption.webuiOption = webuiRes.config;
 		}
+
+		if (coreOption.statistics !== false) {
+			// statistics 未显式关闭时, 把 statistics.json 作为子配置一并传入
+			const statsRes = await readJSONOrCreate(path.join(CONFIGS_DIR, "statistics.json"), {
+				flushIntervalMs: 5000,
+				bufferSize: 500,
+				detailRetentionDays: 7,
+				hourlyRetentionDays: 30,
+			});
+			if (statsRes.created) logger.log("配置文件缺失, 已生成默认配置: configs/statistics.json");
+			coreOption.statisticsOption = statsRes.config;
+		}
 		logger.log(`已加载配置: configs/core.json${coreOption.webuiOption ? ", configs/webui.json" : ""}`);
 
 		core = new Core(coreOption);

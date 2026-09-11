@@ -14,12 +14,18 @@ export class MessageHandler {
 		let ok = this.filter.filter(msg);
 
 		this._logMessage(msg, ok);
-		if (!ok) return; // 被过滤就忽略
 
-		if (!this.bot.command.exec(msg)) {
-			// 没有匹配指令的消息, 进入插件消息回调
-			this.bot.plugin.handleMessage(msg);
+		let isCommand = false;
+		if (ok) {
+			isCommand = this.bot.command.exec(msg);
+			if (!isCommand) {
+				// 没有匹配指令的消息, 进入插件消息回调
+				this.bot.plugin.handleMessage(msg);
+			}
 		}
+
+		// 统计埋点, 覆盖被过滤的消息
+		this.bot.core.statistics?.record(msg, this.bot.id, { filtered: !ok, isCommand });
 	}
 
 	private _logMessage(message: Message, ok: boolean = true) {
