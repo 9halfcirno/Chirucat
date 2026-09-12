@@ -16,6 +16,7 @@ import type { BotState } from "../bot/types";
 import Logger from "../utils/logger";
 import { dirCheck } from "../utils/dir-check";
 import { dfs } from "../utils/dfs";
+import { PluginExports } from "./exports";
 
 const logger = new Logger("PluginManager");
 
@@ -27,6 +28,8 @@ export class PluginManager {
 
 	/** Bot私有目录插件注册表: id -> Plugin */
 	botPlugins = new Map<string, Plugin>();
+
+	private pluginExports = new PluginExports();
 
 	constructor(private bot: Bot) {
 
@@ -121,6 +124,8 @@ export class PluginManager {
 				// 运行中的插件不替换实例, 仅更新清单
 				existing.manifest = manifest;
 			} else {
+				// 实例即将被丢弃, 先释放其运行时资源(含对外导出)
+				existing?.context?.dispose();
 				registry.set(id, new Plugin({ manifest, scope }));
 			}
 		}
@@ -130,6 +135,8 @@ export class PluginManager {
 		const ACTIVE: PluginStatus[] = ["enabled", "loading", "unloading"];
 		for (const [id, plugin] of [...registry]) {
 			if (!collected.has(id) && !ACTIVE.includes(plugin.status)) {
+				// 丢弃前释放运行时资源(含对外导出); dispose 幂等
+				plugin.context?.dispose();
 				registry.delete(id);
 			}
 		}
@@ -185,8 +192,14 @@ export class PluginManager {
 			}
 
 			// 启用插件
-			const context = PluginContextFactory.create(plugin.manifest, this.bot);
-			await plugin.enable(context);
+			const context = PluginContextFactory.create(plugin.manifest, this.bot, this.pluginExports);
+			try {
+				await plugin.enable(context);
+			} catch (e) {
+				// enable 可能在其内部释放之前就报错, 这里兜底(dispose 幂等)
+				context.dispose();
+				throw e;
+			}
 
 			logger.log(`Plugin: 成功载入插件: ${plugin.manifest.name || "???"}(${plugin.id})`);
 		} catch (e) {
@@ -218,6 +231,8 @@ export class PluginManager {
 		const plugin = this.resolve(id);
 		if (!plugin || plugin.status === "disabled" || plugin.status === "registered") return; // 幂等
 		await plugin.disable(true);
+		// 兜底: 导出正常已由 context.dispose() 释放, 这里覆盖上下文缺失等异常情况
+		this.pluginExports.releaseExports(plugin.id);
 
 		logger.log(`Plugin: 已卸载插件: ${plugin.id}`);
 	}

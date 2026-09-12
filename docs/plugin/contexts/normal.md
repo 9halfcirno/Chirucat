@@ -15,6 +15,7 @@
 - [其他](#其他)
   - [日志记录](#logger对象)
   - [动作发送](#action方法)
+  - [插件间导入导出](#插件间导入导出exportsrequire)
 - [禁忌!!除非你知道你在做什么](#绝对不应触碰的禁忌)
 
 ## 基础信息
@@ -76,7 +77,7 @@
 
 下列方法均为同步方法
 
-- `init()`: 初始化kv存储, 需显式调用
+- `init()`: 初始化kv存储, 需显式调用(重复调用安全; 未调用前访问其它方法会报错)
 - `get(key: string, defaultValue?: any): any`: 获取指定键的值, 如果键不存在则返回默认值
 - `set(key: string, value: any)`: 设置指定键的值
 - `delete(key: string)`: 删除指定键的值
@@ -120,6 +121,49 @@
 // entity对象来自注册的回调的参数
 // action对象为具体动作信息
 await ctx.action(entity, action)
+```
+
+### 插件间导入导出(exports/require)
+
+插件可以通过 `ctx.exports` 对外暴露一组接口, 供依赖它的插件通过 `ctx.require` 导入。
+
+导出:
+
+- `ctx.exports = value`: 发布本插件的导出, 通常在 `init` 中同步设置
+- `ctx.exports`: 读取本插件当前的导出
+
+导入:
+
+- `ctx.require<T = any>(pluginId: string): T`: 导入指定插件的导出, 泛型用于标注导出类型
+
+约定:
+
+- 被导入的插件必须在 manifest 的 `dependencies` 中声明, 框架加载时会先加载依赖, 因此依赖的导出在 `init` 中即可用
+- 目标插件没有导出时(未加载/未导出/已卸载) `require` 会抛出 `StateError`, 错误信息会列出当前可导入的插件
+- `require` 每次调用都实时查询, **不要缓存返回值**: 目标插件卸载后其导出即被释放, 缓存下来的只是一份失效引用
+- 导出随上下文生命周期释放: 插件卸载、初始化失败、从注册表移除时都会被释放, 不会残留在框架里
+
+示例:
+
+```ts
+// 被依赖的插件 provider
+export default {
+	init(ctx) {
+		ctx.exports = {
+			hello: () => "hi"
+		}
+	}
+}
+```
+
+```ts
+// 依赖方 consumer, manifest: { "dependencies": { "provider": "any" } }
+export default {
+	init(ctx) {
+		const provider = ctx.require<{ hello: () => string }>("provider")
+		ctx.logger.log(provider.hello())
+	}
+}
 ```
 
 ## 绝对不应触碰的禁忌

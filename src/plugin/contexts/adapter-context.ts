@@ -2,16 +2,16 @@ import type { Bot } from "../../bot/bot";
 import type { BotActions } from "../../protocols/actions";
 import type { BotEvents } from "../../protocols/events";
 import type { SessionType } from "../../protocols/session";
+import type { PluginExports } from "../exports";
 import type { PluginManifest } from "../types";
 import { PluginContext } from "./context";
 import type { ActionHandler, AdapterPluginBotAPI, PluginSessionAPI, PluginUserAPI } from "./types";
 
 export class AdapterContext extends PluginContext {
 	private actionHandlers: ActionHandler[] = [];
-	constructor(bot: Bot, private manifest: PluginManifest) {
+	constructor(bot: Bot, manifest: PluginManifest, exports: PluginExports) {
 		if (manifest.type !== "adapter") throw new Error(`Plugin Context: AdapterContext仅 type: adapter 的插件可创建`)
-		super(bot, manifest);
-
+		super(bot, manifest, exports);
 		/**
 		 * 为Bot触发一个BotEvent
 		 * @param event Bot事件
@@ -21,7 +21,7 @@ export class AdapterContext extends PluginContext {
 			name: this._bot.name,
 			dispatch: (event: BotEvents) => {
 				this._bot.dispatch(event, {
-					adapter: this.manifest.id
+					adapter: this._manifest.id
 				});
 			},
 			/**
