@@ -48,14 +48,15 @@ export interface PluginCommandAPI {
 	 * 使用纯文本和参数触发指令
 	 * @param name 指令名
 	 * @param args 参数
+	 * @returns 命中的指令名, 未命中为 false
 	 */
-	exec(name: string, args: (string | number)[]): boolean;
+	exec(name: string, args: (string | number)[]): string | false;
 	/**
 	 * 对消息进行匹配
 	 * @param message 进行匹配的消息
-	 * @returns true为匹配到指令, false为未匹配
+	 * @returns 命中的指令名, 未命中为 false
 	 */
-	exec(message: Message): boolean;
+	exec(message: Message): string | false;
 }
 
 export interface PluginFileSystemAPI {
