@@ -15,18 +15,15 @@ export class KVStore implements PluginKVAPI {
 
 	constructor(file: string) {
 		this.file = file;
-		// 目录不存在时 sqlite 无法创建文件, 先保证目录存在
-		fs.mkdirSync(path.dirname(file), { recursive: true });
-		this.db = new sqlite(file, {});
-		// 多进程同时打开同一 db 文件时, 避免写入撞 SQLITE_BUSY
-		this.db.pragma("busy_timeout = 5000");
-		this.init();
 	}
 
 	init() {
+		if (this.db) return; // 幂等: 重复调用不应再开一个连接
 		// 目录不存在时 sqlite 无法创建文件, 先保证目录存在
 		fs.mkdirSync(path.dirname(this.file), { recursive: true });
 		this.db = new sqlite(this.file, {});
+		// 多进程同时打开同一 db 文件时, 避免写入撞 SQLITE_BUSY
+		this.db.pragma("busy_timeout = 5000");
 		this.db.exec(`
 			CREATE TABLE IF NOT EXISTS kv (
 				key TEXT PRIMARY KEY,
@@ -36,8 +33,15 @@ export class KVStore implements PluginKVAPI {
 		`);
 	}
 
+	/** 当前连接; 未初始化或已关闭时给出明确错误, 而不是空指针异常 */
+	private get conn(): sqlite.Database {
+		if (this._closed) throw new Error(`KV 已关闭 (file="${this.file}")`);
+		if (!this.db) throw new Error(`KV 未初始化: 请先调用 kv.init() (file="${this.file}")`);
+		return this.db;
+	}
+
 	get<T = unknown>(key: string, defaultValue?: T): T | undefined {
-		const row = this.db!.prepare(
+		const row = this.conn.prepare(
 			'SELECT value FROM kv WHERE key = ?'
 		).get(key) as { value: string } | undefined;
 
@@ -50,7 +54,7 @@ export class KVStore implements PluginKVAPI {
 		if (text === undefined) {
 			throw new TypeError(`KV set: 值不可 JSON 序列化 (key="${key}")`);
 		}
-		this.db!.prepare(`
+		this.conn.prepare(`
 			INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?)
 			ON CONFLICT(key) DO UPDATE SET
 				value = excluded.value,
@@ -59,33 +63,34 @@ export class KVStore implements PluginKVAPI {
 	}
 
 	has(key: string): boolean {
-		return !!this.db!.prepare('SELECT 1 FROM kv WHERE key = ?').get(key);
+		return !!this.conn.prepare('SELECT 1 FROM kv WHERE key = ?').get(key);
 	}
 
 	delete(key: string): boolean {
-		return this.db!.prepare('DELETE FROM kv WHERE key = ?').run(key).changes > 0;
+		return this.conn.prepare('DELETE FROM kv WHERE key = ?').run(key).changes > 0;
 	}
 
 	clear(): void {
-		this.db!.exec('DELETE FROM kv');
+		this.conn.exec('DELETE FROM kv');
 	}
 
 	keys(): string[] {
-		const rows = this.db!.prepare('SELECT key FROM kv').all() as { key: string }[];
+		const rows = this.conn.prepare('SELECT key FROM kv').all() as { key: string }[];
 		return rows.map(r => r.key);
 	}
 
 	entries(): [string, unknown][] {
-		const rows = this.db!.prepare('SELECT key, value FROM kv').all() as { key: string; value: string }[];
+		const rows = this.conn.prepare('SELECT key, value FROM kv').all() as { key: string; value: string }[];
 		return rows.map(r => [r.key, JSON.parse(r.value)]);
 	}
 
 	/**
 	 * 关闭数据库连接, 幂等; 插件卸载时由 PluginContext.dispose 调用
+	 * 从未 init 过的实例(插件没用 KV)直接返回, 不占用任何句柄
 	 */
 	close(): void {
-		if (this._closed) return;
+		if (this._closed || !this.db) return;
 		this._closed = true;
-		this.db!.close();
+		this.db.close();
 	}
 }
