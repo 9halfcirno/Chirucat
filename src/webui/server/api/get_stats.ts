@@ -52,12 +52,17 @@ export default {
 			return { by, rank: stats.rank(range, by, limit) };
 		}
 
+		if (body.target === "commands") {
+			const limit = typeof body.limit === "number" && body.limit > 0 ? Math.min(body.limit, 100) : 10;
+			return { commands: stats.commands(range, limit) };
+		}
+
 		throw { err: "未知的统计查询类型", code: 400 }
 	},
 } as WebUIAPI
 
 type Body = {
-	target: "summary" | "timeline" | "rank" | "bots";
+	target: "summary" | "timeline" | "rank" | "commands" | "bots";
 	/** 起始时间(ms, 含) */
 	from?: number;
 	/** 结束时间(ms, 不含) */

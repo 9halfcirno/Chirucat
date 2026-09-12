@@ -85,20 +85,38 @@
 	color: #dc2626;
 }
 
-/* ---- 趋势图 (平滑折线图由公共组件绘制, 这里只定义容器) ---- */
-.stats-h3 {
+/* ---- 趋势图 (平滑折线图由公共组件绘制, 这里只定义卡片与绘区) ---- */
+.stats-charts {
+	display: grid;
+	gap: 16px;
+	grid-template-columns: 1fr;
+}
+
+@media (min-width: 720px) {
+	.stats-charts {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+
+.stats-chart-box {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	min-width: 0;
+	padding: 14px 16px;
+	border-radius: 12px;
+	border: var(--glass-border, 1px solid rgba(255, 255, 255, 0.3));
+	background: var(--glass-bg, rgba(255, 255, 255, 0.2));
+}
+
+.stats-chart-box h3 {
 	margin: 0;
-	font-size: 1em;
+	font-size: 0.95em;
 	font-weight: 600;
 }
 
 .stats-chart {
 	height: 200px;
-	padding: 12px;
-	border-radius: 12px;
-	border: var(--glass-border, 1px solid rgba(255, 255, 255, 0.3));
-	background: var(--glass-bg, rgba(255, 255, 255, 0.2));
-	box-sizing: border-box;
 }
 
 /* ---- 排行与占比 ---- */
