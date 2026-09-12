@@ -1,9 +1,10 @@
 import Logger from "../utils/logger";
-import { collect } from "./collector";
+import { collect, collectSend } from "./collector";
 import { StatisticsStore } from "./store";
 import type { Message } from "../entity/message";
+import type { MessageSend } from "../protocols/action/message-send";
 import type {
-	StatFlags, StatPoint, StatRange, StatRankItem, StatRecord, StatisticsOptions, StatSummary,
+	StatFlags, StatPoint, StatRange, StatRankItem, StatRecord, StatisticsOptions, StatSendMeta, StatSummary,
 } from "./types";
 
 const logger = new Logger("Statistics");
@@ -53,11 +54,25 @@ export class StatisticsManager {
 	record(message: Message, botId: string, flags: StatFlags) {
 		if (this.closed) return;
 		try {
-			this.buffer.push(collect(message, botId, flags));
-			if (this.buffer.length >= this.options.bufferSize) this.flush();
+			this.#push(collect(message, botId, flags));
 		} catch (e) {
 			logger.debug(`记录统计失败: ${e instanceof Error ? e.message : e}`);
 		}
+	}
+
+	/** 记录一条 Bot 发出的消息。同样不影响发送主流程 */
+	recordSend(action: MessageSend, meta: StatSendMeta) {
+		if (this.closed) return;
+		try {
+			this.#push(collectSend(action, meta));
+		} catch (e) {
+			logger.debug(`记录发送统计失败: ${e instanceof Error ? e.message : e}`);
+		}
+	}
+
+	#push(record: StatRecord) {
+		this.buffer.push(record);
+		if (this.buffer.length >= this.options.bufferSize) this.flush();
 	}
 
 	/** 把缓冲区写入数据库。写入失败只记日志并丢弃缓冲, 避免无限增长 */
@@ -116,6 +131,11 @@ export class StatisticsManager {
 		return by === "session"
 			? this.store.topSessions(range, limit)
 			: this.store.topPlatforms(range, limit);
+	}
+
+	/** 指令命中排行 */
+	commands(range: StatRange, limit = 10): StatRankItem[] {
+		return this.store.topCommands(range, limit);
 	}
 
 	/** 已产生统计数据的 Bot id */
