@@ -19,4 +19,6 @@ export interface MessageCreateEvent extends BotEvent {
 	text: string;
 	/** 消息富文本内容 */
 	richContent: Array<MessageBlock>;
+
+	quote?: MessageCreateEvent;
 }

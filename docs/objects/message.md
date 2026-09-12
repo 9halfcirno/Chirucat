@@ -19,6 +19,7 @@
 - `session`: 消息来源会话信息
   - `id`: 会话uuid
   - `type`: 会话类型, 值为`private`, `group`, `channel`其中之一
+- `quote`: 被引用的消息(同为`Message`对象), 适配器未提供时为`undefined`
 
 # MessageBlock对象
 
