@@ -50,6 +50,7 @@ export class Plugin {
 				await this.module.error?.(e);
 			} catch { /* 忽略清理钩子的错误 */ }
 			this.context?.dispose?.();
+			this.context = null; // 上下文已释放, 断开引用避免后续误用
 			this.status = "error";
 			throw e;
 		}
@@ -73,6 +74,7 @@ export class Plugin {
 			} catch { /* 忽略清理钩子的错误 */ }
 		}
 		this.context?.dispose();
+		this.context = null; // 上下文已释放, 断开引用避免后续误用
 		destroy && (this.module = null);
 		this.status = "disabled";
 	}
