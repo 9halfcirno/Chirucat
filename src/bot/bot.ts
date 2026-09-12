@@ -10,6 +10,7 @@ import type { Core } from "../core";
 import { CommandManager } from "../command/manager";
 import EventEmitter from "events";
 import type { BotActions } from "../protocols/actions";
+import type { MessageSend } from "../protocols/action/message-send";
 import Logger from "../utils/logger";
 
 // 虽然不知道继承Emitter有什么用吧
@@ -110,6 +111,27 @@ export class Bot extends EventEmitter {
 	 * @param extra 额外数据, 应从对应event.extra取
 	 */
 	async action(action: BotActions, adapter: string, extra?: Record<string, any>) {
+		if (action.type === "message.send") this.recordSend(action);
 		await this.plugin.handleAction(action, adapter, extra);
+	}
+
+	/**
+	 * 记录一条 Bot 发出的消息
+	 *
+	 * 统计的是发送动作而非投递结果; 属于辅助功能, 任何失败都不应影响发送主流程,
+	 * 会话查不到时直接放弃这条记录。
+	 */
+	private recordSend(action: MessageSend) {
+		const stats = this.core.statistics;
+		if (!stats) return;
+
+		const session = this.core.session?.query(action.session);
+		if (!session) return;
+
+		stats.recordSend(action, {
+			botId: this.id,
+			platform: session.platform,
+			sessionType: session.type,
+		});
 	}
 }

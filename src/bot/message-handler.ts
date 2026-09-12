@@ -15,17 +15,21 @@ export class MessageHandler {
 
 		this._logMessage(msg, ok);
 
-		let isCommand = false;
+		// 命中时拿到指令名, 未命中为 false
+		let command: string | false = false;
 		if (ok) {
-			isCommand = this.bot.command.exec(msg);
-			if (!isCommand) {
+			command = this.bot.command.exec(msg);
+			if (!command) {
 				// 没有匹配指令的消息, 进入插件消息回调
 				this.bot.plugin.handleMessage(msg);
 			}
 		}
 
-		// 统计埋点, 覆盖被过滤的消息
-		this.bot.core.statistics?.record(msg, this.bot.id, { filtered: !ok, isCommand });
+		// 统计埋点, 覆盖被过滤的消息; 命中指令时一并记录指令名
+		this.bot.core.statistics?.record(msg, this.bot.id, {
+			filtered: !ok,
+			command: command || "",
+		});
 	}
 
 	private _logMessage(message: Message, ok: boolean = true) {
