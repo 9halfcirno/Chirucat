@@ -8,5 +8,7 @@ export default {
 		ctx.command.register("ping", (msg) => {
 			msg?.reply("pong")
 		})
+
+		ctx.logger.log(ctx.require("des"))
 	}
 }
