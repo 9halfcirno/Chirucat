@@ -3,6 +3,9 @@ import type { NPMPackages, PluginModule } from "./types";
 import path from "path";
 import module from "module";
 
+const PLUGIN_MODULE_VAR = "__chirucat_plugin_module__";
+
+
 export class PluginLoader {
 	/**
 	 * 构建插件代码并导出插件模块
@@ -17,7 +20,7 @@ export class PluginLoader {
 			entryPoints: [fileURL],
 			format: "iife",
 			platform: "node",
-			globalName: "module",
+			globalName: PLUGIN_MODULE_VAR,
 
 			plugins: [
 				this.createImportResolver(prequire)
@@ -28,7 +31,7 @@ export class PluginLoader {
 
 		const code = output.outputFiles?.[0]?.text;
 		if (!code) throw new Error(`构建产物为空`)
-		return new Function("require", `${code};return module;`)(prequire);
+		return new Function("require", `${code};return ${PLUGIN_MODULE_VAR};`)(prequire);
 
 	}
 
