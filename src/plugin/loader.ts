@@ -9,7 +9,7 @@ export class PluginLoader {
 	 * @param fileURL 
 	 */
 	async load(fileURL: string): Promise<{ default: PluginModule; }> {
-		const prequire = module.createRequire(path.join(path.dirname(fileURL), "packages.json"))
+		const prequire = module.createRequire(path.join(path.dirname(fileURL), "package.json"))
 
 		const option: esbuild.BuildOptions = {
 			bundle: true,
