@@ -45,7 +45,7 @@ export class Core {
 				const webui = new server({
 					core: this,
 					...this.config.webuiOption
-				 })
+				})
 				this.webui = webui;
 			}).catch(e => {
 				logger.error(`初始化WebUI失败: ${e.message}`, e)
@@ -69,9 +69,9 @@ export class Core {
 			});
 		}
 
-		
+
 		await this.bot.scan(path.join(root, "bots")) // 扫描bot目录
-		await this.bot.syncState();
+		this.bot.syncState();
 
 	}
 
