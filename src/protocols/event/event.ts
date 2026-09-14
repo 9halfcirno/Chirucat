@@ -9,5 +9,5 @@ export interface BotEvent {
 	platform: string;
 
 	/** 扩展对象 */
-	extra: Record<string, any>;
+	extra?: Record<string, any>;
 }
