@@ -5,6 +5,8 @@ import type { BotEvent } from "./event";
 export interface MessageCreateEvent extends BotEvent {
 	type: "message.create";
 
+	messageId: string;
+
 	/** 发送者框架id, 从UserManager获取 */
 	senderId: string;
 	/** 发送者昵称 */

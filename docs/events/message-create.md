@@ -12,6 +12,7 @@
 
 该事件继承[`BotEvent`](event.md)的全部字段(`type`, `time`, `platform`, `extra`), 其中:
 
+- `messageId`: 平台推送消息携带的消息id
 - `type`: 固定为`message.create`
 
 ### 专属字段
@@ -27,6 +28,7 @@
 
 派发后创建的`Message`实体与事件的字段对应关系如下(完整结构见[Message对象](../objects/message.md)):
 
+- `messageId` -> `id`
 - `senderId`/`senderName` -> `sender.id`/`sender.name`
 - `sessionId`/`sessionType` -> `session.id`/`session.type`
 - `text` -> `text`
@@ -39,6 +41,7 @@
 ```ts
 ctx.bot.dispatch({
 	type: "message.create",
+	messageId: data.id,
 	senderId: ctx.user.get("qq", data.author.id), // 平台用户id -> 账号uuid
 	senderName: data.author.username,
 	sessionType: "group",

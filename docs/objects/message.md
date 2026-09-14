@@ -10,6 +10,7 @@
 
 ### 字段
 
+- `id`: 消息的ID
 - `text`: 消息纯文本内容
 - `blocks`: 消息块(`MessageBlock`)数组
 - `sender`: 消息发送者信息

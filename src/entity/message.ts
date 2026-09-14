@@ -19,6 +19,7 @@ type MessageConstructor = new (
 ) => Message;
 
 export class Message extends Entity {
+	id: string;
 	text: string;
 	blocks: Array<MessageBlock>
 	session: Session;
@@ -29,6 +30,7 @@ export class Message extends Entity {
 	constructor(event: MessageCreateEvent, meta: BotEventMeta, bot?: Bot, quoteChain?: Set<MessageCreateEvent>) {
 		if (event.type !== "message.create") throw new TypeError("Message只接收 message.create 事件, 但是收到 " + event.type + " 事件")
 		super(event, meta, bot);
+		this.id = event.messageId;
 		this.text = event.text;
 		this.blocks = event.richContent;
 
