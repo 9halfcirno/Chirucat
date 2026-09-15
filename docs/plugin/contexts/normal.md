@@ -99,7 +99,20 @@
 - `list(dir: string): Promise<string[]>`: 列出指定目录的所有文件/目录
 - `stat(file: string): : Promise<fs.Stats>`: 获取指定文件的属性
 
-所有路径均基于插件私有存储目录
+`fs` 的所有路径均基于插件私有存储目录(可读写)
+
+### plugin对象
+
+以插件代码目录为根的只读文件系统, 供插件读取自带的模板/资源等文件
+
+提供与 `fs` 相同的读取类方法, 但**没有** `write` / `append`:
+
+- `read(file: string, encoding?: string): Promise<string>`: 读取文件
+- `exists(file: string): Promise<boolean>`: 判断指定路径上的文件是否存在
+- `list(dir: string): Promise<string[]>`: 列出指定目录的所有文件/目录
+- `stat(file: string): : Promise<fs.Stats>`: 获取指定文件的属性
+
+所有路径均基于插件代码目录
 
 ## 其他
 

@@ -8,7 +8,7 @@ import { MessageAPI } from "./apis/message";
 import Logger from "../../utils/logger";
 
 const logger = new Logger("PluginContext");
-import type { MessageCallbackEntry, PluginBotAPI, PluginCommandAPI, PluginFileSystemAPI, PluginKVAPI, PluginMessageAPI } from "./types";
+import type { MessageCallbackEntry, PluginBotAPI, PluginCommandAPI, PluginFileSystemAPI, PluginKVAPI, PluginMessageAPI, ReadonlyFsAPI } from "./types";
 import { FileSystemAPI } from "./apis/fs";
 import { KVStore } from "./apis/kv";
 import path from "node:path";
@@ -22,7 +22,15 @@ export class PluginContext {
 	logger: Logger;
 	message: PluginMessageAPI;
 	fs: PluginFileSystemAPI;
+	/** 插件代码根目录的只读文件访问 */
+	plugin: ReadonlyFsAPI;
 	kv: PluginKVAPI;
+	path: {
+		/** 插件代码根目录 */
+		plugin: string;
+		/** 插件数据根目录 */
+		data: string
+	};
 
 	/** 内部持有的 KV 存储实例, 供 dispose 关闭连接 */
 	private _kv: KVStore;
@@ -46,12 +54,19 @@ export class PluginContext {
 		// bot.path 为绝对路径, resolve 会从其重置; 若为相对路径则以 root 为基准
 		this._storageRoot = path.resolve(root, bot.path, "data", "plugins", _manifest.id);
 		this.fs = new FileSystemAPI(this._storageRoot);
+		// 插件代码目录只读: 允许读自带资源, 不允许改写安装目录
+		this.plugin = new FileSystemAPI(path.resolve(root, _manifest.path), { writable: false });
 		this._kv = new KVStore(path.join(this._storageRoot, ".kv.db"));
 		this.kv = this._kv;
 
 		this.bot = {
 			id: this._bot.id,
 			name: this._bot.name
+		}
+
+		this.path = {
+			plugin: _manifest.path,
+			data: this._storageRoot
 		}
 	}
 

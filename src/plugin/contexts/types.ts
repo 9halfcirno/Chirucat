@@ -97,6 +97,13 @@ export interface PluginFileSystemAPI {
 	stat(path: string): Promise<Stats>;
 }
 
+/**
+ * 只读文件系统 API: 摘除写入类操作
+ *
+ * 仅约束正常调用(类型上看不到 write/append), 运行时拦截在 FileSystemAPI 内
+ */
+export type ReadonlyFsAPI = Omit<PluginFileSystemAPI, "write" | "append">;
+
 
 
 export interface PluginKVAPI {
