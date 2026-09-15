@@ -22,5 +22,19 @@ export interface MessageCreateEvent extends BotEvent {
 	/** 消息富文本内容 */
 	richContent: Array<MessageBlock>;
 
-	quote?: MessageCreateEvent;
+	quote?: MessageQuote;
+}
+
+export interface MessageQuote {
+	/** 被引用消息id, 拿不到就是空 */
+	messageId?: string;
+	/** 消息纯文本内容 */
+	text: string;
+	/** 消息富文本内容 */
+	richContent: Array<MessageBlock>;
+
+	/** 发送者框架id, 从UserManager获取 */
+	senderId: string;
+	/** 发送者昵称 */
+	senderName: string;
 }

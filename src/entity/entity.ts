@@ -17,7 +17,7 @@ export class Entity {
 		this.type = event.type;
 		this.time = event.time;
 		this.platform = event.platform;
-		this.extra = event.extra;
+		this.extra = event.extra || {};
 	}
 
 	action(action: BotActions) {

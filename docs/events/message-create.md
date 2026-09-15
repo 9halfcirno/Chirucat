@@ -23,10 +23,21 @@
 - `sessionId`: 会话框架id(会话uuid), 应使用[`ctx.session.get`](../plugin/contexts/adapter.md)从平台会话id转换得到
 - `text`: 消息纯文本内容
 - `richContent`: 消息富文本内容, 为[`MessageBlock`](../objects/message.md)数组
+- `quote`: 该消息引用的消息快照, 若平台无法提供 则不需要该字段
+
+#### 消息引用对象
+
+即`MessageCreateEvent.quote`字段
+
+- `messageId`: 平台推送消息携带的消息id, 若无法得到应不填
+- `text`: 消息纯文本内容
+- `richContent`: 消息富文本内容, 为[`MessageBlock`](../objects/message.md)数组
+- `senderId`: 发送者框架id(账号uuid), 应使用[`ctx.user.get`](../plugin/contexts/adapter.md)从发送者平台id转换得到
+- `senderName`: 发送者昵称
 
 ### 与Message实体的字段对应
 
-派发后创建的`Message`实体与事件的字段对应关系如下(完整结构见[Message对象](../objects/message.md)):
+派发后创建的`Message`实体(以及引用)与事件的字段对应关系如下(完整结构见[Message对象](../objects/message.md)):
 
 - `messageId` -> `id`
 - `senderId`/`senderName` -> `sender.id`/`sender.name`

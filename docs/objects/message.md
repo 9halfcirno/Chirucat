@@ -20,7 +20,27 @@
 - `session`: 消息来源会话信息
   - `id`: 会话uuid
   - `type`: 会话类型, 值为`private`, `group`, `channel`其中之一
-- `quote`: 被引用的消息(同为`Message`对象), 适配器未提供时为`undefined`
+- `quote`: 被引用的消息, 为[`MessageQuote`对象](#messagequote对象), 适配器未提供时为`undefined`
+
+### 方法
+
+- `reply(msg: string | MessageBlock[]): Promise<void>`: 以当前消息被动回复
+
+# MessageQuote对象
+
+## 概述
+
+该对象表示被引用的一条消息
+
+### 字段
+
+- `id`: 消息的ID, 可能不存在, 具体看适配器是否能提供
+- `text`: 消息纯文本内容
+- `blocks`: 消息块(`MessageBlock`)数组
+- `sender`: 消息发送者信息
+  - `id`: 发送者账号uuid
+  - `unionId`: 发送者跨平台uuid
+  - `name`: 发送者昵称
 
 # MessageBlock对象
 
