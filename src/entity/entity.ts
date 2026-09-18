@@ -7,13 +7,13 @@ export class Entity {
 	uuid = uuid();
 	type: BotEvents["type"];
 	time: number;
-	/** 该字段建议配合UserManager使用, 不应直接使用 */
+	/** 该字段建议配合UserManager使用, 不应直接使用, 如果插件要用...也行吧 */
 	platform: string;
 
 	/** 事件携带的额外数据 */
 	extra: Record<string, any>;
 
-	constructor(event: BotEvents, readonly meta: BotEventMeta, protected bot?: Bot) {
+	constructor(readonly event: BotEvents, readonly meta: BotEventMeta, protected bot?: Bot) {
 		this.type = event.type;
 		this.time = event.time;
 		this.platform = event.platform;
