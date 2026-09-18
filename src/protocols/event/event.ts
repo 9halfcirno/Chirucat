@@ -10,4 +10,7 @@ export interface BotEvent {
 
 	/** 扩展对象 */
 	extra?: Record<string, any>;
+
+	/** 原始数据对象 */
+	source?: Record<string, any>;
 }

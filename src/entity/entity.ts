@@ -13,11 +13,15 @@ export class Entity {
 	/** 事件携带的额外数据 */
 	extra: Record<string, any>;
 
+	readonly source: Record<string, any> | null;
+
 	constructor(readonly event: BotEvents, readonly meta: BotEventMeta, protected bot?: Bot) {
 		this.type = event.type;
 		this.time = event.time;
 		this.platform = event.platform;
 		this.extra = event.extra || {};
+
+		this.source = event.source ? event.source : null;
 	}
 
 	action(action: BotActions) {

@@ -18,6 +18,8 @@ interface BotEvent {
 	platform: string;
 	// 扩展对象
 	extra: Record<string, any>;
+	// 事件原始数据
+	source?: Record<string, any>;
 }
 ```
 
@@ -27,6 +29,7 @@ interface BotEvent {
 - `time`: 事件创建时间, 为毫秒时间戳, 通常取`Date.now()`
 - `platform`: 事件来源平台名, 如`qq`, `discord`, `wechat`
 - `extra`: 附加信息, 用于存放平台私有数据(如消息id); 插件通过该事件产生的实体发送`Action`时, 该对象会原样传回适配器 ([Entity对象](../objects/entity.md)), 因此需要被动回复的适配器应将回复所需的数据放入该字段
+- `source`: 平台原始数据内容, 直接将平台事件数据传入即可
 
 ### 事件元数据
 
@@ -50,6 +53,7 @@ ctx.bot.dispatch({
 	time: Date.now(),
 	platform: "qq",
 	extra: {},
+	source: event.data,
 	// ... 该事件类型的专属字段, 见 message-create.md 文档
 })
 ```
