@@ -56,6 +56,13 @@ app.register({
 });
 
 app.register({
+	id: "test",
+	title: "测试页面",
+	icon: "/img/icons/delete.svg",
+	load: () => import("./js/pages/test/index.js"),
+});
+
+app.register({
 	id: "logs",
 	title: "日志",
 	icon: "/img/icons/log.svg",

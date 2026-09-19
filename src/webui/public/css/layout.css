@@ -572,3 +572,320 @@ body.authed #main {
 	opacity: 0.6;
 	font-variant-numeric: tabular-nums;
 }
+
+/* ---- 配置列表组件 (config-editor.js) ---- */
+
+.config-list {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+/* 单个配置项: 标签 / 控件槽 / 说明 纵向排列 */
+.config-group {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-width: 100%;
+}
+
+.config-label {
+	font-size: 0.9em;
+}
+
+.config-required {
+	font-style: normal;
+	margin-left: 3px;
+}
+
+/* 控件槽: 一行内可容纳多个元素 (如滑块 + 读数) */
+.config-field {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+/* group / table 的内嵌容器 */
+.config-group-box,
+.config-table-box {
+	padding: 12px;
+	overflow-x: auto;
+	min-width: 0;
+	box-sizing: border-box;
+	/* 关键：允许在 flex 里收缩 */
+}
+
+/* 分组的控件槽改为纵向排列子控件 */
+.config-field.config-group-body {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 12px;
+}
+
+/* ---- 原生外观接管: 以下控件一律不再沿用系统 UI 绘制 ---- */
+
+/*
+ * 表单控件默认不继承页面字体 (浏览器给的是系统 UI 字体与固定字号),
+ * 这是它们与其余界面最明显的割裂来源, 必须手动接管。
+ */
+input.config-input,
+textarea.config-textarea,
+.config-select,
+.config-table-add,
+.config-table-del {
+	font-family: inherit;
+	font-size: 1em;
+	-webkit-appearance: none;
+	appearance: none;
+}
+
+input.config-input,
+.config-select {
+	box-sizing: border-box;
+	/* 固定宽度而非 width:100%: 控件也会出现在纵向 flex 容器 (group body) 里 */
+	width: 220px;
+	max-width: 100%;
+	line-height: 1.4;
+	border-radius: 999px;
+	padding: 8px 12px;
+}
+
+/* 多行文本: 比单行输入宽, 高度由 rows 决定并允许纵向拉伸 */
+textarea.config-textarea {
+	box-sizing: border-box;
+	/* 横向铺满所在行, min-width: 0 保证能收缩而不是撑破容器 */
+	width: 100%;
+	max-width: 480px;
+	min-width: 0;
+	min-height: 2.4em;
+	line-height: 1.5;
+	/* 多行控件不用胶囊圆角 */
+	border-radius: 12px;
+	padding: 8px 12px;
+	resize: vertical;
+}
+
+/* ---- 下拉选择: 触发器 + 浮层 (原生 select 的弹出层无法用 CSS 接管) ---- */
+
+.config-select-wrap {
+	position: relative;
+	display: inline-block;
+	max-width: 100%;
+}
+
+.config-select {
+	display: inline-flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	width: 160px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.config-select-value {
+	/* min-width: 0 是 flex 子项上 text-overflow 生效的前提 */
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 用边框画下拉三角, 颜色跟随 currentColor */
+.config-select-arrow {
+	flex-shrink: 0;
+	width: 0;
+	height: 0;
+	border-left: 4px solid transparent;
+	border-right: 4px solid transparent;
+	border-top: 5px solid currentColor;
+	transition: transform 0.15s ease;
+}
+
+.config-select[aria-expanded="true"] .config-select-arrow {
+	transform: rotate(180deg);
+}
+
+/* 浮层: fixed 定位, 否则会被 #page-view 的 overflow 裁掉 */
+.config-select-panel {
+	position: fixed;
+	z-index: 40;
+	box-sizing: border-box;
+	min-width: 80px;
+	max-height: 240px;
+	overflow-y: auto;
+	border-radius: 12px;
+	padding: 4px;
+}
+
+.config-select-option {
+	padding: 6px 10px;
+	border-radius: 8px;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* 多选框: 自绘圆角方框 + 勾 */
+.config-checkbox-item input {
+	box-sizing: border-box;
+	flex-shrink: 0;
+	position: relative;
+	width: 1.1em;
+	height: 1.1em;
+	margin: 0;
+	padding: 0;
+	border-radius: 5px;
+	-webkit-appearance: none;
+	appearance: none;
+	cursor: pointer;
+}
+
+/* 勾用两条边框旋转 45° 画成, 默认缩到 0 不可见 */
+.config-checkbox-item input::after {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 0.26em;
+	height: 0.5em;
+	border-right-width: 2px;
+	border-right-style: solid;
+	border-bottom-width: 2px;
+	border-bottom-style: solid;
+	transform: translate(-50%, -60%) rotate(45deg) scale(0);
+	transition: transform 0.12s ease;
+}
+
+.config-checkbox-group {
+	display: flex;
+	width: max-content;
+	flex-direction: column;
+	align-items: start;
+	padding: 8px;
+}
+
+/* 滑块: 轨道与滑块全部自绘 (原生 track/thumb 各平台差异极大) */
+input.config-slider {
+	-webkit-appearance: none;
+	appearance: none;
+	flex: 1 1 160px;
+	max-width: 320px;
+	/* 抬高元素本身作为触摸目标, 轨道在内部垂直居中 */
+	height: 1.5em;
+	margin: 0;
+	background: transparent;
+	cursor: pointer;
+}
+
+input.config-slider::-webkit-slider-runnable-track {
+	box-sizing: border-box;
+	width: 100%;
+	height: 6px;
+	border-radius: 999px;
+}
+
+input.config-slider::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	box-sizing: border-box;
+	width: 16px;
+	height: 16px;
+	/* 让 16px 的滑块在 6px 的轨道上垂直居中 */
+	margin-top: -5px;
+	border-radius: 50%;
+}
+
+input.config-slider::-moz-range-track {
+	box-sizing: border-box;
+	width: 100%;
+	height: 6px;
+	border-radius: 999px;
+}
+
+input.config-slider::-moz-range-thumb {
+	box-sizing: border-box;
+	width: 16px;
+	height: 16px;
+	border: none;
+	border-radius: 50%;
+}
+
+/* Firefox 会给轨道额外画一圈虚线焦点框 */
+input.config-slider::-moz-focus-outer {
+	border: 0;
+}
+
+/* ---- 配置表格 ---- */
+
+.config-table {
+	width: auto;
+	border-collapse: collapse;
+	box-sizing: border-box;
+	border-spacing: 0;
+	font-size: 0.9em;
+}
+
+.config-table th,
+.config-table td {
+	white-space: nowrap;
+	padding: 6px 8px;
+	text-align: left;
+}
+
+/* table 行内控件: 单元格自行排版, 不再叠加外层纵向间距 */
+.config-table td .config-group {
+	gap: 0;
+}
+
+/* 表格与其下方的“添加行”按钮纵向排列 */
+.config-field.config-table-body {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 8px;
+}
+
+/* 操作列: 宽度只占内容, 按钮右对齐 */
+.config-table-op {
+	width: 1%;
+	white-space: nowrap;
+	text-align: right;
+}
+
+.config-table-add {
+	align-self: flex-start;
+	padding: 4px 12px;
+	cursor: pointer;
+}
+
+.config-table-del {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.8em;
+	height: 1.8em;
+	padding: 0;
+	cursor: pointer;
+	line-height: 1;
+}
+
+.config-checkbox-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+}
+
+.config-slider-value {
+	font-size: 0.9em;
+	opacity: 0.7;
+	font-variant-numeric: tabular-nums;
+	min-width: 2.5em;
+}
+
+.config-text {
+	margin: 0;
+}

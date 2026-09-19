@@ -1,0 +1,559 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "Form Controls Config",
+	"type": "object",
+	"required": [
+		"controls"
+	],
+	"properties": {
+		"version": {
+			"type": "string"
+		},
+		"controls": {
+			"type": "array",
+			"items": {
+				"$ref": "#/definitions/control"
+			}
+		}
+	},
+	"definitions": {
+		"control": {
+			"type": "object",
+			"required": [
+				"type",
+				"label"
+			],
+			"properties": {
+				"type": {
+					"type": "string",
+					"enum": [
+						"input",
+						"textarea",
+						"switch",
+						"select",
+						"checkbox",
+						"slider",
+						"group",
+						"text",
+						"table"
+					]
+				},
+				"id": {
+					"type": "string"
+				},
+				"label": {
+					"type": "string"
+				},
+				"default": {},
+				"visible": {
+					"$ref": "#/definitions/visible"
+				},
+				"required": {
+					"type": "boolean"
+				},
+				"desc": {
+					"type": "string"
+				}
+			},
+			"oneOf": [
+				{
+					"$ref": "#/definitions/inputControl"
+				},
+				{
+					"$ref": "#/definitions/textareaControl"
+				},
+				{
+					"$ref": "#/definitions/switchControl"
+				},
+				{
+					"$ref": "#/definitions/selectControl"
+				},
+				{
+					"$ref": "#/definitions/checkboxControl"
+				},
+				{
+					"$ref": "#/definitions/sliderControl"
+				},
+				{
+					"$ref": "#/definitions/groupControl"
+				},
+				{
+					"$ref": "#/definitions/textControl"
+				},
+				{
+					"$ref": "#/definitions/tableControl"
+				}
+			]
+		},
+		"inputControl": {
+			"type": "object",
+			"required": [
+				"type",
+				"id",
+				"label"
+			],
+			"properties": {
+				"type": {
+					"const": "input"
+				},
+				"id": {
+					"type": "string"
+				},
+				"label": {
+					"type": "string"
+				},
+				"default": {
+					"type": "string"
+				},
+				"visible": {
+					"$ref": "#/definitions/visible"
+				},
+				"required": {
+					"type": "boolean"
+				},
+				"desc": {
+					"type": "string"
+				},
+				"placeholder": {
+					"type": "string"
+				},
+				"attr": {
+					"type": "object",
+					"additionalProperties": true
+				}
+			}
+		},
+		"textareaControl": {
+			"type": "object",
+			"required": [
+				"type",
+				"id",
+				"label"
+			],
+			"properties": {
+				"type": {
+					"const": "textarea"
+				},
+				"id": {
+					"type": "string"
+				},
+				"label": {
+					"type": "string"
+				},
+				"default": {
+					"type": "string"
+				},
+				"visible": {
+					"$ref": "#/definitions/visible"
+				},
+				"required": {
+					"type": "boolean"
+				},
+				"desc": {
+					"type": "string"
+				},
+				"placeholder": {
+					"type": "string"
+				},
+				"rows": {
+					"description": "初始可见行数, 未提供时用 3",
+					"type": "number"
+				},
+				"attr": {
+					"type": "object",
+					"additionalProperties": true
+				}
+			}
+		},
+		"switchControl": {
+			"type": "object",
+			"required": [
+				"type",
+				"id",
+				"label"
+			],
+			"properties": {
+				"type": {
+					"const": "switch"
+				},
+				"id": {
+					"type": "string"
+				},
+				"label": {
+					"type": "string"
+				},
+				"default": {
+					"type": "boolean"
+				},
+				"visible": {
+					"$ref": "#/definitions/visible"
+				},
+				"required": {
+					"type": "boolean"
+				},
+				"desc": {
+					"type": "string"
+				}
+			}
+		},
+		"selectControl": {
+			"type": "object",
+			"required": [
+				"type",
+				"id",
+				"label",
+				"items"
+			],
+			"properties": {
+				"type": {
+					"const": "select"
+				},
+				"id": {
+					"type": "string"
+				},
+				"label": {
+					"type": "string"
+				},
+				"items": {
+					"$ref": "#/definitions/optionItems"
+				},
+				"default": {
+					"type": "string"
+				},
+				"visible": {
+					"$ref": "#/definitions/visible"
+				},
+				"required": {
+					"type": "boolean"
+				},
+				"desc": {
+					"type": "string"
+				}
+			}
+		},
+		"checkboxControl": {
+			"type": "object",
+			"required": [
+				"type",
+				"id",
+				"label",
+				"items"
+			],
+			"properties": {
+				"type": {
+					"const": "checkbox"
+				},
+				"id": {
+					"type": "string"
+				},
+				"label": {
+					"type": "string"
+				},
+				"items": {
+					"$ref": "#/definitions/optionItems"
+				},
+				"default": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"visible": {
+					"$ref": "#/definitions/visible"
+				},
+				"required": {
+					"type": "boolean"
+				},
+				"desc": {
+					"type": "string"
+				}
+			}
+		},
+		"sliderControl": {
+			"type": "object",
+			"required": [
+				"type",
+				"id",
+				"label",
+				"min",
+				"max",
+				"step"
+			],
+			"properties": {
+				"type": {
+					"const": "slider"
+				},
+				"id": {
+					"type": "string"
+				},
+				"label": {
+					"type": "string"
+				},
+				"min": {
+					"type": "number"
+				},
+				"max": {
+					"type": "number"
+				},
+				"step": {
+					"type": "number"
+				},
+				"default": {
+					"type": "number"
+				},
+				"visible": {
+					"$ref": "#/definitions/visible"
+				},
+				"required": {
+					"type": "boolean"
+				},
+				"desc": {
+					"type": "string"
+				}
+			}
+		},
+		"groupControl": {
+			"type": "object",
+			"required": [
+				"type",
+				"id",
+				"controls"
+			],
+			"properties": {
+				"type": {
+					"const": "group"
+				},
+				"id": {
+					"type": "string"
+				},
+				"label": {
+					"type": "string"
+				},
+				"controls": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/control"
+					}
+				},
+				"visible": {
+					"$ref": "#/definitions/visible"
+				},
+				"required": {
+					"type": "boolean"
+				},
+				"desc": {
+					"type": "string"
+				}
+			}
+		},
+		"textControl": {
+			"type": "object",
+			"required": [
+				"type",
+				"label"
+			],
+			"properties": {
+				"type": {
+					"const": "text"
+				},
+				"label": {
+					"type": "string"
+				},
+				"visible": {
+					"$ref": "#/definitions/visible"
+				},
+				"required": {
+					"type": "boolean"
+				},
+				"desc": {
+					"type": "string"
+				}
+			}
+		},
+		"tableControl": {
+			"type": "object",
+			"required": [
+				"type",
+				"id",
+				"label",
+				"controls"
+			],
+			"properties": {
+				"type": {
+					"const": "table"
+				},
+				"id": {
+					"type": "string"
+				},
+				"label": {
+					"type": "string"
+				},
+				"controls": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/control"
+					}
+				},
+				"default": {
+					"description": "初始行数据: 每项是该行子控件 id 到值的映射, 缺失的键用子控件自身的 default 填充; 未提供时表格只有表头",
+					"type": "array",
+					"items": {
+						"type": "object"
+					}
+				},
+				"visible": {
+					"$ref": "#/definitions/visible"
+				},
+				"required": {
+					"type": "boolean"
+				},
+				"desc": {
+					"type": "string"
+				}
+			}
+		},
+		"optionItems": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": [
+					"label",
+					"value"
+				],
+				"properties": {
+					"label": {
+						"type": "string"
+					},
+					"value": {
+						"type": "string"
+					}
+				}
+			}
+		},
+		"visible": {
+			"anyOf": [
+				{
+					"type": "boolean"
+				},
+				{
+					"$ref": "#/definitions/expression"
+				}
+			]
+		},
+		"expression": {
+			"type": "object",
+			"required": [
+				"op"
+			],
+			"properties": {
+				"op": {
+					"type": "string",
+					"enum": [
+						"and",
+						"or",
+						"not",
+						"equal",
+						"notEqual",
+						"in",
+						"notIn",
+						"gt",
+						"gte",
+						"lt",
+						"lte"
+					]
+				}
+			},
+			"oneOf": [
+				{
+					"properties": {
+						"op": {
+							"const": "and"
+						},
+						"left": {
+							"$ref": "#/definitions/visible"
+						},
+						"right": {
+							"$ref": "#/definitions/visible"
+						}
+					},
+					"required": [
+						"left",
+						"right"
+					]
+				},
+				{
+					"properties": {
+						"op": {
+							"const": "or"
+						},
+						"left": {
+							"$ref": "#/definitions/visible"
+						},
+						"right": {
+							"$ref": "#/definitions/visible"
+						}
+					},
+					"required": [
+						"left",
+						"right"
+					]
+				},
+				{
+					"properties": {
+						"op": {
+							"const": "not"
+						},
+						"left": {
+							"$ref": "#/definitions/visible"
+						}
+					},
+					"required": [
+						"left"
+					]
+				},
+				{
+					"properties": {
+						"op": {
+							"enum": [
+								"equal",
+								"notEqual",
+								"gt",
+								"gte",
+								"lt",
+								"lte"
+							]
+						},
+						"ref": {
+							"type": "string"
+						},
+						"target": {}
+					},
+					"required": [
+						"ref",
+						"target"
+					]
+				},
+				{
+					"properties": {
+						"op": {
+							"enum": [
+								"in",
+								"notIn"
+							]
+						},
+						"ref": {
+							"type": "string"
+						},
+						"target": {
+							"type": "array"
+						}
+					},
+					"required": [
+						"ref",
+						"target"
+					]
+				}
+			]
+		}
+	}
+}

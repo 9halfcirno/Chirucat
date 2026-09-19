@@ -314,3 +314,237 @@ input[type="search"] {
 ::-webkit-scrollbar-corner {
 	background: transparent;
 }
+
+/* ---- 配置列表组件 (config-editor.js) ---- */
+
+.config-label {
+	color: rgba(0, 0, 0, 0.7);
+}
+
+.config-required {
+	color: #d9534f;
+}
+
+.config-desc {
+	font-size: 0.8em;
+	color: #888;
+}
+
+/* group / table 的外框: 与 .card 保持同一视觉语言 */
+.config-group-box,
+.config-table-box {
+	border: 1px solid rgba(0, 0, 0, 0.12);
+	border-radius: 12px;
+	background: rgba(255, 255, 255, 0.35);
+}
+
+/* ---- 输入类控件: 胶囊 + 半透明玻璃 ---- */
+
+input.config-input,
+textarea.config-textarea,
+.config-select {
+	border: 1px solid rgba(0, 0, 0, 0.15);
+	background-color: rgba(255, 255, 255, 0.5);
+	color: rgba(0, 0, 0, 0.85);
+	outline: none;
+	transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input.config-input::placeholder,
+textarea.config-textarea::placeholder {
+	color: rgba(0, 0, 0, 0.35);
+}
+
+input.config-input:hover,
+textarea.config-textarea:hover,
+.config-select:hover {
+	background-color: rgba(255, 255, 255, 0.68);
+}
+
+input.config-input:focus,
+textarea.config-textarea:focus,
+.config-select:focus {
+	border-color: rgba(74, 144, 217, 0.75);
+	background-color: rgba(255, 255, 255, 0.85);
+	box-shadow: 0 0 0 3px rgba(74, 144, 217, 0.16);
+}
+
+input.config-input:disabled,
+textarea.config-textarea:disabled,
+.config-select:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* ---- 下拉浮层 ---- */
+
+.config-select-panel {
+	border: 1px solid rgba(0, 0, 0, 0.12);
+	background-color: rgba(255, 255, 255, 0.92);
+	backdrop-filter: blur(var(--glass-blur));
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+	color: rgba(0, 0, 0, 0.85);
+	font-size: 0.95em;
+}
+
+/* 键盘导航与鼠标悬停共用这个高亮态 */
+.config-select-option.active {
+	background-color: rgba(74, 144, 217, 0.16);
+}
+
+.config-select-option[aria-selected="true"] {
+	color: rgb(41, 106, 176);
+	font-weight: 600;
+}
+
+/* ---- 多选框 ---- */
+
+.config-checkbox-group {
+	border: 1px solid rgba(0, 0, 0, 0.12);
+	border-radius: 12px;
+	background: rgba(255, 255, 255, 0.35);
+}
+
+.config-checkbox-group>*+* {
+	position: relative;
+}
+
+.config-checkbox-group>*+*::before {
+	content: "";
+	position: absolute;
+	top: -6px;
+	/* 半个 gap，让线在空隙中间 */
+	left: 0;
+	right: 0;
+	height: 1px;
+	background: rgba(0, 0, 0, 0.2);
+}
+
+.config-checkbox-item input {
+	border: 1px solid rgba(0, 0, 0, 0.25);
+	background-color: rgba(255, 255, 255, 0.5);
+	transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.config-checkbox-item input:hover {
+	border-color: rgba(74, 144, 217, 0.6);
+}
+
+.config-checkbox-item input:checked {
+	background-color: rgba(74, 144, 217, 0.9);
+	border-color: rgba(74, 144, 217, 0.95);
+}
+
+.config-checkbox-item input::after {
+	border-right-color: #fff;
+	border-bottom-color: #fff;
+}
+
+.config-checkbox-item input:checked::after {
+	transform: translate(-50%, -60%) rotate(45deg) scale(1);
+}
+
+.config-checkbox-item input:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* ---- 滑块 ---- */
+
+/* 轨道边框用 inset 阴影画, 避免 border 影响滑块垂直居中的计算 */
+input.config-slider::-webkit-slider-runnable-track {
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+	background-color: rgba(255, 255, 255, 0.55);
+}
+
+input.config-slider::-webkit-slider-thumb {
+	border: 1px solid rgba(74, 144, 217, 0.8);
+	background-color: #fff;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+	transition: background-color 0.15s ease;
+}
+
+input.config-slider:hover::-webkit-slider-thumb {
+	background-color: rgba(74, 144, 217, 0.14);
+}
+
+input.config-slider:active::-webkit-slider-thumb {
+	background-color: rgba(74, 144, 217, 0.3);
+}
+
+input.config-slider::-moz-range-track {
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+	background-color: rgba(255, 255, 255, 0.55);
+}
+
+input.config-slider::-moz-range-thumb {
+	border: 1px solid rgba(74, 144, 217, 0.8);
+	background-color: #fff;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+input.config-slider:hover::-moz-range-thumb {
+	background-color: rgba(74, 144, 217, 0.14);
+}
+
+/* ---- 键盘焦点环 (与 .dot-switch 的约定一致) ---- */
+
+.config-checkbox-item input:focus-visible,
+input.config-slider:focus-visible,
+.config-table-add:focus-visible,
+.config-table-del:focus-visible {
+	outline: 2px solid rgba(74, 144, 217, 0.7);
+	outline-offset: 2px;
+}
+
+/* ---- 表格 ---- */
+
+.config-table th {
+	font-weight: 600;
+	color: rgba(0, 0, 0, 0.6);
+	border-bottom: 1px solid rgba(128, 128, 128, 0.4);
+}
+
+.config-table tbody tr+tr td {
+	border-top: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.config-table-add {
+	font-size: 0.9em;
+}
+
+.config-table-del {
+	border: 1px solid transparent;
+	border-radius: 50%;
+	background: transparent;
+	color: rgba(0, 0, 0, 0.55);
+	transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.config-table-del:hover {
+	background: rgba(217, 83, 79, 0.18);
+	color: #a94442;
+}
+
+/* ---- 校验失败: 标签与输入框同时标红 ---- */
+
+.config-invalid>.config-label {
+	color: #a94442;
+}
+
+.config-invalid input.config-input,
+.config-invalid textarea.config-textarea,
+.config-invalid .config-select,
+.config-invalid .config-checkbox-item input {
+	border-color: #d9534f;
+	background-color: rgba(217, 83, 79, 0.08);
+}
+
+.config-text {
+	color: rgba(0, 0, 0, 0.65);
+}
+
+/* 未知控件类型的兜底提示 */
+.config-placeholder {
+	color: #a94442;
+}
