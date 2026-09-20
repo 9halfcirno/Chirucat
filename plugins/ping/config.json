@@ -1,0 +1,45 @@
+{
+	"$schema": "../../src/config/schema.json",
+	"controls": [
+		{
+			"type": "switch",
+			"id": "enable",
+			"label": "启用Ping指令",
+			"default": true
+		},
+		{
+			"type": "input",
+			"id": "command",
+			"label": "Ping指令",
+			"default": "ping",
+			"required": true
+		},
+		{
+			"type": "textarea",
+			"id": "reply",
+			"label": "回复内容",
+			"default": "pong!"
+		},
+		{
+			"type": "slider",
+			"id": "offset",
+			"label": "回复延迟",
+			"default": 10,
+			"desc": "控制消息在框架侧回复延迟",
+			"min": 0,
+			"max": 5000,
+			"step": 10
+		},
+		{
+			"type": "table",
+			"id": "test",
+			"label": "表格测试",
+			"controls": [{
+				"type": "input",
+				"label": "测试与外层重复id",
+				"id": "command",
+				"default": "123"
+			}]
+		}
+	]
+}

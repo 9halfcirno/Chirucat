@@ -4,7 +4,7 @@
 	"name": "Ping",
 	"author": "9halfcirno",
 	"main": "index.ts",
+	"config": "config.json",
 	"dependencies": {
-		"des": "any"
 	}
 }
