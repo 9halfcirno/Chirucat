@@ -8,6 +8,8 @@ import type { PluginManifest, PluginScope, PluginStatus } from "./types";
 import { ValidationError } from "../errors/validation-error";
 import { StateError } from "../errors/state-error";
 import { PluginContextFactory } from "./contexts/factory";
+import { ConfigManager } from "../config/manager";
+import { readConfigDefine } from "../config/define";
 import type { Bot } from "../bot/bot";
 import type { Message } from "../entity/message";
 import type { BotActions } from "../protocols/actions";
@@ -127,7 +129,9 @@ export class PluginManager {
 			} else {
 				// 实例即将被丢弃, 先释放其运行时资源(含对外导出)
 				existing?.context?.dispose();
-				registry.set(id, new Plugin({ manifest, scope }));
+				const plugin = new Plugin({ manifest, scope, bot: this.bot });
+				await this.setupConfig(plugin);
+				registry.set(id, plugin);
 			}
 		}
 
@@ -140,6 +144,33 @@ export class PluginManager {
 				plugin.context?.dispose();
 				registry.delete(id);
 			}
+		}
+	}
+
+	/**
+	 * 装配插件配置
+	 *
+	 * 定义(controls / default)来自插件自带的 manifest.config 文件, 属于插件代码、只读;
+	 * 值文件按 Bot 隔离: <Bot目录>/configs/plugins/<插件id>.json, 不存在时按默认值生成。
+	 *
+	 * 未声明 config 的插件保持 config = null; 定义读取失败只记录日志, 不阻断插件注册。
+	 */
+	private async setupConfig(plugin: Plugin) {
+		const define = plugin.manifest.config;
+		if (!define) return;
+
+		const file = path.resolve(plugin.manifest.path, define);
+		try {
+			plugin.configSchema = await readConfigDefine(file);
+
+			const config = new ConfigManager(
+				plugin.configSchema,
+				ConfigManager.fileForPlugin(this.bot.path, plugin.id),
+			);
+			await config.load();
+			plugin.config = config;
+		} catch (e) {
+			logger.error(`Plugin: 装配插件 ${plugin.id} 的配置失败: ${e instanceof Error ? e.message : e}`);
 		}
 	}
 
@@ -193,7 +224,7 @@ export class PluginManager {
 			}
 
 			// 启用插件
-			const context = PluginContextFactory.create(plugin.manifest, this.bot, this.pluginExports);
+			const context = PluginContextFactory.create(plugin, this.pluginExports, plugin.config);
 			try {
 				await plugin.enable(context);
 			} catch (e) {

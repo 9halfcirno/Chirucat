@@ -1,3 +1,4 @@
+import type { Bot } from "../bot/bot";
 import type { PluginContext } from "./contexts/context";
 
 /** 依赖: 插件id -> 版本约束, 如 { "des": "=0.0.0" } */
@@ -21,6 +22,14 @@ export type PluginManifest = {
 	main: string;
 
 	/**
+	 * 配置定义文件 (相对插件目录), 如 "config.json"
+	 *
+	 * 该文件同时提供控件定义与默认值, 属于插件代码的一部分、只读;
+	 * 配置值按 Bot 隔离存放在 <Bot目录>/configs/plugins/<插件id>.json
+	 */
+	config?: string;
+
+	/**
 	 * 插件依赖
 	 * TODO
 	 */
@@ -35,6 +44,8 @@ export type PluginOption = {
 	scope: PluginScope,
 	/** 插件运行上下文 */
 	context?: PluginContext;
+	/** 插件实例所属bot */
+	bot: Bot;
 }
 
 export type PluginModule = {
