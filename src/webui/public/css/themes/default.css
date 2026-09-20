@@ -526,6 +526,30 @@ input.config-slider:focus-visible,
 	color: #a94442;
 }
 
+/* ---- 表格折叠 ---- */
+
+.config-table-toggle {
+	border: 1px solid transparent;
+	background: transparent;
+	color: rgba(0, 0, 0, 0.5);
+	transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.config-table-toggle:hover {
+	background-color: rgba(128, 128, 128, 0.18);
+	color: rgba(0, 0, 0, 0.75);
+}
+
+.config-table-toggle:focus-visible {
+	outline: 2px solid rgba(74, 144, 217, 0.7);
+	outline-offset: 2px;
+}
+
+.config-table-count {
+	font-size: 0.8em;
+	color: #888;
+}
+
 /* ---- 校验失败: 标签与输入框同时标红 ---- */
 
 .config-invalid>.config-label {
@@ -534,10 +558,13 @@ input.config-slider:focus-visible,
 
 .config-invalid input.config-input,
 .config-invalid textarea.config-textarea,
-.config-invalid .config-select,
-.config-invalid .config-checkbox-item input {
+.config-invalid .config-select {
 	border-color: #d9534f;
 	background-color: rgba(217, 83, 79, 0.08);
+}
+
+.config-invalid .config-checkbox-item input {
+	border-color: #d9534f;
 }
 
 .config-text {

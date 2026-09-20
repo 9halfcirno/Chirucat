@@ -657,7 +657,7 @@ textarea.config-textarea {
 	/* 横向铺满所在行, min-width: 0 保证能收缩而不是撑破容器 */
 	width: 100%;
 	max-width: 480px;
-	min-width: 0;
+	min-width: 160px;
 	min-height: 2.4em;
 	line-height: 1.5;
 	/* 多行控件不用胶囊圆角 */
@@ -821,6 +821,21 @@ input.config-slider::-moz-focus-outer {
 
 /* ---- 配置表格 ---- */
 
+/*
+ * 窄屏时的横向滚动容器。
+ * 表格按内容自然宽度展开 (width: auto + 单元格 nowrap), 屏不够宽时
+ * 会直接溢出并把外层容器撑破, 所以把溢出与滚动都关在这一层里。
+ */
+.config-table-scroll {
+	box-sizing: border-box;
+	width: 100%;
+	max-width: 100%;
+	/* flex 子项默认不会被压到内容宽度以下, 显式放开 */
+	min-width: 0;
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+
 .config-table {
 	width: auto;
 	border-collapse: collapse;
@@ -841,11 +856,66 @@ input.config-slider::-moz-focus-outer {
 	gap: 0;
 }
 
-/* 表格与其下方的“添加行”按钮纵向排列 */
+/* 标题行: label 与折叠按钮并排 */
+.config-group-head {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+/* 折叠按钮: 圆形可点区域 + CSS 三角 (不需要额外的图标资源) */
+.config-table-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 1.5em;
+	height: 1.5em;
+	padding: 0;
+	border-radius: 50%;
+	-webkit-appearance: none;
+	appearance: none;
+	font-family: inherit;
+	cursor: pointer;
+}
+
+/* 三角与下拉箭头同款: 展开朝下, 折叠朝右 */
+.config-table-toggle::after {
+	content: "";
+	width: 0;
+	height: 0;
+	border-left: 4px solid transparent;
+	border-right: 4px solid transparent;
+	border-top: 5px solid currentColor;
+	transition: transform 0.28s ease;
+}
+
+.config-table-box.collapsed .config-table-toggle::after {
+	transform: rotate(-90deg);
+}
+
+/* 表项数: flex-basis 100% 让它换行到 label 下方, 只在折叠时显现 */
+.config-table-count {
+	flex-basis: 100%;
+	overflow: hidden;
+	max-height: 0;
+	opacity: 0;
+	transition: max-height 0.2s ease, opacity 0.15s ease;
+}
+
+.config-table-box.collapsed .config-table-count {
+	max-height: 2.5em;
+	opacity: 1;
+}
+
+/* 表格与其下方的“添加行”按钮纵向排列; 同时也是折叠动画的作用对象 */
 .config-field.config-table-body {
 	flex-direction: column;
 	align-items: stretch;
 	gap: 8px;
+	overflow: hidden;
+	transition: max-height 0.28s ease, opacity 0.22s ease;
 }
 
 /* 操作列: 宽度只占内容, 按钮右对齐 */

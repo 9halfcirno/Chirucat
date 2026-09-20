@@ -213,13 +213,29 @@ function buildPlaceholder(define, ctx, opts) {
 	return createInertNode(define, el, ctx, opts);
 }
 
-/** 建立一个控件外壳: label + 控件槽 + desc */
-function createFieldShell(define, opts) {
+/**
+ * 建立一个控件外壳: label + 控件槽 + desc
+ *
+ * @param {HTMLElement[]} [headExtras] 与 label 并排放在标题行里的元素 (如折叠按钮)。
+ * 	传入时会额外包一层 .config-group-head; 不传则 label 直挂, 其余控件的 DOM 不变。
+ */
+function createFieldShell(define, opts, headExtras) {
 	const el = document.createElement("div");
 	el.classList.add("config-group");
 	if (define.id) el.dataset.id = define.id;
 
-	if (!opts.inline && define.label) el.append(createLabel(define));
+	if (!opts.inline && define.label) {
+		const extras = headExtras ?? [];
+		if (extras.length === 0) {
+			el.append(createLabel(define));
+		} else {
+			const head = document.createElement("div");
+			head.className = "config-group-head";
+			head.append(createLabel(define));
+			for (const extra of extras) head.append(extra);
+			el.append(head);
+		}
+	}
 
 	const field = document.createElement("div");
 	field.className = "config-field";
@@ -774,12 +790,31 @@ function buildGroup(define, holder, ctx, opts) {
 	return node;
 }
 
+/* ---------- 表格折叠 ---------- */
+
+/** 折叠区域的 DOM id 序号 */
+let tableSeq = 0;
+
 function buildTable(define, holder, ctx, opts) {
 	const key = define.id;
 	const columns = define.controls ?? [];
+	const bodyId = `config-table-${++tableSeq}`;
 
-	const { el, field } = createFieldShell(define, opts);
+	// 折叠按钮与表项数要和 label 同处标题行, 因此必须在建立外壳之前先创建
+	const toggle = document.createElement("button");
+	toggle.type = "button";
+	toggle.className = "config-table-toggle";
+	toggle.setAttribute("aria-controls", bodyId);
+	toggle.setAttribute("aria-expanded", "true");
+	toggle.setAttribute("aria-label", "折叠");
+	toggle.title = "折叠 / 展开";
+
+	const count = document.createElement("div");
+	count.className = "config-table-count";
+
+	const { el, field } = createFieldShell(define, opts, [toggle, count]);
 	field.classList.add("config-table-body");
+	field.id = bodyId;
 	el.classList.add("config-table-box");
 
 	const table = document.createElement("table");
@@ -788,7 +823,9 @@ function buildTable(define, holder, ctx, opts) {
 	const headRow = document.createElement("tr");
 	for (const column of columns) {
 		const th = document.createElement("th");
-		th.textContent = column.label ?? column.id ?? "";
+		let label = createLabel(column);
+		th.append(label);
+		// th.textContent = column.label ?? column.id ?? "";
 		headRow.append(th);
 	}
 	const headOp = document.createElement("th");
@@ -807,7 +844,12 @@ function buildTable(define, holder, ctx, opts) {
 	// addButton.classList.add("config-table-add")
 	addButton.title = "添加行";
 
-	field.append(table, addButton);
+	// 表格外面套一层滚动容器: 窄屏时横向滚动, 而不是把外层容器撑破
+	const scroller = document.createElement("div");
+	scroller.className = "config-table-scroll";
+	scroller.append(table);
+
+	field.append(scroller, addButton);
 
 	/** @type {Array<{ holder: object, nodes: object[], tr: HTMLTableRowElement }>} */
 	const rows = [];
@@ -850,6 +892,7 @@ function buildTable(define, holder, ctx, opts) {
 
 		rows.push(entry);
 		tbody.append(tr);
+		updateCount();
 		return entry;
 	}
 
@@ -858,12 +901,19 @@ function buildTable(define, holder, ctx, opts) {
 		if (index < 0) return;
 		rows.splice(index, 1);
 		entry.tr.remove();
+		updateCount();
 		ctx.onValueChange();
 	}
 
 	function clearRows() {
 		for (const entry of rows) entry.tr.remove();
 		rows.length = 0;
+		updateCount();
+	}
+
+	/** 折叠时展示的表项数 */
+	function updateCount() {
+		count.textContent = rows.length === 0 ? "暂无表项" : `共 ${rows.length} 项`;
 	}
 
 	const node = {
@@ -906,6 +956,41 @@ function buildTable(define, holder, ctx, opts) {
 			for (const data of define.default ?? []) addRow(data);
 		},
 	};
+
+	/* ---- 折叠 / 展开 ---- */
+
+	/**
+	 * 用实测的 scrollHeight 驱动高度过渡。
+	 * 固定一个很大的 max-height 上界时, 内容远小于上界会让前大半段动画“空走”, 看起来像卡住。
+	 *
+	 * @param {boolean} collapsed
+	 */
+	function setCollapsed(collapsed) {
+		el.classList.toggle("collapsed", collapsed);
+		toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+		toggle.setAttribute("aria-label", collapsed ? "展开" : "折叠");
+
+		const height = field.scrollHeight || 0;
+		if (collapsed) {
+			field.style.maxHeight = `${height}px`;
+			void field.offsetHeight; // 先落到起始高度, 否则浏览器不会产生过渡
+			field.style.maxHeight = "0px";
+			field.style.opacity = "0";
+		} else {
+			field.style.maxHeight = `${height}px`;
+			field.style.opacity = "1";
+		}
+	}
+
+	toggle.addEventListener("click", () => {
+		setCollapsed(!el.classList.contains("collapsed"));
+	});
+
+	// 展开动画结束后解除高度限制, 否则之后增删行会被裁掉
+	field.addEventListener("transitionend", (event) => {
+		if (event.propertyName !== "max-height") return;
+		if (!el.classList.contains("collapsed")) field.style.maxHeight = "none";
+	});
 
 	bindVisible(node, define, el, ctx, opts);
 	registerNode(ctx, opts, key, node);
