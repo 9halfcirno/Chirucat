@@ -23,7 +23,8 @@
 | `name` | string | 否 | 插件的名称, 用于展示给用户, 例如`My Plugin` |
 | `author` | string | 否 | 插件的作者, 用于展示给用户, 例如`Baka Cirno` |
 | `description` | string | 否 | 插件的描述, 用于展示给用户, 例如`This is my plugin` |
-| `dependencies` | object | 否 | 插件的依赖关系, 键为依赖插件的id, 值为依赖插件的版本号, 例如`{"other-plugin": "^1.0.0"}` |
+| `dependencies` | object | 否 | 插件的依赖关系, 键为依赖插件的id, 值为依赖插件的版本号, 例如`{"other-plugin": ">1.0.0"}` |
+| `config` | string | 否 | 配置生成文件, 相对于插件根目录, 例如`config.json`。该文件同时提供控件定义与默认值;` |
 
 ## 入口文件
 
@@ -41,6 +42,11 @@
 
 入口文件可以导入其目录下的其他文件, 也可以导入npm包
 
+## 配置生成文件
+
+该文件为JSON文件, 用于WebUI前端生成表单控件及后端值校验
+
+该JSON的Schema文件在`/src/config/schema.json`, 也可以查看[Config生成文件](../schemas/config.md)定义
 
 ## 模板
 
@@ -52,6 +58,7 @@
 	"name": "Example Plugin",
 	"author": "Someone",
 	"main": "index.js",
+	"config": "config.json",
 	"dependencies": {
 		"other": "any"
 	}
@@ -71,4 +78,18 @@ export default {
 		// 处理插件错误
 	}
 };
+```
+
+**配置生成文件 (config.json)**
+```json
+{
+	"controls": [
+		{
+			"type": "input",
+			"id": "name",
+			"label": "名称",
+			"default": "chirucat"
+		}
+	]
+}
 ```

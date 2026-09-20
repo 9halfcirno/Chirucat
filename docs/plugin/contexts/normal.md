@@ -6,6 +6,7 @@
 
 - [基础信息](#基础信息)
   - [Bot信息](#bot对象)
+  - [配置](#config对象)
 - [消息处理](#消息处理)
   - [普通回调](#message对象)
   - [指令回调](#command对象)
@@ -30,6 +31,25 @@
 
 - `id`: Bot标识符
 - `name`: Bot显示的名字
+
+### config对象
+
+该对象用于读取插件配置, 这是一个**只读**视图。
+
+配置的控件与默认值来自清单里的 `config` 定义文件; 配置值由用户在 WebUI 中修改。
+
+- `get<T = unknown>(key: string, fallback?: T): T`: 取配置项, 支持点号路径与数组下标(`"offset"` / `"pro-group.extra"` / `"groups.0.id"`), 未配置时返回 `fallback`
+- `has(key: string): boolean`: 该配置项是否有值
+- `all(): object`: 一份配置值副本
+- `watch(handler: (key, value, oldValue) => void): () => void`: 监听配置变更, 返回取消监听的函数
+
+约定:
+
+- 配置值与 WebUI 共享同一份实例, 每次 `get` 读到的都是最新值, **不要缓存返回值**
+- `watch` 只在用户通过 WebUI 改动配置时触发(载入配置不算变更); 一次更新里每个发生变化的配置项调用一次, `key` 为配置项路径(`"offset"` / `"pro-group.extra"`), 表格的行改动只报表格自身的路径
+- 监听随上下文释放自动注销; 回调里抛错不影响其它监听器, 也不会中断保存
+- 插件自己的可变状态请使用 `kv` / `fs`; 配置属于用户, 插件侧不提供写入接口
+- 未在清单里声明 `config` 的插件, `config` 为空配置(`get` 返回 `fallback`、`has` 为 `false`、`all` 为 `{}`), 无需判空
 
 ## 消息处理
 
