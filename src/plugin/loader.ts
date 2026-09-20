@@ -5,6 +5,10 @@ import module from "module";
 
 const PLUGIN_MODULE_VAR = "__chirucat_plugin_module__";
 
+const REFUSE_MODULE = [
+	"fs", "node:fs",
+	
+]
 
 export class PluginLoader {
 	/**
@@ -49,8 +53,11 @@ export class PluginLoader {
 				const importMap = new Map<string, string>();
 				build.onResolve({ filter: /.*/ }, (args) => {
 					let mod = args.path;
-					if (module.isBuiltin(mod)) return {
-						external: true // 内置模块返回
+					if (module.isBuiltin(mod)) {
+						if (REFUSE_MODULE.includes(mod)) throw new Error(`被拒绝的原生模块: ${mod}`);
+						return {
+							external: true // 内置模块返回
+						}
 					}
 					if (self.isNPM(args.path)) {
 						if (importMap.has(mod)) return {
