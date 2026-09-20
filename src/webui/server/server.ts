@@ -13,10 +13,12 @@ import type { WebUIAPI } from "./types";
 /**
  * handler 抛出的自定义错误对象, 用于向前端返回带 HTTP 状态码的错误响应。
  * 形如 { err: "错误信息", code: 400 }, 其中 code 作为 HTTP 状态码。
+ * details 为可选的附加信息(如字段级校验错误), 存在时原样透传给前端。
  */
 interface APIError {
 	err: string;
 	code: number;
+	details?: unknown;
 }
 
 /** 判断抛出的对象是否为 { err, code } 形式的 API 错误 */
@@ -246,7 +248,12 @@ export class WebUIServer {
 						Number.isInteger(err.code) && err.code >= 400 && err.code <= 599
 							? err.code
 							: 500;
-					res.status(status).json({ err: err.err, code: status });
+					// details 存在时一并透传(字段级校验错误等), 否则保持原来的响应形状
+					res.status(status).json(
+						err.details === undefined
+							? { err: err.err, code: status }
+							: { err: err.err, code: status, details: err.details },
+					);
 					return;
 				}
 
