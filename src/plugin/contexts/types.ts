@@ -1,4 +1,4 @@
-import type { Stats } from "fs";
+import type { MakeDirectoryOptions, RmOptions, Stats } from "fs";
 import type { Command } from "../../command/types";
 import type { Message } from "../../entity/message";
 import type { BotActions } from "../../protocols/actions";
@@ -80,6 +80,35 @@ export interface PluginFileSystemAPI {
 	 * @param data 追加数据
 	 */
 	append(path: string, data: string | NodeJS.ArrayBufferView): Promise<void>;
+
+	/**
+	 * 删除文件/目录
+	 * @param path 要删除的文件路径
+	 * @param option 删除选项
+	 */
+	remove(path: string, option?: RmOptions): Promise<void>;
+
+	/**
+	 * 创建文件夹
+	 * @param path 目标目录路径
+	 * @param option mkdie选项
+	 */
+	mkdir(path: string, option?: MakeDirectoryOptions): Promise<void>;
+
+	/**
+	 * 更改文件名
+	 * @param path 要改名的文件路径
+	 * @param name 新名字
+	 */
+	rename(path: string, name: string): Promise<void>;
+
+	/**
+	 * 复制文件
+	 * @param from 源文件
+	 * @param to 目标路径
+	 */
+	copy(from: string, to: string): Promise<void>;
+
 	/**
 	 * 检查指定文件是否存在
 	 * @param path 目标文件是否存在

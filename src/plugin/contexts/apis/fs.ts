@@ -1,7 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
-import type { Stats } from "fs";
+import type { RmOptions, Stats } from "fs";
 import type { PluginFileSystemAPI } from "../types";
+import type { MakeDirectoryOptions } from "node:fs";
 
 export class FileSystemAPI implements PluginFileSystemAPI {
 	readonly root: string;
@@ -44,6 +45,32 @@ export class FileSystemAPI implements PluginFileSystemAPI {
 		} catch {
 			return false;
 		}
+	}
+
+	async remove(filePath: string, option: RmOptions = { force: false, recursive: false }) {
+		this.assertWritable(filePath);
+		const target = this.resolve(filePath);
+		await fs.rm(target, option);
+	}
+
+	async rename(filePath: string, name: string) {
+		this.assertWritable(filePath);
+		const old = this.resolve(filePath);
+		const newName = this.resolve(name);
+		await fs.rename(old, newName);
+	}
+
+	async copy(from: string, to: string): Promise<void> {
+		this.assertWritable(from);
+		const old = this.resolve(from);
+		const newName = this.resolve(to);
+		await fs.copyFile(old, newName);
+	}
+
+	async mkdir(filePath: string, option?: MakeDirectoryOptions): Promise<void> {
+		this.assertWritable(filePath);
+		const target = this.resolve(filePath);
+		await fs.mkdir(target, option);
 	}
 
 	async list(filePath = "."): Promise<string[]> {

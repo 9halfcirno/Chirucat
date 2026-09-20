@@ -12,6 +12,8 @@
 - [持久化存储](#持久化存储)
   - [KV存储](#kv对象)
   - [文件系统存储](#fs对象)
+    - [只读FS对象](#只读fs对象)
+  - [插件目录访问](#plugin对象)
 - [其他](#其他)
   - [日志记录](#logger对象)
   - [动作发送](#action方法)
@@ -44,7 +46,7 @@
 | `end` | 消息后缀(string) | 注册一个以指定后缀结尾的消息回调, 该回调会在接收到以指定后缀结尾的消息时触发 |
 | `include` | 消息包含(string) | 注册一个包含指定字符串的消息回调, 该回调会在接收到包含指定字符串的消息时触发 |
 | `full` | 消息完全匹配(string) | 注册一个完全匹配指定字符串的消息回调, 该回调会在接收到完全匹配指定字符串的消息时触发 |
-| `regex` | 正则表达式(RegExp) | 注册一个匹配指定正则表达式的消息回调, 该回调会在接收到匹配指定正则表达式的消息时触发 |
+| `regex` | 正则表达式(RegExp) | 注册一个匹配指定正则表达式的消息回调, 如果使用`g`/`y`标识, 请手动重置`lastIndex`, 该回调会在接收到匹配指定正则表达式的消息时触发 |
 | `match` | 消息断言函数(返回boolean) | 注册一个自定义消息匹配回调, 该回调会在接收到任何消息时触发, 并将消息传入回调函数, 回调函数返回true则触发该回调, 返回false则不触发 |
 
 除`all`方法外, 其他方法的第二个参数均为消息处理函数
@@ -90,27 +92,40 @@
 
 该存储方式提供了简易的文件系统读写, 以存放大数据
 
-下列方法均为异步方法
+下列方法均为异步方法, 返回`void`的方法返回类型已省略
 
 - `read(file: string, encoding?: string): Promise<string>`: 读取文件
+
 - `write(file: string, data: string | NodeJS.ArrayBufferView)`: 向指定文件写入数据
+
 - `append(file: string, data: string | NodeJS.ArrayBufferView)`: 向指定文件末尾追加数据
+
 - `exists(file: string): Promise<boolean>`: 判断指定路径上的文件是否存在
+
 - `list(dir: string): Promise<string[]>`: 列出指定目录的所有文件/目录
-- `stat(file: string): : Promise<fs.Stats>`: 获取指定文件的属性
+
+- `remove(file: string, option: RmOptions)`: 删除指定文件
+
+- `rename(file: string, newName: string)`: 重命名指定文件
+
+- `mkdir(file: string, option: MakeDirectoryOptions)`: 创建指定目录
+
+- `copy(from: string, to: string)`: 复制指定文件
+
+- `stat(file: string): Promise<fs.Stats>`: 获取指定文件的属性
+
 
 `fs` 的所有路径均基于插件私有存储目录(可读写)
+
+#### 只读FS对象
+
+如果FS API为只读, 则将只能调用以下api: `read`, `list`, `exists`, `stat`
 
 ### plugin对象
 
 以插件代码目录为根的只读文件系统, 供插件读取自带的模板/资源等文件
 
-提供与 `fs` 相同的读取类方法, 但**没有** `write` / `append`:
-
-- `read(file: string, encoding?: string): Promise<string>`: 读取文件
-- `exists(file: string): Promise<boolean>`: 判断指定路径上的文件是否存在
-- `list(dir: string): Promise<string[]>`: 列出指定目录的所有文件/目录
-- `stat(file: string): : Promise<fs.Stats>`: 获取指定文件的属性
+提供与 `fs` 相同的读取类方法, 为[**只读FS对象**](#只读fs对象)
 
 所有路径均基于插件代码目录
 
