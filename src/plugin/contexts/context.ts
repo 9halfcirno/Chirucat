@@ -43,7 +43,7 @@ export class PluginContext {
 	private _commands = new Set<Command>();
 
 	/** dispose 幂等标记: enable失败/卸载/注册表丢弃都可能重复触发释放 */
-	private _disposed = false;
+	protected _disposed = false;
 
 	constructor(bot: Bot, protected _manifest: PluginManifest, protected _pluginExports: PluginExports) {
 		this._bot = bot;
@@ -73,6 +73,7 @@ export class PluginContext {
 	bot: PluginBotAPI;
 	command: PluginCommandAPI = {
 		register: (name, handler) => {
+			if (this._disposed) throw new StateError(`Context已释放, 无法注册指令`);
 			const command: Command = { name, handler };
 
 			this._commands.add(command);
@@ -84,6 +85,7 @@ export class PluginContext {
 			this._bot.command.unregister(command);
 		},
 		exec: (message: Message | string, args?: (string | number)[]) => {
+			if (this._disposed) throw new StateError(`Context已释放, 无法触发指令`);
 			return message instanceof Message ? this._bot.command.exec(message) : this._bot.command.exec(message, args || []);
 		}
 	}
@@ -94,6 +96,7 @@ export class PluginContext {
 	 * @param action 动作对象
 	 */
 	action(entity: Entity, action: BotActions) {
+		if (this._disposed) throw new StateError(`Context已释放, 无法发送Action`);
 		return this._bot.action(action, entity.meta.adapter, entity.extra)
 	}
 
@@ -130,6 +133,8 @@ export class PluginContext {
 	 * @param msg 框架消息
 	 */
 	handleMessage(msg: Message) {
+		if (this._disposed) return;
+
 		for (const entry of this._onMessageCallback) {
 			try {
 				if (!entry.matcher(msg)) continue;

@@ -121,8 +121,9 @@ export class PluginManager {
 		for (const [id, manifest] of collected) {
 			const existing = registry.get(id);
 			if (existing?.status === "enabled") {
+				// 下面这两行先不要了, 避免运行中插件的清单状态不一致
 				// 运行中的插件不替换实例, 仅更新清单
-				existing.manifest = manifest;
+				// existing.manifest = manifest;
 			} else {
 				// 实例即将被丢弃, 先释放其运行时资源(含对外导出)
 				existing?.context?.dispose();

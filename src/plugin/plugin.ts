@@ -1,8 +1,12 @@
+import type { ConfigRoot } from "../config/types";
 import { StateError } from "../errors/state-error";
+import Logger from "../utils/logger";
 import type { PluginContext } from "./contexts/context";
 import type { PluginManifest, PluginModule, PluginOption, PluginScope, PluginStatus, PluginType } from "./types";
 
 export class Plugin {
+	logger: Logger;
+
 	/** 运行状态 */
 	status: PluginStatus = "registered";
 
@@ -15,12 +19,15 @@ export class Plugin {
 	id: string;
 	manifest: PluginManifest;
 
+	/** 插件配置schema */
+	configSchema?: null | ConfigRoot = null;
 	module: PluginModule | null = null;
 	context: PluginContext | null = null;
 
 	constructor(option: PluginOption) {
 		this.manifest = option.manifest;
 		this.id = option.manifest.id;
+		this.logger = new Logger(`Plugin ${this.id}`);
 		this.type = option.manifest.type || "normal";
 		this.scope = option.scope;
 		option.context && (this.context = option.context);
@@ -48,7 +55,9 @@ export class Plugin {
 			// 让插件尝试清理初始化到一半的资源
 			try {
 				await this.module.error?.(e);
-			} catch { /* 忽略清理钩子的错误 */ }
+			} catch { 
+				this.logger.error(`插件载入时错误清理失败`, e)
+			 }
 			this.context?.dispose?.();
 			this.context = null; // 上下文已释放, 断开引用避免后续误用
 			this.status = "error";
@@ -71,7 +80,9 @@ export class Plugin {
 			// unload 失败也让插件尝试清理
 			try {
 				await this.module?.error?.(e);
-			} catch { /* 忽略清理钩子的错误 */ }
+			} catch(e) { 
+				this.logger.error(`插件卸载时错误清理失败`, e)
+			 }
 		}
 		this.context?.dispose();
 		this.context = null; // 上下文已释放, 断开引用避免后续误用

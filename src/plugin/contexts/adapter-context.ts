@@ -1,4 +1,5 @@
 import type { Bot } from "../../bot/bot";
+import { StateError } from "../../errors/state-error";
 import type { BotActions } from "../../protocols/actions";
 import type { BotEvents } from "../../protocols/events";
 import type { SessionType } from "../../protocols/session";
@@ -20,6 +21,9 @@ export class AdapterContext extends PluginContext {
 			id: this._bot.id,
 			name: this._bot.name,
 			dispatch: (event: BotEvents) => {
+				if (this._disposed) {
+					if (this._disposed) throw new StateError(`Context已释放, 无法触发事件`);
+				}
 				this._bot.dispatch(event, {
 					adapter: this._manifest.id
 				});
