@@ -1,3 +1,5 @@
+import type { Bot } from "../bot/bot";
+import type { ConfigManager } from "../config/manager";
 import type { ConfigRoot } from "../config/types";
 import { StateError } from "../errors/state-error";
 import Logger from "../utils/logger";
@@ -18,15 +20,21 @@ export class Plugin {
 	/** 同清单id */
 	id: string;
 	manifest: PluginManifest;
+	bot: Bot;
 
-	/** 插件配置schema */
+	/** 插件配置schema (定义文件里的控件定义), 未声明 manifest.config 时为 null */
 	configSchema?: null | ConfigRoot = null;
+
+	/** 插件配置(值)管理器; 未声明 manifest.config 或装配失败时为 null */
+	config: ConfigManager | null = null;
+
 	module: PluginModule | null = null;
 	context: PluginContext | null = null;
 
 	constructor(option: PluginOption) {
 		this.manifest = option.manifest;
 		this.id = option.manifest.id;
+		this.bot = option.bot;
 		this.logger = new Logger(`Plugin ${this.id}`);
 		this.type = option.manifest.type || "normal";
 		this.scope = option.scope;

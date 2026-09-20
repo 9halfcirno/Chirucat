@@ -8,12 +8,14 @@ import { MessageAPI } from "./apis/message";
 import Logger from "../../utils/logger";
 
 const logger = new Logger("PluginContext");
-import type { MessageCallbackEntry, PluginBotAPI, PluginCommandAPI, PluginFileSystemAPI, PluginKVAPI, PluginMessageAPI, ReadonlyFsAPI } from "./types";
+import type { MessageCallbackEntry, PluginBotAPI, PluginCommandAPI, PluginConfigAPI, PluginFileSystemAPI, PluginKVAPI, PluginMessageAPI, ReadonlyFsAPI } from "./types";
 import { FileSystemAPI } from "./apis/fs";
 import { KVStore } from "./apis/kv";
+import { PluginConfig } from "./apis/config";
 import path from "node:path";
 import { root } from "../../utils/root";
 import type { PluginExports } from "../exports";
+import type { ConfigManager } from "../../config/manager";
 import { StateError } from "../../errors/state-error";
 
 export class PluginContext {
@@ -25,6 +27,10 @@ export class PluginContext {
 	/** 插件代码根目录的只读文件访问 */
 	plugin: ReadonlyFsAPI;
 	kv: PluginKVAPI;
+	/** 插件配置(只读), 未声明 manifest.config 时为空配置 */
+	config: PluginConfigAPI;
+	/** 内部持有的配置视图, 供 dispose 注销监听 */
+	private _config: PluginConfig;
 	path: {
 		/** 插件代码根目录 */
 		plugin: string;
@@ -45,7 +51,7 @@ export class PluginContext {
 	/** dispose 幂等标记: enable失败/卸载/注册表丢弃都可能重复触发释放 */
 	protected _disposed = false;
 
-	constructor(bot: Bot, protected _manifest: PluginManifest, protected _pluginExports: PluginExports) {
+	constructor(bot: Bot, protected _manifest: PluginManifest, protected _pluginExports: PluginExports, config: ConfigManager | null = null) {
 		this._bot = bot;
 		this.logger = new Logger(`Plugin ${_manifest.id}`);
 		this.message = new MessageAPI((entry) => {
@@ -58,6 +64,8 @@ export class PluginContext {
 		this.plugin = new FileSystemAPI(path.resolve(root, _manifest.path), { writable: false });
 		this._kv = new KVStore(path.join(this._storageRoot, ".kv.db"));
 		this.kv = this._kv;
+		this._config = new PluginConfig(config);
+		this.config = this._config;
 
 		this.bot = {
 			id: this._bot.id,
@@ -168,6 +176,8 @@ export class PluginContext {
 			this._bot.command.unregister(com)
 		}
 		this._commands.clear();
+		// 注销配置变更监听
+		this._config.dispose();
 		// 关闭 KV 连接(插件可能从未使用 KV, 未初始化时不应视为异常);
 		// 清理异常不应阻断上下文释放
 		try {

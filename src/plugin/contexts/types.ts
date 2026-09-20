@@ -171,6 +171,47 @@ export interface PluginKVAPI {
 
 
 
+/**
+ * 插件配置的只读视图
+ *
+ * 配置值由 WebUI 修改; 插件与 WebUI 共享同一个配置实例,
+ * 因此每次 get 读到的都是最新值 —— 除非插件自己把返回值缓存了下来。
+ *
+ * 插件自己的可变状态请使用 `kv` / `fs`; 配置属于用户, 插件只读。
+ */
+/**
+ * 配置变更回调
+ * @param key 发生变化的配置项路径(点号分隔), 如 "offset" / "pro-group.extra"
+ * @param value 新值
+ * @param oldValue 旧值
+ */
+export type PluginConfigWatcher = (key: string, value: unknown, oldValue: unknown) => void;
+
+export interface PluginConfigAPI {
+	/**
+	 * 取配置项, 支持点号路径与数组下标:
+	 * `get("offset")` / `get("pro-group.extra")` / `get("groups.0.id")`
+	 * @param key 属性路径
+	 * @param fallback 未配置时的返回值
+	 */
+	get<T = unknown>(key: string, fallback?: T): T;
+	/** 该配置项是否有值 (值为 undefined 视为没有) */
+	has(key: string): boolean;
+	/** 一份配置值副本 */
+	all(): Record<string, any>;
+	/**
+	 * 监听配置变更
+	 *
+	 * 仅用户通过 WebUI 改动配置时触发(载入配置不算变更);
+	 * 一次更新里每个发生变化的配置项调用一次回调。
+	 * 上下文释放时监听自动注销。
+	 *
+	 * @param handler 变更回调
+	 * @returns 取消监听
+	 */
+	watch(handler: PluginConfigWatcher): () => void;
+}
+
 export type ActionHandler = (action: BotActions, extra?: Record<string, any>) => any;
 
 export interface PluginBotAPI {
