@@ -261,6 +261,7 @@ body.authed #main {
 }
 
 .dialog-window {
+	box-sizing: border-box;
 	opacity: 1;
 
 	min-width: 36%;
@@ -268,6 +269,8 @@ body.authed #main {
 
 	margin: auto;
 	max-width: 80%;
+	/* 内容再长也不高过视口(上下各留 24px): 超出部分交给 .dialog-window-inner 滚动 */
+	max-height: calc(100vh - 48px);
 
 	display: flex;
 	flex-direction: column;
@@ -284,7 +287,17 @@ body.authed #main {
 
 .dialog-window-inner {
 	flex-grow: 1;
+	/* flex 子项的 min-height 默认是 auto: 不归零的话长内容会把弹窗顶出屏幕,
+	   而不是在内部产生滚动 */
+	min-height: 0;
+	overflow-y: auto;
 	/* white-space: pre-wrap; */
+}
+
+/* 标题行与按钮栏不参与压缩: 内容再长也只让中间的内容区滚动 */
+.dialog-window header,
+.dialog-window footer {
+	flex-shrink: 0;
 }
 
 .dialog-window-btns {

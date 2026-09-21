@@ -131,6 +131,23 @@ export class Bot extends EventEmitter {
 	}
 
 	/**
+	 * 重新扫描插件目录, 让插件注册表与磁盘对齐
+	 *
+	 * 只更新注册表, 不加载/卸载任何插件: 已启用插件的实例不被替换, 运行中的插件不受影响,
+	 * 也不写 state.json。未运行的 Bot 同样可以扫描(只登记清单, 不加载模块),
+	 * 供 WebUI 在启动前展示插件列表。
+	 *
+	 * 与启停走同一条串行队列: 扫描会替换非启用状态的插件实例并释放其上下文,
+	 * 若与正在进行的加载交错, 会把加载到一半的插件拆掉。
+	 */
+	async refreshPlugins() {
+		await this.serialize(() => this.plugin.scan({
+			global: "plugins",
+			bot: path.join(this.path, "plugins"),
+		}));
+	}
+
+	/**
 	 * 让运行态收敛到持久化的期望态
 	 */
 	async applyDesired(): Promise<void> {
