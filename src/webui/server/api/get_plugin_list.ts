@@ -1,36 +1,27 @@
-import { Bot } from "../../../bot/bot";
 import type { WebUIAPI } from "../types";
+import { buildPluginPayload } from "../plugin-view";
 
 /**
- * 获取插件列表
+ * 获取插件列表 (只读, 不扫描插件目录)
+ *
  * POST
  * 请求体
- * - bot?: 目标bot id, FUTURE: 不填就返回全局
+ * - bot: 目标bot id
+ *
+ * 返回结构与 refresh_plugins 完全一致, 但不会扫描目录: 未扫描过的 Bot
+ * (从未启动、也没刷新过)会得到空列表, 前端首屏因此统一用 refresh_plugins。
  */
-
 export default {
 	method: "POST",
 	path: "get_plugin_list",
 	auth: true,
 
 	handler(req, core) {
-		if (!core) return {
-			plugins: { global: [], bot: [] }
-		}
+		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
 
-		let bot = req.body.bot;
-		if (typeof bot === "string") {
-			if (!core.bot.bots.has(bot)) throw { code: 404, err: "找不到目标Bot" }
-			bot = core.bot.bots.get(bot);
-			if (!(bot instanceof Bot)) throw { code: 418, err: "天呐!这几乎是不可能的, 你要知道这只是为了让ts进行类型收窄"};
-			return {
-				plugins: {
-					global: bot.plugin.globalPlugins.values().map(p => p.manifest).toArray(),
-					bot: bot.plugin.botPlugins.values().map(p => p.manifest).toArray()
-				}
-			}
-		} else {
-			throw { code: 404, err: "当前请求体必须包含bot字段" }
-		}
-	}
-} as WebUIAPI
+		const bot = core.bot.bots.get(req.body?.bot);
+		if (!bot) throw { code: 404, err: "目标Bot不存在" };
+
+		return buildPluginPayload(bot);
+	},
+} as WebUIAPI;

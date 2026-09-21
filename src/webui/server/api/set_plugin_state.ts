@@ -39,8 +39,7 @@ export default {
 			throw { code: 500, err: `更改插件状态失败: ${(e as Error).message}` }
 		}
 
-		return { success: true }
-
-
+		// 回传收敛后的运行态: 与 set_bot_state 一致, 前端据此对齐开关
+		return { success: true, state: bot.plugin.resolve(id)?.status === "enabled" }
 	},
 } as WebUIAPI
