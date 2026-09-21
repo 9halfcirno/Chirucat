@@ -29,8 +29,6 @@ export default {
 			
 			msg?.reply(ctx.config.get("reply", "pong!"));
 		}
-
-		ctx.logger.log(ctx.require("des"))
 	}
 }
 
