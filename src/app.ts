@@ -4,6 +4,9 @@ import Logger from "./utils/logger";
 import { root } from "./utils/root";
 import { readJSONOrCreate } from "./utils/readJSON";
 import type { CoreOption } from "./types";
+import type { WebUIConfig } from "./webui/server/types";
+import { uuid } from "./utils/uuid";
+import type { WebUIServerOptions } from "./webui/server/server";
 
 const logger = new Logger("App");
 
@@ -87,12 +90,20 @@ async function appStart() {
 
 		if (coreOption.webui !== false) {
 			// webui 未显式关闭时, 把 webui.json 作为 WebUI 子配置一并传入
-			const webuiRes = await readJSONOrCreate(path.join(CONFIGS_DIR, "webui.json"), {
-				password: "chirucat",
+			const webuiRes = await readJSONOrCreate<WebUIServerOptions>(path.join(CONFIGS_DIR, "webui.json"), {
+				password: uuid().replaceAll("-", "").slice(0, 10), // 默认生成随机字符串
 				port: 7636,
 				host: "127.0.0.1",
+				frontConfig: {
+					enableTestLab: false // 默认关闭test页面
+				}
 			});
-			if (webuiRes.created) logger.log("配置文件缺失, 已生成默认配置: configs/webui.json");
+			if (webuiRes.created) {
+				logger.log("配置文件缺失, 已生成默认配置: configs/webui.json");
+				logger.log(`=======================`)
+				logger.log(`已生成初始密码: ${webuiRes.config.password}`);
+				logger.log(`=======================`)
+			};
 			coreOption.webuiOption = webuiRes.config;
 		}
 

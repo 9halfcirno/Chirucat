@@ -8,6 +8,12 @@ export type WebUIConfig = {
 	port?: number;
 	/** WebUI主机, 默认127.0.0.1 */
 	host?: string;
+
+	front?: WebUIFrontConfig;
+}
+
+export type WebUIFrontConfig = {
+	enableTestLab?: boolean;
 }
 
 export interface WebUIAPI {

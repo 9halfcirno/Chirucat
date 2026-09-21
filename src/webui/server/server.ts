@@ -8,7 +8,7 @@ import Logger from "../../utils/logger";
 import { AUTH_COOKIE, TOKEN_TTL_MS, readAuthToken, safeEqualPassword, signToken, verifyToken } from "./auth";
 import { root } from "../../utils/root";
 import type { Core } from "../../core";
-import type { WebUIAPI } from "./types";
+import type { WebUIAPI, WebUIFrontConfig } from "./types";
 
 /**
  * handler 抛出的自定义错误对象, 用于向前端返回带 HTTP 状态码的错误响应。
@@ -42,6 +42,8 @@ export interface WebUIServerOptions {
 	core?: Core;
 	/** API 模块目录, 默认 src/webui/server/api, 启动时自动加载其中的 API */
 	apiDir?: string;
+	/** 前端页面配置 */
+	frontConfig?: WebUIFrontConfig;
 }
 
 /**
@@ -64,6 +66,9 @@ export class WebUIServer {
 	/** WebUI 密码; 未设置 (undefined/空串) 时所有 API 直接放行 */
 	private readonly password?: string;
 
+	/** 前端配置 */
+	front?: WebUIFrontConfig;
+
 	constructor(options: WebUIServerOptions = {}) {
 		this.port = options.port ?? 7636;
 		this.host = options.host ?? "0.0.0.0";
@@ -71,7 +76,8 @@ export class WebUIServer {
 		this.apiDir = options.apiDir ?? path.join(root, "src", "webui", "server", "api");
 		options.core && (this.core = options.core);
 		options.password && (this.password = options.password);
-
+		options.frontConfig && (this.front = options.frontConfig);
+		
 		this.setupMiddleware();
 	}
 

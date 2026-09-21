@@ -20,6 +20,8 @@ const app = createApp({
 	nav: document.getElementById("main-nav"),
 });
 
+const config = await auth.apiFetch("/api/get_webui_front_config").then(r => r.json());
+
 app.register({
 	id: "home",
 	title: "首页",
@@ -55,10 +57,10 @@ app.register({
 	load: () => import("./js/pages/plugins/plugins.js"),
 });
 
-app.register({
+config.enableTestLab && app.register({
 	id: "test",
 	title: "测试页面",
-	icon: "/img/icons/delete.svg",
+	icon: "/img/icons/test.svg",
 	load: () => import("./js/pages/test/index.js"),
 });
 
