@@ -1,9 +1,8 @@
-import fs from "fs/promises";
 import path from "path";
 import { PluginManager } from "../plugin/manager";
-import { BotStateFile } from "./state-file";
+import { BotStateManager } from "./state-manager";
 import { MessageHandler } from "./message-handler";
-import type { BotConfig, BotState } from "./types";
+import type { BotConfig } from "./types";
 import type { BotEventMeta, BotEvents } from "../protocols/events";
 import { EntityFactory } from "../entity/factory";
 import type { Core } from "../core";
@@ -11,11 +10,16 @@ import { CommandManager } from "../command/manager";
 import EventEmitter from "events";
 import type { BotActions } from "../protocols/actions";
 import type { MessageSend } from "../protocols/action/message-send";
+import { StateError } from "../errors/state-error";
 import Logger from "../utils/logger";
 
-// 虽然不知道继承Emitter有什么用吧
+/**
+ * 一个 Bot: 一组插件的独立容器
+ *
+ * 运行态(running / 插件的实际 status)与持久化期望态(`state`)分开:
+ * 期望态是 state.json 的权威内容, 运行态只在内存, 由 applyDesired 收敛过来。
+ */
 export class Bot extends EventEmitter {
-	private _inited = false;
 	logger: Logger;
 	id: string;
 	name: string | null = null;
@@ -24,44 +28,68 @@ export class Bot extends EventEmitter {
 	command = new CommandManager({});
 	plugin = new PluginManager(this);
 
-	private _state: BotState;
-	private stateFile: BotStateFile;
+	/** 持久化启停状态(期望态) */
+	readonly state: BotStateManager;
 
 	/** Bot 是否处于运行中(已启动且未停止) */
 	running = false;
 
-	constructor(config: BotConfig, readonly core: Core, state: BotState) {
+	/** 收敛串行化: 外部改动与 WebUI 操作不会交错启停 */
+	private applying: Promise<void> = Promise.resolve();
+
+	/** 已释放: 不再响应状态文件变化 */
+	private disposed = false;
+
+	/** 取消状态变更监听 */
+	private unwatchState: (() => void) | null = null;
+
+	constructor(config: BotConfig, readonly core: Core) {
 		super();
 		this.logger = new Logger(`Bot ${config.id}`)
 		this.path = config.path;
 		this.id = config.id;
 		this.name = config.name || null;
-		this.stateFile = new BotStateFile(path.join(this.path, "state.json"), state);
-		this._state = this.stateFile.proxy;
-	}
-
-
-	get state() {
-		return this._state;
+		this.state = new BotStateManager(path.join(this.path, "state.json"));
 	}
 
 	/**
-	 * 开启Bot, 并设置状态为true(显式写回state.json)
+	 * 载入持久化状态并开始监听其变化
+	 *
+	 * 由 BotManager.scan 在实例创建后调用。开始监听后, 外部(含手工编辑)
+	 * 改动 state.json 会自动收敛运行态。
+	 */
+	async initState() {
+		await this.state.load();
+
+		this.unwatchState = this.state.watch(() => {
+			// 监听回调不等待收敛, 失败只记录: 外部改动引发的收敛不该打断任何主流程
+			void this.applyDesired().catch((e) => {
+				this.logger.error("应用状态文件变更失败", e);
+			});
+		});
+
+		this.state.startWatching();
+	}
+
+	/**
+	 * 启动Bot: 扫描插件, 并按期望的插件列表启用插件。
+	 *
+	 * 只改变运行态, **不写 state.json** —— 期望态由 setEnable 或外部改文件表达。
 	 */
 	async start() {
 		if (this.running) return; // 幂等
-		this._state.enable = true;
-		await this.saveState();
 
 		await this.plugin.scan({ global: "plugins", bot: path.join(this.path, "plugins") });
 		await this.plugin.syncState();
+
 		this.running = true;
 		this.logger.log(`${this.name || this.id} 启动成功`);
-
 	}
 
 	/**
-	 * 关闭Bot: 卸载全部启用插件, 设置状态为false
+	 * 关闭Bot: 卸载全部启用插件。
+	 *
+	 * 同样只改运行态, 不写 state.json: 停一次不等于"以后都别启动"。
 	 */
 	async stop() {
 		if (!this.running) return; // 幂等
@@ -69,31 +97,111 @@ export class Bot extends EventEmitter {
 		for (const plugin of [...this.plugin.enabledPlugins]) {
 			await this.plugin.unload(plugin.id);
 		}
-		this._state.enable = false;
 		this.logger.log(`${this.name || this.id} 停止成功`);
 	}
 
 	/**
-	 * 显式保存状态到 state.json。
-	 * 对 state 的修改只更新内存, 不会自动落盘; 需要持久化时必须调用本方法。
+	 * 设置期望启用状态(WebUI 等外部入口)
+	 *
+	 * 先收敛运行态, 成功后才落盘: 避免出现"文件里写着启用, 实际没跑起来"的假启用。
+	 * @param enable 是否启用
 	 */
-	async saveState() {
-		await this.stateFile.save();
+	async setEnable(enable: boolean) {
+		await this.serialize(async () => {
+			enable ? await this.start() : await this.stop();
+			await this.state.setEnable(this.running);
+		});
 	}
 
 	/**
-	 * 从状态文件重读状态, 并让插件启停收敛到新状态
+	 * 设置单个插件的期望启用状态
+	 *
+	 * 与 setEnable 一致: 先收敛(加载/卸载)成功, 再写入偏好。
+	 * 插件只能在 Bot 运行时加载, 因此 Bot 未运行时无法更改。
+	 * @param id 插件 id
+	 * @param enabled 是否启用
+	 */
+	async setPluginEnabled(id: string, enabled: boolean) {
+		await this.serialize(async () => {
+			if (!this.running) throw new StateError(`Bot ${this.id} 未运行, 无法更改插件状态`);
+
+			enabled ? await this.plugin.load(id) : await this.plugin.unload(id);
+			await this.state.setPluginEnabled(id, enabled);
+		});
+	}
+
+	/**
+	 * 让运行态收敛到持久化的期望态
+	 */
+	async applyDesired(): Promise<void> {
+		await this.serialize(() => this.converge());
+	}
+
+	/**
+	 * 把所有会改变运行态的操作排进同一条队列
+	 *
+	 * 外部改动(applyDesired)与 WebUI 操作(setEnable/setPluginEnabled)可能同时发生,
+	 * 交错执行会出现“刚启动又被停掉”这类结构性竞争, 因此统一串行。
+	 * 队列内部不再调用本方法, 避免自锁。
+	 */
+	private serialize<T>(task: () => Promise<T>): Promise<T> {
+		const run = this.applying.then(() => {
+			// 栅栏: Bot 已释放就不再执行任何运行态变更
+			if (this.disposed) throw new StateError(`Bot ${this.id} 已释放, 不再接受状态变更`);
+			return task();
+		});
+		this.applying = run.then(() => undefined, () => undefined);
+		return run;
+	}
+
+	/** 单次收敛: 先对齐 Bot 启停, 再对齐插件 */
+	private async converge() {
+		if (this.disposed) return;
+
+		const desired = this.state.get();
+
+		if (desired.enable && !this.running) {
+			// start 内部已经 scan + 按期望加载插件, 这里不能再同步一次:
+			// 加载失败的插件停在 error 状态, 重复同步会让它把 init 再跑一遍
+			await this.start();
+			return;
+		}
+
+		if (!desired.enable && this.running) {
+			await this.stop();
+			return;
+		}
+
+		// 启停无需变更: 只把插件对齐到期望列表
+		if (this.running) await this.plugin.syncState(desired.enabledPlugins);
+	}
+
+	/**
+	 * 从状态文件重读并收敛运行态(供 Core 启动、BotManager 批量收敛使用)
 	 */
 	async syncState() {
-		await this.stateFile.reload();
-		await this.plugin.syncState();
+		await this.state.load();
+		await this.applyDesired();
 	}
 
 	/**
-	 * 仅从状态文件重读, 不收敛插件(供 BotManager.syncState 等批量收敛场景使用)
+	 * 释放: 停止运行并停止监听状态文件; 幂等
+	 *
+	 * 删除 Bot 或退出进程前应当调用, 否则残留的监听会在目录消失后继续被触发。
 	 */
-	async reloadState() {
-		await this.stateFile.reload();
+	async dispose() {
+		if (this.disposed) return;
+		this.disposed = true;
+
+		// 先立在途任务跑完: 队列里可能正有一次启停进行到一半,
+		// 不等它结束就拆监听, 会留下一个已经没有人管的运行态。
+		await this.applying.catch(() => { /* 在途任务的失败不影响释放 */ });
+
+		this.unwatchState?.();
+		this.unwatchState = null;
+		this.state.close();
+
+		if (this.running) await this.stop();
 	}
 
 	dispatch(event: BotEvents, meta: BotEventMeta) {

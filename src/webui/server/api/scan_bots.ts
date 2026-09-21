@@ -18,7 +18,12 @@ const api: WebUIAPI = {
 				return {
 					id: bot.id,
 					name: bot.name,
-					state: bot.state
+					// running 是运行态, state 是期望态: 前端开关要用期望态,
+					// 而"是否正在运行"必须看 running
+					running: bot.running,
+					// 必须是普通快照: 直接返回 BotStateManager 会把它的内部字段
+					// (file / watcher / writing ...) 一并序列化给前端
+					state: bot.state.get()
 				}
 			})
 		}

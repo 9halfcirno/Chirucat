@@ -21,7 +21,10 @@ const api: WebUIAPI = {
 		return {
 			id: bot.id,
 			name: bot.name,
-			state: bot.state
+			// 运行态与期望态分开返回: 判断"是否正在运行"必须用 running,
+			// state.enable 只是持久化的期望(可能尚未收敛, 也可能收敛失败)
+			running: bot.running,
+			state: bot.state.get()
 		};
 	}
 }

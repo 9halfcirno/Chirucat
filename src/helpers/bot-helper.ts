@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import type { Core } from "../core";
 import type { BotConfig } from "../bot/types";
+import { DEFAULT_BOT_STATE } from "../bot/state-manager";
 import { root } from "../utils/root";
 import { dirCheck } from "../utils/dir-check";
 import Logger from "../utils/logger";
@@ -53,7 +54,7 @@ export class BotHelper {
 		);
 		await fs.writeFile(
 			path.join(dir, "state.json"),
-			JSON.stringify({ enable: false, plugins: {} }, null, "\t") + "\n"
+			JSON.stringify(DEFAULT_BOT_STATE, null, "\t") + "\n"
 		);
 		logger.log(`已创建Bot ${config.id}, 路径: ${dir}`);
 		await this.core.bot.scan(botsDir);
@@ -66,7 +67,8 @@ export class BotHelper {
 		let dir: string | null = null;
 
 		if (bot) {
-			if (bot.running) await bot.stop();
+			// 目录即将被删除: 先摘掉状态文件监听并停下运行态
+			await bot.dispose();
 			dir = bot.path;
 		} else {
 			const candidate = path.join(root, "bots", id);

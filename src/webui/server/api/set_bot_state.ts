@@ -20,9 +20,8 @@ export default {
 		let state = !!req.body.state; // 转布尔
 		let bot = core.bot.bots.get(id)!;
 		try {
-			await (state ? bot.start() : bot.stop());
-			await bot.saveState()
-			
+			// setEnable 先收敛运行态, 成功后才把偏好写入 state.json
+			await bot.setEnable(state);
 		} catch (e) {
 
 			throw { code: 500, err: `更改Bot状态失败: ${(e as Error).message}` }

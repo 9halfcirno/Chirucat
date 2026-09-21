@@ -129,7 +129,7 @@ export default {
 /**
  * 创建单个机器人卡片
  *
- * @param {{ id: string, name?: string|null, state?: { enable?: boolean, plugins?: Record<string, boolean> } }} bot
+ * @param {{ id: string, name?: string|null, state?: { enable?: boolean, enabledPlugins?: string[] } }} bot
  */
 function createBotCard(bot) {
 	const card = document.createElement("div");

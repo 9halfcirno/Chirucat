@@ -14,7 +14,6 @@ import type { Bot } from "../bot/bot";
 import type { Message } from "../entity/message";
 import type { BotActions } from "../protocols/actions";
 import type { AdapterContext } from "./contexts/adapter-context";
-import type { BotState } from "../bot/types";
 import Logger from "../utils/logger";
 import { dirCheck } from "../utils/dir-check";
 import { dfs } from "../utils/dfs";
@@ -243,7 +242,7 @@ export class PluginManager {
 
 	/**
 	 * 卸载指定插件: 释放运行态, 保留注册表条目。
-	 * 仅处理运行时, 不修改持久化的启停偏好(由调用方显式 saveState)。
+	 * 仅处理运行时, 不修改持久化的启停偏好(由调用方通过 bot.setPluginEnabled 写回)。
 	 * @param ids 插件id
 	 */
 	async unload(...ids: string[]) {
@@ -277,20 +276,21 @@ export class PluginManager {
 
 	/**
 	 * 同步插件启停状态: 让运行状态收敛到期望状态
-	 * 无参时从 state.json 读取期望状态(通过 bot.state.plugins)
-	 * @param desired 期望状态: id -> 是否启用, 缺省读 state.json
+	 * 无参时从 state.json 读取期望状态(通过 bot.state 的 enabledPlugins)
+	 * @param desired 期望启用的插件 id 列表, 缺省读 state.json
 	 */
-	async syncState(desired: BotState["plugins"] = this.bot.state.plugins) {
+	async syncState(desired: string[] = this.bot.state.get().enabledPlugins) {
+		const wanted = new Set(desired);
+
 		// 先卸载期望关闭的
 		for (const plugin of [...this.enabledPlugins]) {
-			if (desired[plugin.id] !== true) {
+			if (!wanted.has(plugin.id)) {
 				await this.unload(plugin.id);
 			}
 		}
 
 		// 再加载期望开启的
-		for (const [id, on] of Object.entries(desired)) {
-			if (!on) continue;
+		for (const id of wanted) {
 			if (!this.resolve(id)) {
 				logger.warn(`Plugin: 期望启用但未注册的插件: ${id}`);
 				continue;

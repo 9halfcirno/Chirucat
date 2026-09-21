@@ -71,12 +71,12 @@ export class Core {
 
 
 		await this.bot.scan(path.join(root, "bots")) // 扫描bot目录
-		this.bot.syncState();
+		await this.bot.syncState();
 
 	}
 
 	async close() {
-		await this.bot.stop(); // 关闭bot
+		await this.bot.dispose(); // 停止所有Bot, 并释放状态文件监听
 		await this.webui?.close() // 停止webui
 		this.statistics?.close(); // 冲刷统计缓冲并关闭数据库
 	}

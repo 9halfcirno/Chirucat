@@ -12,7 +12,8 @@
   "main": "index.js",
   "scripts": {
     "app": "tsx src/app.ts",
-    "webui": "tsx src/webui/server/server.ts"
+    "webui": "tsx src/webui/server/server.ts",
+    "check:state": "tsx scripts/check-bot-state.ts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",

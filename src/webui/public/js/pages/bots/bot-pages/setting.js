@@ -1,4 +1,5 @@
 import { apiFetch } from "../../../spa/auth.js"
+import { createConfigList } from "../../../spa/components/config-editor.js"
 import { createDialogWindow } from "../../../spa/components/dialog-window.js"
 import { createIconButton } from "../../../spa/components/icon-button.js"
 import toast from "../../../spa/toast.js"
@@ -12,6 +13,13 @@ export default {
 	 * @param {{ id: string, state?: boolean }} bot
 	 */
 	render(div, bot) {
+
+		let configList = createConfigList(createConfig(bot));
+		div.append(configList.el);
+
+
+
+		// 删除bot相关
 		const delDes = document.createElement("div")
 		delDes.textContent = "删除Bot"
 		delDes.style.color = "darkred"
@@ -50,6 +58,9 @@ async function handleDeleteClick(bot, container, btn) {
 
 /**
  * 请求 bot 运行状态
+ *
+ * 必须读 running 而不是 state.enable: 后者只是持久化的期望态,
+ * 文件里写着启用而实际没跑起来时, 用它会误判成"正在运行"。
  * @param {string} id
  * @returns {Promise<boolean>} 是否正在运行
  */
@@ -61,7 +72,7 @@ async function fetchBotRunning(id) {
 	})
 	if (!res.ok) throw new Error(`HTTP: ${res.status}`)
 	const data = await res.json()
-	return data.state.enable === true
+	return data.running === true
 }
 
 /**
@@ -113,7 +124,7 @@ function buildConfirmContent(botId) {
 	const content = document.createElement("div")
 
 	const intro = document.createElement("div")
-	intro.append("确定停用并删除 Bot ")
+	intro.append("确定删除 Bot ")
 	const idStrong = document.createElement("strong")
 	idStrong.textContent = botId
 	intro.append(idStrong, "? 此操作无法撤销!")
@@ -178,5 +189,28 @@ async function deleteBot(bot, container) {
 		document.body.querySelector(".bot-refresh-btn")?.click()
 	} catch (e) {
 		toast(`删除Bot失败: ${e.message}`, { type: "error" })
+	}
+}
+
+
+function createConfig(bot) {
+	return {
+		controls: [
+			{
+				type: "input",
+				id: "id",
+				label: "Bot ID",
+				default: bot.id,
+				desc: "Bot的标识, 更改可能导致部分数据出现异常",
+				required: true
+			},
+			{
+				type: "input",
+				id: "name",
+				label: "Bot 名称",
+				default: bot.name
+			},
+
+		]
 	}
 }

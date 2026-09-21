@@ -32,10 +32,8 @@ export default {
 		let state = !!req.body.state; // 转布尔
 
 		try {
-			state ? await bot.plugin.load(id) : await bot.plugin.unload(id);
-			// 运行成功后才持久化偏好; 失败时 state 不变, 不落盘
-			bot.state.plugins[id] = state;
-			await bot.saveState();
+			// setPluginEnabled 先加载/卸载, 成功后才把偏好写入 state.json
+			await bot.setPluginEnabled(id, state);
 		} catch (e) {
 
 			throw { code: 500, err: `更改插件状态失败: ${(e as Error).message}` }

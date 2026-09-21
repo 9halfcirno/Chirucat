@@ -13,7 +13,9 @@ const api: WebUIAPI = {
 				return {
 					id: bot.id,
 					name: bot.name,
-					state: bot.state
+					// 运行态与期望态分开返回, 与 get_bot_state 保持一致
+					running: bot.running,
+					state: bot.state.get()
 				}
 			})
 		}
