@@ -261,18 +261,18 @@ export default {
 			const inner = document.createElement("div")
 			inner.className = "plugin-config"
 
-			const sub = document.createElement("p")
-			sub.className = "plugin-config-sub"
-			sub.textContent = `${item.name || item.id} (${item.id})`
+			// const sub = document.createElement("p")
+			// sub.className = "plugin-config-sub"
+			// sub.textContent = `${item.name || item.id} (${item.id}) 的配置`
 
 			const slot = document.createElement("div")
 			slot.append(createSpinner())
-			inner.append(sub, slot)
+			inner.append(slot)
 
 			/** 配置表单控制器; 读取完成前为 null, 此时点"保存"不做事 */
 			let list = null
 
-			const dialog = createDialogWindow("插件配置", inner, [
+			const dialog = createDialogWindow(`${item.name}(${item.id})的插件配置`, inner, [
 				{ name: "保存", onclick: () => save() },
 				{ name: "取消", onclick: () => dialog.closeDialog() },
 			], true)
