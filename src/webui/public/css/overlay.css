@@ -3,7 +3,7 @@
 .spa-overlay {
 	position: absolute;
 	inset: 0;
-	z-index: 100;
+	z-index: var(--z-overlay);
 
 	/* 跟随 #main 的圆角, 避免直角遮罩露出圆角外的白角 */
 	border-radius: inherit;

@@ -15,7 +15,7 @@
 .dialog-window-base {
 	position: fixed;
 	inset: 0;
-	z-index: 500; /* 高于窄屏抽屉(20) 与 SPA 遮罩(100), 低于 Toast(1000) */
+	z-index: var(--z-dialog);
 
 	display: flex;
 

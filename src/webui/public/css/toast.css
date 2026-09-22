@@ -6,7 +6,7 @@
 	position: fixed;
 	top: var(--sp-3);
 	right: var(--sp-3);
-	z-index: 1000; /* 高于 SPA 加载遮罩 (100) 与窄屏抽屉 (20) */
+	z-index: var(--z-toast);
 
 	display: flex;
 	flex-direction: column;

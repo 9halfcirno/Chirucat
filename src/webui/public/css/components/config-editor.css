@@ -198,7 +198,10 @@ textarea.config-textarea {
 /* 浮层: fixed 定位, 否则会被 #page-view 的 overflow 裁掉 */
 .config-select-panel {
 	position: fixed;
-	z-index: 40;
+	/* 必须高于弹窗。这个面板会被挂到 document.body 上, 而弹窗自身也是 body 下的
+	   固定层: 早先这里写死 40、弹窗用 500, 于是弹窗里的下拉一展开就被弹窗整块
+	   盖住, 表现就是“展开项丢了”。层级统一由 themes 的 --z-* 令牌管。 */
+	z-index: var(--z-popover);
 	box-sizing: border-box;
 
 	min-width: 80px;
