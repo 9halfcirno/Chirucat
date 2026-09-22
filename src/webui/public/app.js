@@ -190,6 +190,66 @@ auth.onUnauthorized(() => {
 	}
 })();
 
+// ---- 主题切换 (跟随系统 / 浅色 / 深色 三态循环) ----
+//
+// 两个标记分工不同, 不要混:
+//   data-theme-mode  用户选的模式 (auto|light|dark) → 决定顶栏显示哪个图标
+//   data-theme       "dark" 或不存在 → 决定实际配色
+// 跟随系统时 data-theme 会随系统偏好变化, 但 mode 始终是 auto。
+// index.html 的 <head> 内联脚本早在首屏前就把这两者写好, 避免白闪;
+// 这里只负责交互与持久化。
+const THEME_KEY = "chirucat-theme";
+const THEME_MODES = ["auto", "light", "dark"];
+const THEME_MODE_NAMES = { auto: "跟随系统", light: "浅色", dark: "深色" };
+const themeToggle = document.getElementById("theme-toggle");
+const darkMedia = matchMedia("(prefers-color-scheme: dark)");
+
+if (themeToggle) {
+	/** 当前模式; 以 <head> 脚本写下的 data-theme-mode 为准 */
+	let mode = THEME_MODES.includes(document.documentElement.dataset.themeMode)
+		? document.documentElement.dataset.themeMode
+		: "auto";
+
+	/** 提示当前模式与下一次会切到什么 */
+	function syncThemeLabel() {
+		const next = THEME_MODES[(THEME_MODES.indexOf(mode) + 1) % THEME_MODES.length];
+		const label = `主题: ${THEME_MODE_NAMES[mode]} (点击切换到${THEME_MODE_NAMES[next]})`;
+		themeToggle.title = label;
+		themeToggle.setAttribute("aria-label", label);
+	}
+
+	/** 把模式落到 <html>: 写模式标记, 再按模式决定实际配色 */
+	const applyMode = next => {
+		mode = next;
+		document.documentElement.dataset.themeMode = next;
+
+		const dark = next === "dark" || (next === "auto" && darkMedia.matches);
+		if (dark) document.documentElement.dataset.theme = "dark";
+		else delete document.documentElement.dataset.theme;
+
+		syncThemeLabel();
+	};
+
+	themeToggle.addEventListener("click", () => {
+		const next = THEME_MODES[(THEME_MODES.indexOf(mode) + 1) % THEME_MODES.length];
+		applyMode(next);
+
+		try {
+			// 跟随系统也显式存下来, 这样用户能主动从手动模式切回跟随系统
+			localStorage.setItem(THEME_KEY, next);
+		} catch {
+			/* localStorage 不可用 (隐私模式等): 本次会话内仍生效, 只是记不住 */
+		}
+	});
+
+	// 跟随系统时, 系统偏好变了要立刻反映到配色上
+	darkMedia.addEventListener("change", () => {
+		if (mode === "auto") applyMode("auto");
+	});
+
+	syncThemeLabel();
+}
+
 // ---- 窄屏侧栏抽屉: 顶部按钮展开/收起, 点遮罩或导航后自动收起 ----
 //
 // 二级侧栏当前停用, 所以下面两个元素取不到, 整块会被跳过。

@@ -81,6 +81,37 @@ body {
 	white-space: nowrap;
 }
 
+/* 主题切换按钮: 推到顶栏最右 */
+#theme-toggle {
+	margin-left: auto;
+}
+
+#theme-toggle svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* 只显示与当前模式对应的那一个图标: 半圆=跟随系统(默认), 太阳=浅色, 月亮=深色。
+   判断依据是 data-theme-mode (用户选的模式), 而不是 data-theme (实际配色) ——
+   跟随系统时配色会随系统变, 但图标应当始终是"跟随系统"那一个。 */
+#theme-toggle .theme-icon-light,
+#theme-toggle .theme-icon-dark {
+	display: none;
+}
+
+:root[data-theme-mode="light"] #theme-toggle .theme-icon-auto,
+:root[data-theme-mode="dark"] #theme-toggle .theme-icon-auto {
+	display: none;
+}
+
+:root[data-theme-mode="light"] #theme-toggle .theme-icon-light {
+	display: block;
+}
+
+:root[data-theme-mode="dark"] #theme-toggle .theme-icon-dark {
+	display: block;
+}
+
 /* 窄屏汉堡按钮 (#nav-toggle) 随二级侧栏一起停用, 已从 index.html 移除 */
 
 /* ==================== 活动栏 (一级导航) ==================== */
@@ -215,7 +246,7 @@ body:not(.authed) #main {
 #login-view {
 	position: fixed;
 	inset: 0;
-	z-index: 1000;
+	z-index: var(--z-login);
 
 	display: flex;
 	align-items: center;
@@ -300,7 +331,7 @@ body:not(.authed) #main {
 		   两者配套才能得到"侧栏刚好占住内容区让出的位置" */
 		left: var(--activity-w, 44px);
 		right: auto;
-		z-index: 20;
+		z-index: var(--z-drawer);
 
 		width: calc(var(--drawer-w, 276px) - var(--activity-w, 44px));
 		max-width: calc(100vw - var(--activity-w, 44px));
@@ -332,7 +363,7 @@ body:not(.authed) #main {
 		content: "";
 		position: fixed;
 		inset: 0 0 0 var(--drawer-w, 276px);
-		z-index: 15;
+		z-index: var(--z-drawer-scrim);
 		background: var(--scrim);
 	}
 }

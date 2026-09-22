@@ -6,16 +6,26 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Chirucat WebUI</title>
 	<script>
-		/* 在样式生效前确定主题, 避免深色偏好下的白闪。
-		   localStorage 的 "chirucat-theme" (light|dark) 由设置页写入;
-		   未设置时跟随系统。放在 <head> 且同步执行, 才能早于首屏绘制。 */
+		/* 在样式生效前定好主题, 避免深色偏好下的白闪。
+		   localStorage 的 "chirucat-theme" 由顶栏主题按钮写入, 三态:
+		     "auto"            跟随系统 (默认)
+		     "light" / "dark"  手动指定
+		   这里同时写两个标记, 分工不同:
+		     data-theme-mode  用户选的模式 → 决定顶栏显示哪个图标
+		     data-theme       "dark" 或不存在 → 决定实际配色
+		   放在 <head> 且同步执行, 才能早于首屏绘制。 */
 		(() => {
 			try {
 				const saved = localStorage.getItem("chirucat-theme");
-				const dark = saved ? saved === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+				const mode = (saved === "light" || saved === "dark") ? saved : "auto";
+				document.documentElement.dataset.themeMode = mode;
+
+				const dark = mode === "dark"
+					|| (mode === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
 				if (dark) document.documentElement.dataset.theme = "dark";
 			} catch {
-				/* localStorage 不可用 (隐私模式等): 退回浅色, 不阻塞页面 */
+				/* localStorage 不可用 (隐私模式等): 按跟随系统处理, 不阻塞页面 */
+				document.documentElement.dataset.themeMode = "auto";
 			}
 		})();
 	</script>
@@ -34,6 +44,22 @@
 <body class="auth-pending nav-collapsed">
 	<header id="top-nav">
 		<span class="brand">=^ - ^= WebUI</span>
+
+		<!-- 主题切换。三个图标对应三种模式, 只显示当前那一个:
+		     半圆=跟随系统, 太阳=浅色, 月亮=深色 -->
+		<button id="theme-toggle" class="icon-btn" type="button" aria-label="切换主题">
+			<svg class="theme-icon theme-icon-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<circle cx="12" cy="12" r="9" />
+				<path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none" />
+			</svg>
+			<svg class="theme-icon theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<circle cx="12" cy="12" r="4" />
+				<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+			</svg>
+			<svg class="theme-icon theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+			</svg>
+		</button>
 	</header>
 
 	<!-- 活动栏: 一级导航, 由 SPA 框架根据注册的页面自动生成 -->
