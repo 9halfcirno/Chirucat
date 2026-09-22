@@ -19,8 +19,6 @@ import { dirCheck } from "../utils/dir-check";
 import { dfs } from "../utils/dfs";
 import { PluginExports } from "./exports";
 
-const logger = new Logger("PluginManager");
-
 export class PluginManager {
 	loader = new PluginLoader();
 
@@ -33,7 +31,6 @@ export class PluginManager {
 	private pluginExports = new PluginExports();
 
 	constructor(private bot: Bot) {
-
 	}
 
 	/**
@@ -56,7 +53,7 @@ export class PluginManager {
 		for (const depId of Object.keys(plugin.manifest.dependencies ?? {})) {
 			const dep = this.resolve(depId);
 			if (!dep) {
-				logger.warn(`Plugin: 插件 ${plugin.id} 的依赖 ${depId} 未注册`);
+				this.bot.logger.warn(`插件 ${plugin.id} 的依赖 ${depId} 未注册`);
 				continue;
 			}
 			deps.push(dep);
@@ -82,7 +79,7 @@ export class PluginManager {
 			const cycle = dfs(plugin, p => p.id, p => this.getDependencyPlugins(p));
 			if (!cycle) continue;
 			cycle.forEach(p => reported.add(p.id));
-			logger.warn(`Plugin: 检测到插件依赖循环: ${cycle.map(p => p.id).join(" -> ")}`);
+			this.bot.logger.warn(`检测到插件依赖循环: ${cycle.map(p => p.id).join(" -> ")}`);
 		}
 	}
 
@@ -113,7 +110,7 @@ export class PluginManager {
 				manifest.path = pluginDir;
 				collected.set(manifest.id, manifest);
 			} catch (e) {
-				logger.error(e);
+				this.bot.logger.error(e);
 
 			}
 		}
@@ -169,7 +166,7 @@ export class PluginManager {
 			await config.load();
 			plugin.config = config;
 		} catch (e) {
-			logger.error(`Plugin: 装配插件 ${plugin.id} 的配置失败: ${e instanceof Error ? e.message : e}`);
+			this.bot.logger.error(`装配插件 ${plugin.id} 的配置失败: ${e instanceof Error ? e.message : e}`);
 		}
 	}
 
@@ -223,7 +220,7 @@ export class PluginManager {
 			}
 
 			// 启用插件
-			const context = PluginContextFactory.create(plugin, this.pluginExports, plugin.config);
+			const context = PluginContextFactory.create(plugin, this.pluginExports);
 			try {
 				await plugin.enable(context);
 			} catch (e) {
@@ -232,7 +229,7 @@ export class PluginManager {
 				throw e;
 			}
 
-			logger.log(`Plugin: 成功载入插件: ${plugin.manifest.name || "???"}(${plugin.id})`);
+			this.bot.logger.log(`成功载入插件: ${plugin.manifest.name || "???"}(${plugin.id})`);
 		} catch (e) {
 			// 构建/加载失败: 落error而非卡在loading
 			if (plugin.status === "loading") plugin.status = "error";
@@ -265,7 +262,7 @@ export class PluginManager {
 		// 兜底: 导出正常已由 context.dispose() 释放, 这里覆盖上下文缺失等异常情况
 		this.pluginExports.releaseExports(plugin.id);
 
-		logger.log(`Plugin: 已卸载插件: ${plugin.id}`);
+		this.bot.logger.log(`已卸载插件: ${plugin.id}`);
 	}
 
 	/** 依赖指定插件的插件列表(跨 global/bot 注册表) */
@@ -292,14 +289,14 @@ export class PluginManager {
 		// 再加载期望开启的
 		for (const id of wanted) {
 			if (!this.resolve(id)) {
-				logger.warn(`Plugin: 期望启用但未注册的插件: ${id}`);
+				this.bot.logger.warn(`期望启用但未注册的插件: ${id}`);
 				continue;
 			}
 			try {
 				await this.load(id);
 			} catch (e) {
 				// 单个插件加载失败(如依赖循环)不阻断状态收敛, 记录后继续
-				logger.error(`Plugin: 插件 ${id} 加载失败: ${e instanceof Error ? e.message : e}`);
+				this.bot.logger.error(`插件 ${id} 加载失败: ${e instanceof Error ? e.message : e}`);
 			}
 		}
 	}
@@ -317,7 +314,7 @@ export class PluginManager {
 	async handleAction(action: BotActions, adapter: string, extra?: Record<string, any>) {
 		const adapterPlugin = this.enabledPlugins.find(p => p.id === adapter && p.manifest.type === "adapter");
 		if (!adapterPlugin) {
-			logger.error(`Plugin: 已启用插件中找不到id为 ${adapter} 的适配器插件!`);
+			this.bot.logger.error(`已启用插件中找不到id为 ${adapter} 的适配器插件!`);
 			return;
 		}
 		await (adapterPlugin.context as AdapterContext).handleAction(action, extra);

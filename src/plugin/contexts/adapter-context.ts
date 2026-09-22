@@ -8,12 +8,13 @@ import type { ConfigManager } from "../../config/manager";
 import type { PluginManifest } from "../types";
 import { PluginContext } from "./context";
 import type { ActionHandler, AdapterPluginBotAPI, PluginSessionAPI, PluginUserAPI } from "./types";
+import type { Plugin } from "../plugin";
 
 export class AdapterContext extends PluginContext {
 	private actionHandlers: ActionHandler[] = [];
-	constructor(bot: Bot, manifest: PluginManifest, exports: PluginExports, config: ConfigManager | null = null) {
-		if (manifest.type !== "adapter") throw new Error(`Plugin Context: AdapterContext仅 type: adapter 的插件可创建`)
-		super(bot, manifest, exports, config);
+	constructor(plugin: Plugin, exports: PluginExports) {
+		if (plugin.manifest.type !== "adapter") throw new Error(`Plugin Context: AdapterContext仅 type: adapter 的插件可创建`)
+		super(plugin, exports);
 		/**
 		 * 为Bot触发一个BotEvent
 		 * @param event Bot事件

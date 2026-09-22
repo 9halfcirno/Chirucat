@@ -17,9 +17,11 @@ import { root } from "../../utils/root";
 import type { PluginExports } from "../exports";
 import type { ConfigManager } from "../../config/manager";
 import { StateError } from "../../errors/state-error";
+import type { Plugin } from "../plugin";
 
 export class PluginContext {
 	protected _bot: Bot;
+	protected _manifest: PluginManifest;
 
 	logger: Logger;
 	message: PluginMessageAPI;
@@ -51,20 +53,22 @@ export class PluginContext {
 	/** dispose 幂等标记: enable失败/卸载/注册表丢弃都可能重复触发释放 */
 	protected _disposed = false;
 
-	constructor(bot: Bot, protected _manifest: PluginManifest, protected _pluginExports: PluginExports, config: ConfigManager | null = null) {
-		this._bot = bot;
-		this.logger = new Logger(`Plugin ${_manifest.id}`);
+	constructor(plugin: Plugin, protected _pluginExports: PluginExports) {
+		this._bot = plugin.bot;
+		this._manifest = plugin.manifest;
+
+		this.logger = new Logger(`Plugin ${this._manifest.id}`);
 		this.message = new MessageAPI((entry) => {
 			this._onMessageCallback.push(entry);
 		});
 		// bot.path 为绝对路径, resolve 会从其重置; 若为相对路径则以 root 为基准
-		this._storageRoot = path.resolve(root, bot.path, "data", "plugins", _manifest.id);
+		this._storageRoot = path.resolve(root, this._bot.path, "data", "plugins", this._manifest.id);
 		this.fs = new FileSystemAPI(this._storageRoot);
 		// 插件代码目录只读: 允许读自带资源, 不允许改写安装目录
-		this.plugin = new FileSystemAPI(path.resolve(root, _manifest.path), { writable: false });
+		this.plugin = new FileSystemAPI(path.resolve(root, this._manifest.path), { writable: false });
 		this._kv = new KVStore(path.join(this._storageRoot, ".kv.db"));
 		this.kv = this._kv;
-		this._config = new PluginConfig(config);
+		this._config = new PluginConfig(plugin.config);
 		this.config = this._config;
 
 		this.bot = {
@@ -73,7 +77,7 @@ export class PluginContext {
 		}
 
 		this.path = {
-			plugin: _manifest.path,
+			plugin: this._manifest.path,
 			data: this._storageRoot
 		}
 	}
