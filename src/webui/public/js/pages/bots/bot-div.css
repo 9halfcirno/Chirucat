@@ -305,10 +305,6 @@
 	color: var(--ok);
 }
 
-.plugin-card-status[data-status="error"] {
-	color: var(--danger);
-}
-
 .plugin-card-status[data-status="loading"],
 .plugin-card-status[data-status="unloading"] {
 	color: var(--accent);

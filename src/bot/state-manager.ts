@@ -163,6 +163,25 @@ export class BotStateManager {
 	}
 
 	/**
+	 * 批量移出期望启用列表(不在列表里的 id 忽略)
+	 *
+	 * 供"插件运行态收敛失败"后清理期望: 运行态给不出来的插件不留在文件里。
+	 * 列表没有实际变化时不写盘。
+	 * @param ids 要移除的插件 id
+	 * @returns 是否真的发生了改动
+	 */
+	async disablePlugins(ids: readonly string[]): Promise<boolean> {
+		const drop = new Set(ids);
+		if (drop.size === 0) return false;
+
+		const kept = this.state.enabledPlugins.filter((id) => !drop.has(id));
+		if (kept.length === this.state.enabledPlugins.length) return false;
+
+		await this.commit({ enable: this.state.enable, enabledPlugins: kept });
+		return true;
+	}
+
+	/**
 	 * 用一份完整期望态覆盖(列表整体替换, 顺序以传入为准)
 	 * @param next 期望状态
 	 */

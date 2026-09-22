@@ -44,6 +44,10 @@ export class Plugin {
 
 	/**
 	 * 启动插件, 执行module.init方法
+	 *
+	 * 成功进入 enabled; 失败时只做资源清理(调用 error 钩子并释放上下文),
+	 * 终态留给调用方 —— PluginManager.load 会把插件恢复到加载前的关态,
+	 * 失败原因靠抛出的异常上报, 不占用独立状态。
 	 * @param ctx 运行上下文, 由 PluginManager 创建
 	 */
 	async enable(ctx?: PluginContext) {
@@ -60,7 +64,7 @@ export class Plugin {
 			await this.module.init(this.context!);
 			this.status = "enabled";
 		} catch (e) {
-			// 让插件尝试清理初始化到一半的资源
+			// 让插件尝试清理初始化到一半的资源(error 钩子相当于插件自己的 try/catch)
 			try {
 				await this.module.error?.(e);
 			} catch { 
@@ -68,8 +72,7 @@ export class Plugin {
 			 }
 			this.context?.dispose?.();
 			this.context = null; // 上下文已释放, 断开引用避免后续误用
-			this.status = "error";
-			throw e;
+			throw e; // 终态由调用方恢复: 加载失败对外就是"没开起来", 不留第三种状态
 		}
 	}
 
@@ -83,7 +86,9 @@ export class Plugin {
 
 		this.status = "unloading";
 		try {
-			if (this.module?.unload) await this.module.unload(this.context!);
+			// context 缺失说明插件从未成功启用(init 失败时已由 error 钩子清理过), 跳过 unload
+			const ctx = this.context;
+			if (this.module?.unload && ctx) await this.module.unload(ctx);
 		} catch (e) {
 			// unload 失败也让插件尝试清理
 			try {

@@ -74,13 +74,15 @@ export class Bot extends EventEmitter {
 	/**
 	 * 启动Bot: 扫描插件, 并按期望的插件列表启用插件。
 	 *
-	 * 只改变运行态, **不写 state.json** —— 期望态由 setEnable 或外部改文件表达。
+	 * 基本只改变运行态, 不写 state.json —— 期望态由 setEnable 或外部改文件表达。
+	 * 例外是起不来的插件: 加载失败的 id 会从期望列表移除(见 dropUnstartable),
+	 * 否则文件里记着"开着"、界面上却是"关着"。
 	 */
 	async start() {
 		if (this.running) return; // 幂等
 
 		await this.plugin.scan({ global: "plugins", bot: path.join(this.path, "plugins") });
-		await this.plugin.syncState();
+		await this.dropUnstartable(await this.plugin.syncState());
 
 		this.running = true;
 		this.logger.log(`${this.name || this.id} 启动成功`);
@@ -128,6 +130,21 @@ export class Bot extends EventEmitter {
 			enabled ? await this.plugin.load(id) : await this.plugin.unload(id);
 			await this.state.setPluginEnabled(id, enabled);
 		});
+	}
+
+	/**
+	 * 清理起不来的插件: 把期望启用但没跑起来的 id 从期望态移除
+	 *
+	 * 所见即所得 —— 运行态给不出来的插件不该继续留在 state.json 里, 否则
+	 * 界面显示"关着"而文件记着"开着", 下次启动还会再试一遍。插件起不来
+	 * 是插件的问题, 靠日志暴露即可, 不需要框架替它保留一份做不到的期望。
+	 * @param failed syncState 报告的失败插件 id
+	 */
+	private async dropUnstartable(failed: readonly string[]) {
+		if (!failed.length) return;
+
+		const dropped = await this.state.disablePlugins(failed);
+		if (dropped) this.logger.warn(`已从期望启用列表移除起不来的插件: ${failed.join(", ")}`);
 	}
 
 	/**
@@ -190,7 +207,7 @@ export class Bot extends EventEmitter {
 		}
 
 		// 启停无需变更: 只把插件对齐到期望列表
-		if (this.running) await this.plugin.syncState(desired.enabledPlugins);
+		if (this.running) await this.dropUnstartable(await this.plugin.syncState(desired.enabledPlugins));
 	}
 
 	/**

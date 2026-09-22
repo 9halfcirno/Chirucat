@@ -209,6 +209,10 @@ export class PluginManager {
 			await this.load(dep.id);
 		}
 
+		// 进入 loading 前的状态只可能是关态(enabled/loading/unloading 已在上面拦掉),
+		// 失败时恢复到它 —— 加载失败对外就是"没开起来", 不引入第三种状态
+		const before = plugin.status;
+
 		// 前置loading: 覆盖整个加载流程(含模块构建), 防止scan清理悬空条目时误删
 		plugin.status = "loading";
 		try {
@@ -231,8 +235,8 @@ export class PluginManager {
 
 			this.bot.logger.log(`成功载入插件: ${plugin.manifest.name || "???"}(${plugin.id})`);
 		} catch (e) {
-			// 构建/加载失败: 落error而非卡在loading
-			if (plugin.status === "loading") plugin.status = "error";
+			// 构建/启用失败: 回到加载前的关态, 既不卡在 loading, 也不产生错误态
+			plugin.status = before;
 			throw e;
 		}
 	}
@@ -275,9 +279,13 @@ export class PluginManager {
 	 * 同步插件启停状态: 让运行状态收敛到期望状态
 	 * 无参时从 state.json 读取期望状态(通过 bot.state 的 enabledPlugins)
 	 * @param desired 期望启用的插件 id 列表, 缺省读 state.json
+	 * @returns 期望启用但没能跑起来的插件 id(未注册或加载失败), 供调用方清理期望态
 	 */
-	async syncState(desired: string[] = this.bot.state.get().enabledPlugins) {
+	async syncState(desired: string[] = this.bot.state.get().enabledPlugins): Promise<string[]> {
 		const wanted = new Set(desired);
+
+		/** 起不来的插件: 期望里有、运行态给不出来 */
+		const failed: string[] = [];
 
 		// 先卸载期望关闭的
 		for (const plugin of [...this.enabledPlugins]) {
@@ -290,6 +298,7 @@ export class PluginManager {
 		for (const id of wanted) {
 			if (!this.resolve(id)) {
 				this.bot.logger.warn(`期望启用但未注册的插件: ${id}`);
+				failed.push(id);
 				continue;
 			}
 			try {
@@ -297,8 +306,11 @@ export class PluginManager {
 			} catch (e) {
 				// 单个插件加载失败(如依赖循环)不阻断状态收敛, 记录后继续
 				this.bot.logger.error(`插件 ${id} 加载失败: ${e instanceof Error ? e.message : e}`);
+				failed.push(id);
 			}
 		}
+
+		return failed;
 	}
 
 	/**

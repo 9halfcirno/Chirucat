@@ -14,14 +14,17 @@ export function createDotSwitch(onclick, state = true) {
 		if (locked) return;
 		locked = true; // 加锁
 
-		state = !state; // 取反
+		const target = !state; // 目标状态: 由当前状态取反, 交给回调
 		try {
 			swh.classList.add("loading");
 			swh.disabled = true;
 
-			let newState = await onclick(e, state); // 触发回调
+			const newState = await onclick(e, target); // 触发回调
 
-			switchState(swh, newState);
+			// 以回调返回值为准: 失败回弹时内部状态跟着回退, 否则下一次点击
+			// 会发出与用户所见相反的意图
+			state = Boolean(newState);
+			switchState(swh, state);
 		} catch (e) {
 			throw e; // 再抛
 		} finally {

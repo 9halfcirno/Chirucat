@@ -3,6 +3,21 @@ import type { Plugin } from "../../plugin/plugin";
 import type { PluginScope, PluginStatus } from "../../plugin/types";
 
 /**
+ * 插件运行状态在 WebUI 中的表述
+ *
+ * 前端只需要"开着 / 关着 / 正在切换"三种观感: registered(从未加载) 与
+ * disabled(已停用) 都收敛成 disabled —— 期望态、"没加载过"这类内部概念
+ * 不往前端漏, 用户看到的永远只有运行态。
+ */
+export type PluginViewStatus = "enabled" | "disabled" | "loading" | "unloading";
+
+/** 把内部状态收敛成对外的运行态表述 */
+function toViewStatus(status: PluginStatus): PluginViewStatus {
+	if (status === "loading" || status === "unloading") return status;
+	return status === "enabled" ? "enabled" : "disabled";
+}
+
+/**
  * 插件在 WebUI 中的视图数据: 清单里的展示字段 + 运行状态
  *
  * 不直接返回 Plugin/manifest: manifest.path 是服务器本地绝对路径, 对前端无用;
@@ -19,7 +34,7 @@ export type PluginView = {
 	/** 是否声明了配置定义并装配成功, 决定是否给出配置入口 */
 	hasConfig: boolean;
 	/** 运行状态, 供前端显示徽章与开关 */
-	status: PluginStatus;
+	status: PluginViewStatus;
 	/** 来源: 全局目录 / Bot 私有目录 */
 	scope: PluginScope;
 };
@@ -30,17 +45,15 @@ export type PluginList = {
 	bot: PluginView[];
 };
 
-/** 插件列表接口的返回体 */
+/**
+ * 插件列表接口的返回体
+ *
+ * 只给运行态: 期望态(state.json 的 enabledPlugins)是框架内部概念, 前端拿不到,
+ * 也就无从出现"文件说开着、界面说关着"这类两套状态对不上的情况。
+ */
 export type PluginPayload = {
 	/** Bot 是否运行中: 未运行时插件无法启停, 前端据此置灰开关 */
 	running: boolean;
-	/**
-	 * 期望启用的插件 id (state.json 的 enabledPlugins)
-	 *
-	 * 插件停用后再扫描, 注册表里会是被重建的新实例(状态回到未加载), 单看 status
-	 * 分不出“用户主动停用”与“期望启用但还没加载”, 所以把期望态一并给出。
-	 */
-	enabledPlugins: string[];
 	plugins: PluginList;
 };
 
@@ -48,7 +61,6 @@ export type PluginPayload = {
 export function buildPluginPayload(bot: Bot): PluginPayload {
 	return {
 		running: bot.running,
-		enabledPlugins: bot.state.get().enabledPlugins,
 		plugins: buildPluginViews(bot),
 	};
 }
@@ -71,7 +83,7 @@ function toPluginView(plugin: Plugin): PluginView {
 		description: manifest.description,
 		type: plugin.type,
 		hasConfig: plugin.config !== null,
-		status: plugin.status,
+		status: toViewStatus(plugin.status),
 		scope: plugin.scope,
 	};
 }

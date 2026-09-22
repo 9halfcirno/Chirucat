@@ -17,14 +17,12 @@ import { createDotSwitch } from "../../../spa/components/dot-switch.js"
 import { createIconButton } from "../../../spa/components/icon-button.js"
 import toast from "../../../spa/toast.js"
 
-/** 插件运行状态 -> 展示文案 */
+/** 插件运行状态 -> 展示文案 (只有运行态: 开 / 关 / 切换中) */
 const STATUS_TEXT = {
-	registered: "未加载",
-	loading: "加载中",
 	enabled: "已启用",
+	loading: "加载中",
 	unloading: "卸载中",
 	disabled: "已停用",
-	error: "加载出错",
 }
 
 /** 切换中的状态: 此时不允许再次点开关 */
@@ -68,7 +66,7 @@ export default {
 		let firstLoad = true
 
 		// 首屏与"刷新"共用同一个接口: 先扫描目录再回传, 因此未启动的 Bot
-		// 也能看到一个和磁盘对齐的列表(状态都是未加载)
+		// 也能看到一个和磁盘对齐的列表(这些插件都是"关着"的状态)
 		async function reload(fromClick) {
 			refresh.classList.add("loading")
 			if (firstLoad) body.replaceChildren(createSpinner())
@@ -91,8 +89,6 @@ export default {
 		function paint(data) {
 			const running = data.running === true
 			const groups = data.plugins ?? {}
-			// 期望启用的插件: 与运行状态一起决定徽章文案
-			const wanted = new Set(data.enabledPlugins ?? [])
 
 			tip.hidden = running
 			if (!running) {
@@ -100,13 +96,13 @@ export default {
 			}
 
 			body.replaceChildren(
-				createSection("全局插件", groups.global ?? [], running, wanted),
-				createSection("Bot 私有插件", groups.bot ?? [], running, wanted),
+				createSection("全局插件", groups.global ?? [], running),
+				createSection("Bot 私有插件", groups.bot ?? [], running),
 			)
 		}
 
 		/** 一组插件: 可折叠的标题行 + 卡片网格 */
-		function createSection(label, list, running, wanted) {
+		function createSection(label, list, running) {
 			// 适配器插件排在最前, 便于从一堆普通插件里区分出来
 			// (Array.prototype.sort 是稳定的, 同类型内保持接口返回的顺序)
 			const sorted = [...list].sort(
@@ -148,7 +144,7 @@ export default {
 			} else {
 				const grid = document.createElement("div")
 				grid.className = "plugin-grid"
-				for (const item of sorted) grid.append(createCard(item, running, wanted))
+				for (const item of sorted) grid.append(createCard(item, running))
 				body.append(grid)
 			}
 
@@ -157,7 +153,7 @@ export default {
 		}
 
 		/** 单个插件卡片: 名称与操作 / id·作者·版本 / 类型标识 / 描述 */
-		function createCard(item, running, wanted) {
+		function createCard(item, running) {
 			const card = document.createElement("div")
 			card.className = "card plugin-card"
 
@@ -172,22 +168,23 @@ export default {
 			cardHead.append(name)
 
 			// 只有声明了配置定义的插件才给出配置入口
-			if (item.hasConfig) {
-				const configBtn = createIconButton("/img/icons/setting.svg", () => openConfigDialog(item))
-				configBtn.classList.add("plugin-card-config")
-				configBtn.title = "修改插件配置"
-				configBtn.setAttribute("aria-label", "修改插件配置")
-				cardHead.append(configBtn)
-			}
+			const configBtn = createIconButton("/img/icons/setting.svg", () => {
+				if (item.hasConfig) openConfigDialog(item);
+				else toast(`插件 ${item.name || item.id} 没有可配置项`)
+			})
+			configBtn.classList.add("plugin-card-config")
+			configBtn.title = "修改插件配置"
+			configBtn.setAttribute("aria-label", "修改插件配置")
+			cardHead.append(configBtn)
 
 			// 运行状态文本: 显示在开关左侧。需在 toggle 里被引用, 故先创建
 			const statusEl = document.createElement("span")
 			statusEl.className = "plugin-card-status"
-			paintStatus(statusEl, item, wanted)
+			paintStatus(statusEl, item)
 			cardHead.append(statusEl)
 
 			/**
-			 * 开关回调: 返回实际生效的状态, 失败则回到原状态
+			 * 开关回调: 返回实际生效的运行态, 失败则回到原状态
 			 * @param {PointerEvent} _ 事件(未使用)
 			 * @param {boolean} target 目标状态
 			 */
@@ -200,13 +197,14 @@ export default {
 					})
 					const state = data.state === true
 					item.status = state ? "enabled" : "disabled"
-					state ? wanted.add(item.id) : wanted.delete(item.id)
-					paintStatus(statusEl, item, wanted)
+					paintStatus(statusEl, item)
+					paintSwitch(swh, item.status, running)
 					toast(`插件 ${item.name || item.id} ${state ? "已启用" : "已停用"}`)
 					return state
 				} catch (e) {
+					// 请求被拒(插件起不来/未注册等): 运行态没变, 开关回到原处
 					toast(`切换插件状态失败: ${e.message}`, { type: "error", duration: 5000 })
-					return item.status === "enabled" // 状态未变, 开关保持原样
+					return item.status === "enabled"
 				}
 			}
 
@@ -354,19 +352,14 @@ function createError(message) {
 }
 
 /**
- * 把状态写到徽章上 (着色由 CSS 按 data-status 决定)
+ * 把运行状态写到徽章上 (着色由 CSS 按 data-status 决定)
  *
- * 关着的插件再分一层: 期望启用却没加载出来 (如 Bot 未运行时) 报“未加载”,
- * 否则就是用户停用的。
+ * 只有运行态一种口径: 开着就是启用, 加载失败就是没跑起来(已停用),
+ * 不再根据期望态另立"未加载"这类说法。
  */
-function paintStatus(el, item, wanted) {
-	const off = item.status === "registered" || item.status === "disabled"
-	const text = off
-		? (wanted.has(item.id) ? "未加载" : "已停用")
-		: STATUS_TEXT[item.status] ?? item.status
-
+function paintStatus(el, item) {
 	el.dataset.status = item.status
-	el.textContent = text
+	el.textContent = STATUS_TEXT[item.status] ?? item.status
 }
 
 /** 按运行态与插件状态决定开关是否可用, 并给出对应提示 */

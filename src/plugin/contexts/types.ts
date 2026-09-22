@@ -169,7 +169,19 @@ export interface PluginKVAPI {
 	entries(): [string, unknown][];
 }
 
-
+/**
+ * 使插件可操作webui
+ * @todo
+ */
+export interface PluginWebUIAPI {
+	/**
+	 * 
+	 * @param path 注册的路由, 会注册为`/api/bot/${botId}/plugin/${pluginId}/${PATH}`
+	 * @param handler 请求处理器, 处理完请求返回响应结果
+	 * @returns 
+	 */
+	route: (path: string, handler: (res: Request) => any | Promise<any>) => void;
+}
 
 /**
  * 插件配置的只读视图
