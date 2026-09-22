@@ -57,6 +57,11 @@
 	border-bottom: 1px solid var(--border);
 }
 
+.dialog-window header .icon-btn {
+	width: calc(var(--ctl-h) - 4px);
+	height: calc(var(--ctl-h) - 4px);
+}
+
 .dialog-window-title {
 	font-size: var(--fs);
 	font-weight: 600;
