@@ -156,11 +156,11 @@ function buildConfirmContent(botId) {
 	tip.textContent = `请输入 Bot ID "${botId}" 以确认删除:`
 
 	const input = document.createElement("input")
+	input.className = "input"
 	input.type = "text"
 	input.autocomplete = "off"
 	input.spellcheck = false
 	input.placeholder = botId
-	input.style.width = "100%"
 	input.style.marginTop = "0.5em"
 
 	content.append(intro, detail, warn, tip, input)

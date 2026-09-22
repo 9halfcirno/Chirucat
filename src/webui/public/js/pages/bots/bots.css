@@ -2,12 +2,13 @@
 
 /* 页面头部: 说明文字在左, 圆形刷新按钮在右 */
 .bots-head {
-	font-size: 1.2em;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 12px;
-	margin-bottom: 16px;
+	gap: var(--sp-3);
+	margin-bottom: var(--sp-3);
+
+	color: var(--fg);
 }
 
 .bots-head .muted {
@@ -15,8 +16,8 @@
 }
 
 .bots-head .icon-btn {
-	width: 2.5em;
-	height: 2.5em;
+	width: calc(var(--ctl-h) + 8px);
+	height: calc(var(--ctl-h) + 8px);
 }
 
 /* 刷新按钮: 排在创建按钮左侧, 并把按钮组整体推到最右 */
@@ -25,8 +26,10 @@
 	margin-left: auto;
 }
 
-/* 刷新进行中: 图标旋转反馈 */
-.bot-refresh-btn.loading img {
+/* 刷新进行中: 图标旋转反馈。
+   注意图标是 .icon (mask 渲染) 而不是 <img> —— 旧规则写成 .loading img,
+   在图标改用 mask 之后就再也匹配不到, 动画静默失效了。 */
+.bot-refresh-btn.loading .icon {
 	animation: bot-refresh-spin 0.8s linear infinite;
 }
 
@@ -37,46 +40,46 @@
 }
 
 /* ---- bot 卡片列表 ---- */
+
 .bot-list {
 	display: grid;
-	gap: 16px;
-	/* 默认：单行 1 个，占满全宽 */
+	gap: var(--sp-3);
 	grid-template-columns: 1fr;
 }
 
-/* 屏幕足够放下 2 个卡片时（假设临界点为 600px） */
 @media (min-width: 600px) {
 	.bot-list {
-		/* 每排 2 个，且平分剩余空间 */
 		grid-template-columns: repeat(2, 1fr);
 	}
 }
 
-/* 屏幕足够放下 3 个卡片时（假设临界点为 900px） */
 @media (min-width: 900px) {
 	.bot-list {
-		/* 每排 3 个，且平分剩余空间 */
 		grid-template-columns: repeat(3, 1fr);
 	}
 }
 
+/* 整张卡片可点 (bots.js 绑了 click 打开详情弹窗) */
 .bot-card {
 	box-sizing: border-box;
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
+	cursor: pointer;
 }
 
 .bot-card-head {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 8px;
+	gap: var(--sp-2);
 }
 
 .bot-card-name {
 	font-weight: 600;
-	font-size: 1.05em;
+	font-size: var(--fs-lg);
+	color: var(--fg);
+
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -84,11 +87,13 @@
 }
 
 .bot-card-id {
-	font-size: 0.85em;
-	opacity: 0.7;
+	font-family: var(--font-mono);
+	font-size: var(--fs-xs);
+	color: var(--fg-subtle);
 }
 
 .bot-card-plugins {
 	margin: 0;
-	font-size: 0.9em;
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
 }

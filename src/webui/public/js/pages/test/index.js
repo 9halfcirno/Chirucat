@@ -283,6 +283,7 @@ function createSelectField(label) {
 	el.append(label);
 
 	const select = document.createElement("select");
+	select.className = "input";
 	select.style.minWidth = "12em";
 	el.append(select);
 

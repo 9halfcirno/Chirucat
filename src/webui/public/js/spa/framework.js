@@ -3,7 +3,7 @@
  *
  * 轻量级单页应用框架, 不依赖任何第三方库, 原生 ES Modules 实现:
  *
- * - 侧边栏 (#main-nav) 按钮根据注册的页面自动生成, 点击切换页面
+ * - 活动栏 (#activity-bar) 按钮根据注册的页面自动生成, 点击切换页面
  * - 页面通过动态 import() 按需加载, 加载期间显示遮罩盖住内容区 (#main)
  * - 使用 hash 路由 (#/page-id), 支持浏览器前进/后退与刷新后定位
  *
@@ -13,11 +13,13 @@
  * export default {
  *   id: "bots",                 // 页面唯一标识, 同时作为 hash 路由段
  *   title: "机器人",            // 页面名, 用于按钮悬停提示
- *   icon: "/img/icons/bot.svg", // 侧边栏按钮图标 (SVG 资源路径)
+ *   icon: "/img/icons/bot.svg", // 活动栏按钮图标 (SVG 资源路径, 以 mask 渲染并跟随主题色)
  *   styles: ["/js/pages/bots/bots.css"], // 可选: 页面专属样式表, 进入时动态加载, 离开时移除
  *   async render(container) {   // 可选: 渲染页面内容到 container (框架提供的页面子容器)
  *     container.textContent = "hello";
  *   },
+ *   async renderSidebar(container) { }, // 可选: 填充次级侧栏 (#side-bar);
+ *                                      // 未实现或渲染后为空则折叠侧栏, 内容区占满
  *   destroy() { },              // 可选: 页面被切换走时的清理
  * };
  * ```
@@ -75,7 +77,8 @@ function loadStyles(urls) {
  * @param {object} [options]
  * @param {HTMLElement} [options.main] 内容区 #main, 也是遮罩的宿主
  * @param {HTMLElement} [options.root] 页面内容容器, 默认 #page-view
- * @param {HTMLElement} [options.nav] 侧边栏, 默认 #main-nav
+ * @param {HTMLElement} [options.nav] 活动栏 (一级导航), 默认 #activity-bar
+ * @param {HTMLElement} [options.sidebar] 次级侧栏, 默认 #side-bar
  * @param {number} [options.minLoadTime=250] 加载遮罩最小时长(ms), 0 表示不限制
  * @param {number} [options.fadeMs=200] 遮罩淡入/淡出动画时长(ms), 需与 CSS 的 transition 一致
  * @returns {{ register: Function, navigate: Function, start: Function }}
@@ -83,12 +86,13 @@ function loadStyles(urls) {
 export function createApp(options = {}) {
 	const main = options.main ?? document.getElementById("main");
 	const root = options.root ?? document.getElementById("page-view");
-	const nav = options.nav ?? document.getElementById("main-nav");
+	const nav = options.nav ?? document.getElementById("activity-bar");
+	const sideBar = options.sidebar ?? document.getElementById("side-bar");
 
 	nav.onselectstart = (e) => { e.preventDefault(); return false };
 
 	if (!main || !root || !nav) {
-		throw new Error("SPA 初始化失败: 页面需要 #main / #page-view / #main-nav 三个元素");
+		throw new Error("SPA 初始化失败: 页面需要 #main / #page-view / #activity-bar 三个元素");
 	}
 
 	const minLoadTime = options.minLoadTime ?? 250;
@@ -143,15 +147,14 @@ export function createApp(options = {}) {
 		for (const def of pages.values()) {
 			const btn = document.createElement("button");
 			btn.type = "button";
-			btn.className = "main-nav-btn";
+			btn.className = "activity-btn";
 			btn.title = def.title;
 			if (def.icon) {
-				const img = document.createElement("img");
-				img.className = "main-nav-icon";
-				img.src = def.icon;
-				img.alt = ""; // 装饰性图标, 悬停提示由按钮 title 提供
-				img.draggable = false;
-				btn.appendChild(img);
+				// mask 图标: 颜色跟随 currentColor, 从而适配深浅主题 (见 base.css 的 .icon)
+				const icon = document.createElement("span");
+				icon.className = "icon";
+				icon.style.setProperty("--icon", `url("${def.icon}")`);
+				btn.appendChild(icon);
 			} else {
 				btn.textContent = "·"; // 无图标页面的兜底
 			}
@@ -171,6 +174,35 @@ export function createApp(options = {}) {
 		for (const [pid, btn] of buttons) {
 			btn.classList.toggle("active", pid === id);
 		}
+	}
+
+	/**
+	 * 渲染当前页面的次级侧栏
+	 *
+	 * 页面模块可选实现 renderSidebar(container) 来填充 #side-bar。
+	 * 未实现、或渲染后容器为空时, 给 body 加 nav-collapsed 折叠侧栏
+	 * (宽屏下把宽度让给内容区, 窄屏下用户仍可用汉堡按钮展开抽屉)。
+	 *
+	 * 侧栏渲染失败不应连带整页失败, 所以单独捕获并只记录日志。
+	 *
+	 * @param {object} page 页面模块
+	 */
+	async function renderSideBar(page) {
+		if (!sideBar) return;
+
+		const host = document.createElement("div");
+		host.className = "spa-sidebar";
+		sideBar.replaceChildren(host);
+
+		if (typeof page.renderSidebar === "function") {
+			try {
+				await page.renderSidebar(host);
+			} catch (err) {
+				console.error(`[SPA] 渲染页面 ${page.id} 的次级侧栏失败:`, err);
+			}
+		}
+
+		document.body.classList.toggle("nav-collapsed", host.childElementCount === 0);
 	}
 
 	/**
@@ -245,6 +277,10 @@ export function createApp(options = {}) {
 			root.replaceChildren(view);
 			await page.render?.(view);
 			if (seq !== navSeq) return; // 渲染期间被更新的导航取代
+
+			// 次级侧栏: 页面可选实现 renderSidebar
+			await renderSideBar(page);
+			if (seq !== navSeq) return;
 		} catch (err) {
 			if (seq === navSeq) {
 				console.error(`[SPA] 加载页面 ${id} 失败:`, err);

@@ -1,71 +1,79 @@
+/* ==================== Bot 详情弹窗 (bot-content.js) ====================
+ * 这个弹窗自己也有一套"图标竖条 + 内容区"的两栏结构 —— 与二级侧栏同构,
+ * 是被收编进框架的候选 (见 layout.css 里停用的 #side-bar)。 */
+
 .bot-div {
 	display: flex;
 	width: 80vw;
 	height: 80vh;
 }
 
+/* ---- 弹窗内的图标导航条 ---- */
 .bot-nav {
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
-	padding-right: 4px;
-	border-right: 1px solid rgba(128, 128, 128, 0.5);
+	gap: var(--sp-2);
+	padding-right: var(--sp-1);
+	border-right: 1px solid var(--border);
 }
 
 .bot-nav .icon-btn {
 	display: block;
-	width: 2.75em;
-	height: 2.75em;
+	width: calc(var(--ctl-h) + 14px);
+	height: calc(var(--ctl-h) + 14px);
 }
 
 .bot-nav .icon-btn.show {
-	background-color: rgba(128, 128, 128, 0.25);
-	border: 1px solid rgba(128, 128, 128, 0.4);
+	background-color: var(--bg-active);
+	border-color: var(--border-strong);
 }
 
 .bot-main {
 	box-sizing: border-box;
 	width: 100%;
 	height: 100%;
-
-	padding: 8px 12px;
+	padding: var(--sp-2) var(--sp-3);
 
 	/* 面板内容可能超出 80vh 的窗口 (如插件列表很长), 超出部分滚动 */
 	overflow-y: auto;
 }
 
-/* ---- 面板页公共: 标题行 ---- */
+/* ==================== 面板页公共: 标题行 ==================== */
 
 .bot-page-head {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 8px;
+	gap: var(--sp-2);
 
-	margin-bottom: 12px;
-	padding-bottom: 8px;
-	border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+	margin-bottom: var(--sp-3);
+	padding-bottom: var(--sp-2);
+
+	border-bottom: 1px solid var(--border);
 }
 
 .bot-page-title {
 	margin: 0;
-	font-size: 1.1em;
+	font-size: var(--fs-lg);
+	color: var(--fg);
 }
 
-/* 刷新进行中: 图标旋转 (与 bots.css 的 .bot-refresh-btn 视觉一致) */
-.bot-page-refresh.loading img {
+/* 刷新进行中: 图标旋转。
+   注意图标是 .icon (mask 渲染) 而不是 <img> —— 旧规则写成 .loading img,
+   在图标改用 mask 之后选择器就再也匹配不到, 动画静默失效了。 */
+.bot-page-refresh.loading .icon {
 	animation: bot-page-spin 0.8s linear infinite;
 }
 
 /* 页面内加载指示 */
 .bot-page-loading {
 	box-sizing: border-box;
-	width: 2.5em;
-	height: 2.5em;
-	margin: 24px auto;
+	width: 28px;
+	height: 28px;
+	margin: var(--sp-5) auto;
 
-	border: 4px solid rgba(128, 128, 128, 0.3);
-	border-top-color: rgba(42, 136, 244, 0.9);
+	border: 3px solid var(--bg-active);
+	border-top-color: var(--accent);
 	border-radius: 50%;
 
 	animation: bot-page-spin 0.8s linear infinite;
@@ -77,34 +85,92 @@
 	}
 }
 
-/* ---- 插件页 ---- */
+/* ==================== 插件页 ==================== */
 
 /* Bot 未运行时的提示条 */
 .plugin-page-tip {
-	margin: 0 0 12px;
-	padding: 8px 12px;
-	border: 1px solid rgba(240, 173, 78, 0.55);
-	border-radius: 12px;
-	background: rgba(240, 173, 78, 0.16);
-	font-size: 0.9em;
-	color: #8a5a10;
+	margin: 0 0 var(--sp-3);
+	padding: var(--sp-2) var(--sp-3);
+
+	border: 1px solid var(--warn-line);
+	border-radius: var(--r-md);
+	background: var(--warn-soft);
+	color: var(--warn);
+
+	font-size: var(--fs-sm);
 }
 
 .plugin-page-body {
 	display: flex;
 	flex-direction: column;
-	gap: 20px;
+	gap: var(--sp-3);
+}
+
+/* ---- 插件分组: 标题行本身即折叠开关 ---- */
+
+/* 分组是 .plugin-page-body (flex column) 的子项。flex 子项默认 min-width: auto,
+   会被内容的最小宽度撑大 —— 必须显式归零, 否则长描述会把整列撑破。 */
+.plugin-group {
+	min-width: 0;
+}
+
+.plugin-group-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+
+	width: 100%;
+	margin-bottom: var(--sp-2);
+	padding: var(--sp-1) 0;
+
+	border: 0;
+	background: transparent;
+	color: var(--fg-muted);
+	font-family: inherit;
+	text-align: left;
+	cursor: pointer;
+
+	transition: color var(--dur-fast) var(--ease);
+}
+
+.plugin-group-head:hover {
+	color: var(--fg);
+}
+
+.plugin-group-head:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
 }
 
 .plugin-group-title {
-	margin: 0 0 8px;
-	font-size: 1em;
-	color: rgba(0, 0, 0, 0.7);
+	margin: 0;
+	font-size: var(--fs-sm);
+	font-weight: 600;
+}
+
+/* 折叠三角: 展开朝下, 折叠朝右 (与配置表格的折叠按钮同款) */
+.plugin-group-caret {
+	flex-shrink: 0;
+	width: 0;
+	height: 0;
+	border-left: 4px solid transparent;
+	border-right: 4px solid transparent;
+	border-top: 5px solid currentColor;
+	transition: transform var(--dur-slow) var(--ease);
+}
+
+.plugin-group.collapsed .plugin-group-caret {
+	transform: rotate(-90deg);
+}
+
+/* 折叠时整块内容让位 */
+.plugin-group.collapsed .plugin-group-body {
+	display: none;
 }
 
 .plugin-grid {
 	display: grid;
-	gap: 12px;
+	gap: var(--sp-2);
 	grid-template-columns: 1fr;
 }
 
@@ -120,14 +186,20 @@
 	}
 }
 
-/* ---- 插件卡片 ---- */
+/* ---- 插件卡片 ----
+   结构: 头部 (名称 + 操作) / 第一行 (作者·版本) / 第二行 (类型·状态) / 描述 */
 
 .plugin-card {
 	box-sizing: border-box;
+
+	/* 作为 grid item, 默认 min-width: auto 会让最小宽度取内容宽度,
+	   从而把 1fr 列顶宽 —— 归零后列宽才完全由容器决定。 */
+	min-width: 0;
+
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
-	padding: 12px;
+	gap: 5px;
+	padding: var(--sp-3);
 }
 
 .plugin-card-head {
@@ -139,6 +211,8 @@
 .plugin-card-name {
 	flex: 1;
 	font-weight: 600;
+	color: var(--fg);
+
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -146,26 +220,110 @@
 }
 
 .plugin-card-head .icon-btn {
-	width: 1.75em;
-	height: 1.75em;
+	width: var(--ctl-h);
+	height: var(--ctl-h);
 }
 
+/* 第一行: 作者 + 版本 */
 .plugin-card-meta {
 	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 6px;
-	font-size: 0.85em;
+	align-items: baseline;
+	gap: var(--sp-2);
+
+	font-size: var(--fs-xs);
+	color: var(--fg-muted);
 }
 
+/* id 与作者都可收缩截断, 版本固定 */
 .plugin-card-id {
-	opacity: 0.7;
+	min-width: 0;
+	font-family: var(--font-mono);
+	color: var(--fg-subtle);
+
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.plugin-card-author {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.plugin-card-version {
+	flex-shrink: 0;
+	font-variant-numeric: tabular-nums;
+}
+
+/* 第二行: 类型 (图标 + 文案) + 运行状态 */
+.plugin-card-kind {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+
+	font-size: var(--fs-xs);
+	color: var(--fg-muted);
+}
+
+.plugin-card-type {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+
+	padding: 1px var(--sp-2);
+	border-radius: 999px;
+
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.plugin-card-type .icon {
+	width: 1em;
+	height: 1em;
+}
+
+/* 类型着色: 适配器与普通插件用不同色系, 便于一眼区分 */
+.plugin-card-type[data-type="adapter"] {
+	color: var(--type-adapter);
+	background: var(--type-adapter-soft);
+}
+
+.plugin-card-type[data-type="normal"] {
+	color: var(--type-normal);
+	background: var(--type-normal-soft);
+}
+
+/* 运行状态: 纯文本 + 语义色, 位于开关左侧 */
+.plugin-card-status {
+	flex-shrink: 0;
+	color: var(--fg-subtle);
+}
+
+.plugin-card-status[data-status="enabled"] {
+	color: var(--ok);
+}
+
+.plugin-card-status[data-status="error"] {
+	color: var(--danger);
+}
+
+.plugin-card-status[data-status="loading"],
+.plugin-card-status[data-status="unloading"] {
+	color: var(--accent);
 }
 
 .plugin-card-desc {
 	margin: 0;
-	font-size: 0.9em;
-	color: #888;
+	font-size: var(--fs-sm);
+	color: var(--fg-subtle);
+
+	/* flex 子项默认 min-width: auto。不归零的话, -webkit-box 的最小宽度会取
+	   近乎整行文本宽度 (而不是断行后的宽度), 一段长描述就能把卡片连同整个
+	   网格一起顶破 —— 这正是"全局插件正常、Bot 私有插件出横向滚动条"的原因:
+	   前者 manifest 里没有 description, 后者有长描述。 */
+	min-width: 0;
 
 	/* 描述最多两行, 避免长文案把卡片撑得过高 */
 	display: -webkit-box;
@@ -174,37 +332,7 @@
 	overflow: hidden;
 }
 
-/* ---- 标签 ---- */
-
-.plugin-tag {
-	padding: 1px 8px;
-	border: 1px solid rgba(128, 128, 128, 0.4);
-	border-radius: 999px;
-	background: rgba(128, 128, 128, 0.12);
-	color: rgba(0, 0, 0, 0.65);
-}
-
-/* 状态徽章: 按运行状态着色 */
-.plugin-tag-status[data-status="enabled"] {
-	border-color: rgba(92, 184, 92, 0.55);
-	background: rgba(92, 184, 92, 0.18);
-	color: #2f6f32;
-}
-
-.plugin-tag-status[data-status="error"] {
-	border-color: rgba(217, 83, 79, 0.55);
-	background: rgba(217, 83, 79, 0.16);
-	color: #a94442;
-}
-
-.plugin-tag-status[data-status="loading"],
-.plugin-tag-status[data-status="unloading"] {
-	border-color: rgba(74, 144, 217, 0.5);
-	background: rgba(74, 144, 217, 0.16);
-	color: #296ab0;
-}
-
-/* ---- 插件配置弹窗 ---- */
+/* ==================== 插件配置弹窗 ==================== */
 
 .plugin-config {
 	box-sizing: border-box;
@@ -212,7 +340,7 @@
 }
 
 .plugin-config-sub {
-	margin: 0 0 12px;
-	font-size: 0.9em;
-	color: #888;
+	margin: 0 0 var(--sp-3);
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
 }

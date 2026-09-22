@@ -105,36 +105,63 @@ export default {
 			)
 		}
 
-		/** 一组插件: 标题 + 卡片网格 */
+		/** 一组插件: 可折叠的标题行 + 卡片网格 */
 		function createSection(label, list, running, wanted) {
+			// 适配器插件排在最前, 便于从一堆普通插件里区分出来
+			// (Array.prototype.sort 是稳定的, 同类型内保持接口返回的顺序)
+			const sorted = [...list].sort(
+				(a, b) => (a.type === "adapter" ? 0 : 1) - (b.type === "adapter" ? 0 : 1)
+			)
+
 			const section = document.createElement("section")
 			section.className = "plugin-group"
 
+			// 标题行本身就是折叠开关
+			const head = document.createElement("button")
+			head.type = "button"
+			head.className = "plugin-group-head"
+			head.setAttribute("aria-expanded", "true")
+
+			const caret = document.createElement("span")
+			caret.className = "plugin-group-caret"
+
 			const heading = document.createElement("h4")
 			heading.className = "plugin-group-title"
-			heading.textContent = `${label} (${list.length})`
-			section.append(heading)
+			heading.textContent = `${label} (${sorted.length})`
 
-			if (list.length === 0) {
+			head.append(caret, heading)
+			section.append(head)
+
+			head.addEventListener("click", () => {
+				const collapsed = section.classList.toggle("collapsed")
+				head.setAttribute("aria-expanded", String(!collapsed))
+			})
+
+			const body = document.createElement("div")
+			body.className = "plugin-group-body"
+
+			if (sorted.length === 0) {
 				const empty = document.createElement("p")
 				empty.className = "muted"
 				empty.textContent = "暂无插件"
-				section.append(empty)
-				return section
+				body.append(empty)
+			} else {
+				const grid = document.createElement("div")
+				grid.className = "plugin-grid"
+				for (const item of sorted) grid.append(createCard(item, running, wanted))
+				body.append(grid)
 			}
 
-			const grid = document.createElement("div")
-			grid.className = "plugin-grid"
-			for (const item of list) grid.append(createCard(item, running, wanted))
-			section.append(grid)
+			section.append(body)
 			return section
 		}
 
-		/** 单个插件卡片: 名称、状态徽章、启停开关、配置入口 */
+		/** 单个插件卡片: 名称与操作 / id·作者·版本 / 类型标识 / 描述 */
 		function createCard(item, running, wanted) {
 			const card = document.createElement("div")
 			card.className = "card plugin-card"
 
+			// ---- 头部: 名称在左, 配置入口与启停开关在右 ----
 			const cardHead = document.createElement("div")
 			cardHead.className = "plugin-card-head"
 
@@ -144,10 +171,6 @@ export default {
 			name.title = item.id
 			cardHead.append(name)
 
-			const statusTag = document.createElement("span")
-			statusTag.className = "plugin-tag plugin-tag-status"
-			paintStatus(statusTag, item, wanted)
-
 			// 只有声明了配置定义的插件才给出配置入口
 			if (item.hasConfig) {
 				const configBtn = createIconButton("/img/icons/setting.svg", () => openConfigDialog(item))
@@ -156,6 +179,12 @@ export default {
 				configBtn.setAttribute("aria-label", "修改插件配置")
 				cardHead.append(configBtn)
 			}
+
+			// 运行状态文本: 显示在开关左侧。需在 toggle 里被引用, 故先创建
+			const statusEl = document.createElement("span")
+			statusEl.className = "plugin-card-status"
+			paintStatus(statusEl, item, wanted)
+			cardHead.append(statusEl)
 
 			/**
 			 * 开关回调: 返回实际生效的状态, 失败则回到原状态
@@ -172,7 +201,7 @@ export default {
 					const state = data.state === true
 					item.status = state ? "enabled" : "disabled"
 					state ? wanted.add(item.id) : wanted.delete(item.id)
-					paintStatus(statusTag, item, wanted)
+					paintStatus(statusEl, item, wanted)
 					toast(`插件 ${item.name || item.id} ${state ? "已启用" : "已停用"}`)
 					return state
 				} catch (e) {
@@ -186,6 +215,7 @@ export default {
 			paintSwitch(swh, item.status, running)
 			cardHead.append(swh)
 
+			// ---- 第一行: id + 作者 + 版本 ----
 			const meta = document.createElement("div")
 			meta.className = "plugin-card-meta"
 
@@ -193,18 +223,38 @@ export default {
 			id.className = "plugin-card-id"
 			id.textContent = item.id
 
-			meta.append(
-				id,
-				createTag(item.type === "adapter" ? "适配器" : "普通"),
-				createTag(`v${item.version}`),
-				statusTag,
-			)
+			const author = document.createElement("span")
+			author.className = "plugin-card-author"
+			author.textContent = item.author || "未知作者"
 
+			const version = document.createElement("span")
+			version.className = "plugin-card-version"
+			version.textContent = `v${item.version}`
+
+			meta.append(id, author, version)
+
+			// ---- 第二行: 类型标识 (图标 + 文案, 按类型着色) ----
+			const kind = document.createElement("div")
+			kind.className = "plugin-card-kind"
+
+			const isAdapter = item.type === "adapter"
+			const type = document.createElement("span")
+			type.className = "plugin-card-type"
+			type.dataset.type = isAdapter ? "adapter" : "normal"
+
+			const typeIcon = document.createElement("span")
+			typeIcon.className = "icon"
+			typeIcon.style.setProperty("--icon", `url("${isAdapter ? "/img/icons/adapter.svg" : "/img/icons/cube.svg"}")`)
+			type.append(typeIcon, document.createTextNode(isAdapter ? "适配器" : "普通插件"))
+
+			kind.append(type)
+
+			// ---- 描述 ----
 			const desc = document.createElement("p")
 			desc.className = "plugin-card-desc"
 			desc.textContent = item.description || "无描述"
 
-			card.append(cardHead, meta, desc)
+			card.append(cardHead, meta, kind, desc)
 			return card
 		}
 
@@ -303,28 +353,20 @@ function createError(message) {
 	return el
 }
 
-/** 元信息小标签 */
-function createTag(text) {
-	const tag = document.createElement("span")
-	tag.className = "plugin-tag"
-	tag.textContent = text
-	return tag
-}
-
 /**
  * 把状态写到徽章上 (着色由 CSS 按 data-status 决定)
  *
  * 关着的插件再分一层: 期望启用却没加载出来 (如 Bot 未运行时) 报“未加载”,
  * 否则就是用户停用的。
  */
-function paintStatus(tag, item, wanted) {
+function paintStatus(el, item, wanted) {
 	const off = item.status === "registered" || item.status === "disabled"
 	const text = off
 		? (wanted.has(item.id) ? "未加载" : "已停用")
 		: STATUS_TEXT[item.status] ?? item.status
 
-	tag.dataset.status = item.status
-	tag.textContent = text
+	el.dataset.status = item.status
+	el.textContent = text
 }
 
 /** 按运行态与插件状态决定开关是否可用, 并给出对应提示 */

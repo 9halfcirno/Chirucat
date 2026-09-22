@@ -1,0 +1,73 @@
+/**
+ * Chirucat WebUI 设计令牌 — 深色主题
+ *
+ * 只覆盖「颜色」令牌; 尺寸 / 尺度 / 字体 / 动效等结构令牌继承 default.css。
+ * 分层参考 VS Code Dark+: 活动栏最亮, 侧栏次之, 内容区最暗 —— 靠层级差
+ * 而不是阴影来区分区域, 避免深色下阴影糊成一片。
+ *
+ * 主题判定在 index.html 的 <head> 内联脚本里完成 (样式生效前设置
+ * <html data-theme="dark">), 因此这里不需要 prefers-color-scheme 媒体查询,
+ * 也就不会有深色下的白闪。
+ */
+
+:root[data-theme="dark"] {
+	color-scheme: dark;
+
+	/* ==================== 表面 ==================== */
+	--bg-app: #1e1e1e;
+	--bg-activity: #333333;
+	--bg-sidebar: #252526;
+	--bg-panel: #252526;
+	--bg-elevated: #2d2d30;
+	--bg-input: #3c3c3c;
+
+	--bg-hover: rgba(255, 255, 255, 0.07);
+	--bg-active: rgba(255, 255, 255, 0.12);
+	--bg-selected: rgba(74, 158, 255, 0.18);
+
+	/* ==================== 文字 ==================== */
+	--fg: #d4d4d4;
+	--fg-muted: #9d9d9d;
+	--fg-subtle: #7a7a7a;
+	--fg-on-accent: #ffffff;
+
+	/* ==================== 线条 ==================== */
+	--border: rgba(255, 255, 255, 0.10);
+	--border-strong: rgba(255, 255, 255, 0.24);
+
+	/* ==================== 语义 ==================== */
+	--accent: #4a9eff;
+	--accent-hover: #6cb2ff;
+	--ok: #4ec9b0;
+	--warn: #d7ba7d;
+	--danger: #f48771;
+
+	/* 弱化变体: 深色下用更低的不透明度, 避免色块过亮抢视线 */
+	--accent-soft: rgba(74, 158, 255, 0.16);
+	--ok-soft: rgba(78, 201, 176, 0.16);
+	--ok-line: rgba(78, 201, 176, 0.5);
+	--warn-soft: rgba(215, 186, 125, 0.16);
+	--warn-line: rgba(215, 186, 125, 0.5);
+	--danger-soft: rgba(244, 135, 113, 0.16);
+	--danger-line: rgba(244, 135, 113, 0.5);
+
+	/* 插件类型标识: 深色下提亮, 保持与背景的对比 */
+	--type-adapter: #4a9eff;
+	--type-adapter-soft: rgba(74, 158, 255, 0.16);
+	--type-normal: #b392f0;
+	--type-normal-soft: rgba(179, 146, 240, 0.16);
+
+	/* ==================== 遮罩 / 毛玻璃 ==================== */
+	--scrim: rgba(0, 0, 0, 0.45);
+	--overlay-bg: rgba(30, 30, 30, 0.6);
+	--glass-bg: rgba(45, 45, 48, 0.82);
+	--glass-border: rgba(255, 255, 255, 0.12);
+
+	/* 日志终端区: 深色下略比浅色主题更暗, 与周围 UI 拉开层次 */
+	--log-bg: rgba(12, 14, 18, 0.92);
+
+	/* ==================== 阴影 ====================
+	   深色下阴影必须更重才有层次感 */
+	--shadow-1: 0 1px 3px rgba(0, 0, 0, 0.5);
+	--shadow-2: 0 8px 24px rgba(0, 0, 0, 0.6);
+}

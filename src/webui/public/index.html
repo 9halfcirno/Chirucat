@@ -5,27 +5,46 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Chirucat WebUI</title>
+	<script>
+		/* 在样式生效前确定主题, 避免深色偏好下的白闪。
+		   localStorage 的 "chirucat-theme" (light|dark) 由设置页写入;
+		   未设置时跟随系统。放在 <head> 且同步执行, 才能早于首屏绘制。 */
+		(() => {
+			try {
+				const saved = localStorage.getItem("chirucat-theme");
+				const dark = saved ? saved === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+				if (dark) document.documentElement.dataset.theme = "dark";
+			} catch {
+				/* localStorage 不可用 (隐私模式等): 退回浅色, 不阻塞页面 */
+			}
+		})();
+	</script>
+	<link rel="stylesheet" href="css/themes/default.css">
+	<link rel="stylesheet" href="css/themes/dark.css">
 	<link rel="stylesheet" href="css/layout.css">
+	<link rel="stylesheet" href="css/base.css">
+	<link rel="stylesheet" href="css/components/dialog.css">
+	<link rel="stylesheet" href="css/components/dot-switch.css">
+	<link rel="stylesheet" href="css/components/config-editor.css">
+	<link rel="stylesheet" href="css/components/charts.css">
 	<link rel="stylesheet" href="css/overlay.css">
 	<link rel="stylesheet" href="css/toast.css">
-	<link rel="stylesheet" href="css/themes/default.css">
 </head>
 
-<body class="auth-pending">
+<body class="auth-pending nav-collapsed">
 	<header id="top-nav">
-		<button id="nav-toggle" type="button" class="nav-toggle" aria-label="展开导航" aria-expanded="false" aria-controls="main-nav">
-			<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-				<line x1="4" y1="6" x2="20" y2="6" />
-				<line x1="4" y1="12" x2="20" y2="12" />
-				<line x1="4" y1="18" x2="20" y2="18" />
-			</svg>
-		</button>
-		<!-- <img class="brand" src="/img/chirucat.svg" alt="logo" /> -->
 		<span class="brand">=^ - ^= WebUI</span>
 	</header>
-	<nav id="main-nav" aria-label="主导航">
-		<!-- 侧边栏按钮由 SPA 框架根据注册的页面自动生成 -->
-	</nav>
+
+	<!-- 活动栏: 一级导航, 由 SPA 框架根据注册的页面自动生成 -->
+	<nav id="activity-bar" aria-label="主导航"></nav>
+
+	<!-- 二级侧栏 (#side-bar) 与配套的窄屏汉堡按钮 (#nav-toggle) 当前停用:
+	     bot 管理是以弹窗形式呈现的, 接不进二级菜单。
+	     相关 CSS (layout.css 末尾的抽屉规则) 与框架能力
+	     (framework.js 的 renderSidebar) 都保留着 — 需要时把 <aside> 加回,
+	     并把 layout.css 的 grid 改回三列即可。 -->
+
 	<div id="main">
 		<!-- 页面内容渲染目标: SPA 框架把当前页面渲染到这里 -->
 		<div id="page-view"></div>
@@ -41,8 +60,8 @@
 			<img class="login-logo" src="/img/chirucat.svg" alt="Chirucat logo" />
 			<h1 class="login-title">WebUI</h1>
 			<p class="login-subtitle">请输入访问密码</p>
-			<input id="login-password" type="password" placeholder="密码" autocomplete="current-password" required />
-			<button id="login-submit" class="login-btn" type="submit">登 录</button>
+			<input id="login-password" class="input" type="password" placeholder="密码" autocomplete="current-password" required />
+			<button id="login-submit" class="btn primary" type="submit">登 录</button>
 			<p id="login-error" class="login-error" hidden></p>
 		</form>
 	</div>

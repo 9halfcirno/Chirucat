@@ -1,0 +1,257 @@
+/**
+ * Chirucat WebUI 共用原语
+ *
+ * 这里只放「跨页面复用」的原子样式, 全部消费 themes/* 的令牌。
+ * 页面自己的样式表 (js/pages/&#42;/&#42;.css) 只写该页特有的排版,
+ * 不再重复定义按钮 / 输入框 / 卡片 / 图标 / 进度条。
+ *
+ * 用法约定:
+ *   - 文字类输入统一用 .input (input / textarea / select 共用)
+ *   - checkbox 与 range 不并入 .input, 它们的渲染模型不同
+ *   - 图标统一用 .icon + 行内 --icon 变量 (见下)
+ */
+
+/* ==================== 图标 ====================
+ * 用 mask + currentColor, 而不是 <img>:
+ * 现有 SVG 文件内写死了 stroke="#000000", 而 <img> 是隔离文档,
+ * CSS 无法改其颜色 —— 深色主题下会变成深底黑图, 直接不可见。
+ * mask 让图标完全跟随 currentColor, 从而自动适配主题与悬停/选中态。
+ *
+ * 用法: <span class="icon" style="--icon: url('/img/icons/bot.svg')"></span>
+ */
+.icon {
+	display: inline-block;
+	flex: 0 0 auto;
+
+	width: 1.25em;
+	height: 1.25em;
+
+	background-color: currentColor;
+
+	-webkit-mask: var(--icon) center / contain no-repeat;
+	mask: var(--icon) center / contain no-repeat;
+}
+
+/* ==================== 按钮 ==================== */
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--sp-1);
+
+	height: var(--ctl-h);
+	padding: 0 var(--sp-3);
+
+	font-family: inherit;
+	font-size: var(--fs-sm);
+	line-height: 1;
+	white-space: nowrap;
+
+	color: var(--fg);
+	background: var(--bg-panel);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--r-sm);
+	cursor: pointer;
+
+	transition: background-color var(--dur-fast) var(--ease),
+		border-color var(--dur-fast) var(--ease),
+		color var(--dur-fast) var(--ease);
+}
+
+.btn:hover {
+	background: var(--bg-hover);
+}
+
+.btn:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+/* 主按钮: 强调色填充 */
+.btn.primary {
+	color: var(--fg-on-accent);
+	background: var(--accent);
+	border-color: transparent;
+}
+
+.btn.primary:hover {
+	background: var(--accent-hover);
+}
+
+/* 危险操作按钮 */
+.btn.danger {
+	color: var(--fg-on-accent);
+	background: var(--danger);
+	border-color: transparent;
+}
+
+/* 图标按钮: 正方形, 图标跟随 currentColor */
+.icon-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+
+	width: calc(var(--ctl-h) + 2px);
+	height: calc(var(--ctl-h) + 2px);
+	padding: 0;
+
+	color: var(--fg-muted);
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: var(--r-sm);
+	cursor: pointer;
+
+	transition: color var(--dur-fast) var(--ease),
+		background-color var(--dur-fast) var(--ease);
+}
+
+.icon-btn:hover {
+	color: var(--fg);
+	background: var(--bg-hover);
+}
+
+.icon-btn:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+/* 选中/激活态 (如设置页的分组切换) */
+.icon-btn.show {
+	color: var(--fg);
+	background: var(--bg-active);
+}
+
+/* ==================== 输入 ====================
+ * 文字类输入统一到 .input: 文本系 input / textarea / select 共用外观。
+ * 用显式类而非 input[type=...] 类型选择器 —— 类型选择器每加一种输入类型
+ * 都要回来维护, 还要写 :not() 把 checkbox / range 排除掉; 显式类天然不受影响。
+ */
+.input {
+	width: 100%;
+	min-width: 0;
+	height: var(--ctl-h);
+	padding: 0 var(--sp-2);
+
+	font-family: inherit;
+	font-size: var(--fs-sm);
+	line-height: 1.4;
+	color: var(--fg);
+	background: var(--bg-input);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--r-sm);
+
+	transition: border-color var(--dur-fast) var(--ease),
+		box-shadow var(--dur-fast) var(--ease);
+}
+
+textarea.input {
+	height: auto;
+	min-height: calc(var(--ctl-h) * 2.5);
+	padding: var(--sp-1) var(--sp-2);
+	resize: vertical;
+}
+
+.input::placeholder {
+	color: var(--fg-subtle);
+}
+
+.input:hover {
+	border-color: var(--fg-subtle);
+}
+
+.input:focus {
+	outline: none;
+	border-color: var(--accent);
+	box-shadow: 0 0 0 2px var(--bg-selected);
+}
+
+.input:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+
+/* 校验失败态 */
+.input.is-invalid {
+	border-color: var(--danger);
+}
+
+/* ==================== 卡片 ==================== */
+
+.card {
+	padding: var(--sp-3);
+
+	background: var(--bg-panel);
+	border: 1px solid var(--border);
+	border-radius: var(--r-md);
+}
+
+/* 毛玻璃卡片: 浮层 (弹窗 / Toast) 同款表面 */
+.card.glass {
+	background: var(--glass-bg);
+	backdrop-filter: blur(var(--glass-blur));
+	border-color: var(--glass-border);
+	box-shadow: var(--shadow-2);
+}
+
+/* ==================== 进度条 ==================== */
+
+.bar {
+	height: 6px;
+	border-radius: 999px;
+	background: var(--bg-active);
+	overflow: hidden;
+}
+
+.bar-fill {
+	height: 100%;
+	border-radius: 999px;
+	background: var(--accent);
+	transition: width var(--dur-slow) var(--ease),
+		background-color var(--dur-slow) var(--ease);
+}
+
+/* ==================== 文字工具类 ==================== */
+
+.muted {
+	color: var(--fg-muted);
+}
+
+.subtle {
+	color: var(--fg-subtle);
+}
+
+/* 单行截断 (原来在 8 处重复的 overflow/text-overflow/white-space 三件套) */
+.truncate {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 数字等宽: 统计 / 表格 / 日志对齐用 */
+.num {
+	font-variant-numeric: tabular-nums;
+}
+
+.mono {
+	font-family: var(--font-mono);
+}
+
+/* ==================== 分隔线与错误块 ==================== */
+
+.divider {
+	height: 1px;
+	margin: var(--sp-2) 0;
+	background: var(--border);
+	border: 0;
+}
+
+.page-error {
+	padding: var(--sp-3);
+
+	background: var(--bg-panel);
+	border: 1px solid var(--danger);
+	border-radius: var(--r-md);
+	color: var(--danger);
+}

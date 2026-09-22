@@ -1,9 +1,10 @@
 /* ---- 日志页面 ---- */
+
 /* 页面纵向布局: 日志列表占满剩余高度并内部滚动 */
 .logs-page {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: var(--sp-2);
 	height: 100%;
 }
 
@@ -12,8 +13,8 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
-	font-size: 0.85em;
-	color: #888;
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
 }
 
 /* 状态行: 连接状态在左, 圆形清理按钮在右 */
@@ -21,12 +22,12 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 12px;
+	gap: var(--sp-2);
 }
 
 .logs-head .icon-btn {
-	width: 2.5em;
-	height: 2.5em;
+	width: calc(var(--ctl-h) + 6px);
+	height: calc(var(--ctl-h) + 6px);
 }
 
 .logs-status::before {
@@ -34,15 +35,15 @@
 	width: 8px;
 	height: 8px;
 	border-radius: 50%;
-	background: #f0ad4e; /* 连接中/重连中: 黄 */
+	background: var(--warn); /* 连接中/重连中 */
 }
 
 .logs-status.on::before {
-	background: #5cb85c; /* 已连接: 绿 */
+	background: var(--ok); /* 已连接 */
 }
 
 .logs-status.off::before {
-	background: #d9534f; /* 已断开: 红 */
+	background: var(--danger); /* 已断开 */
 }
 
 /* 日志列表: 深色终端风格, 内部滚动 */
@@ -51,13 +52,17 @@
 	min-height: 0;
 	overflow-y: auto;
 
-	background: rgba(20, 24, 32, 0.92);
-	border-radius: 12px;
-	padding: 12px 16px;
-	font-family: Consolas, Monaco, "Courier New", monospace;
-	font-size: 50%;
-	line-height: 1.5;
-	color: #cfd6e4;
+	padding: var(--sp-2) var(--sp-3);
+	background: var(--log-bg);
+	border-radius: var(--r-md);
+
+	font-family: var(--font-mono);
+	/* 注意: 这里原本是 font-size: 50% (相对 16px 基准 = 8px, 本就偏小)。
+	   令牌化把基准降到 13px 后会掉到 6.5px, 完全不可读 —— 所以改用
+	   明确的字号令牌 --log-fs, 不再用相对百分比。 */
+	font-size: var(--log-fs);
+	line-height: 1.55;
+	color: var(--log-fg);
 }
 
 .log-line {
@@ -65,7 +70,7 @@
 	word-break: break-all;
 }
 
-/* 日志级别配色 */
+/* 日志级别配色: 深色终端配色, 固定值 (不随 UI 主题切换) */
 .log-line.level-debug {
 	color: #8b95a7;
 }

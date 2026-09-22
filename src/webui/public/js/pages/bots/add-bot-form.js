@@ -43,7 +43,7 @@ export function createAddForm() {
 	idLabel.append(required);
 
 	const idInput = document.createElement("input");
-	idInput.className = "dialog-input";
+	idInput.className = "input";
 	idInput.id = `add-bot-id-${seq}`;
 	idInput.name = "id";
 	idInput.type = "text";
@@ -69,7 +69,7 @@ export function createAddForm() {
 	nameLabel.textContent = "名称 (可选)";
 
 	const nameInput = document.createElement("input");
-	nameInput.className = "dialog-input";
+	nameInput.className = "input";
 	nameInput.id = `add-bot-name-${seq}`;
 	nameInput.name = "name";
 	nameInput.type = "text";

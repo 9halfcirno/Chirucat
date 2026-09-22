@@ -1,0 +1,126 @@
+/**
+ * 弹窗 (dialog-window.js)
+ *
+ * createDialogWindow() 生成的结构:
+ *   .dialog-window-base          全屏遮罩层
+ *     .dialog-window             弹窗本体
+ *       header > .dialog-window-title + .icon-btn(关闭)
+ *       .dialog-window-inner     内容区 (超高时内部滚动)
+ *       footer > .dialog-window-btns > .btn...
+ *
+ * 关键: .dialog-window-base 必须 position: fixed 且铺满视口。
+ * 缺了它弹窗不脱流, 会落到 body 文档流末尾 —— 表现为"弹窗出现在页面最下方"。
+ */
+
+.dialog-window-base {
+	position: fixed;
+	inset: 0;
+	z-index: 500; /* 高于窄屏抽屉(20) 与 SPA 遮罩(100), 低于 Toast(1000) */
+
+	display: flex;
+
+	background: var(--scrim);
+	backdrop-filter: blur(2px);
+}
+
+.dialog-window {
+	box-sizing: border-box;
+
+	/* 宽度由内容决定, 上限只受视口约束。
+	   之前写死 max-width: 720px, 宽内容 (如 bot 管理弹窗的 80vw 面板、
+	   配置表格) 超出后只能横向滚动 —— 这里放开, 让弹窗自己去适应内容。 */
+	width: fit-content;
+	min-width: min(360px, calc(100vw - var(--sp-6)));
+	max-width: calc(100vw - var(--sp-6));
+	max-height: calc(100vh - var(--sp-6));
+	margin: auto;
+
+	display: flex;
+	flex-direction: column;
+
+	background: var(--bg-elevated);
+	border: 1px solid var(--border);
+	border-radius: var(--r-lg);
+	box-shadow: var(--shadow-2);
+}
+
+.dialog-window header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--sp-2);
+
+	flex-shrink: 0;
+	padding: var(--sp-2) var(--sp-3);
+
+	border-bottom: 1px solid var(--border);
+}
+
+.dialog-window-title {
+	font-size: var(--fs);
+	font-weight: 600;
+	color: var(--fg);
+}
+
+.dialog-window-inner {
+	flex-grow: 1;
+
+	/* flex 子项的 min-height 默认是 auto: 不归零的话长内容会把弹窗顶出
+	   屏幕, 而不是在内部产生滚动 */
+	min-height: 0;
+	/* 两个方向都允许滚动: 内容宽于弹窗上限时不至于溢出到弹窗外 */
+	overflow: auto;
+
+	padding: var(--sp-3);
+}
+
+.dialog-window footer {
+	flex-shrink: 0;
+	padding: var(--sp-2) var(--sp-3);
+
+	border-top: 1px solid var(--border);
+}
+
+/* 按钮靠右; row-reverse 让主操作在最右 */
+.dialog-window-btns {
+	display: flex;
+	flex-direction: row-reverse;
+	align-items: center;
+	gap: var(--sp-2);
+}
+
+/* ==================== 弹窗内表单字段 ====================
+ * 供各页面复用。控件本身用 base.css 的 .input, 这里只管字段排版。 */
+
+.dialog-field {
+	margin-top: var(--sp-2);
+}
+
+.dialog-field:first-child {
+	margin-top: 0;
+}
+
+.dialog-label {
+	display: block;
+	margin-bottom: var(--sp-1);
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+}
+
+.dialog-required {
+	font-style: normal;
+	color: var(--danger);
+}
+
+.dialog-hint {
+	margin: var(--sp-1) 0 0;
+	font-size: var(--fs-xs);
+	color: var(--fg-subtle);
+}
+
+.dialog-error {
+	margin: var(--sp-2) 0 0;
+	font-size: var(--fs-sm);
+	color: var(--danger);
+}

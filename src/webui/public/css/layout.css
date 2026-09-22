@@ -1,196 +1,229 @@
+/**
+ * Chirucat WebUI 布局骨架 — 两级侧栏 (活动栏 + 次级侧栏)
+ *
+ * 宽屏 (> 768px):
+ *   ┌──────────────────────────────────────┐
+ *   │ top-nav                              │
+ *   ├──────┬───────────┬───────────────────┤
+ *   │活动栏 │ 次级侧栏   │   内容区 #main     │
+ *   └──────┴───────────┴───────────────────┘
+ *   活动栏常驻; 侧栏在页面未提供次级内容时折叠 (body.nav-collapsed)。
+ *
+ * 窄屏 (<= 768px):
+ *   活动栏常驻, 次级侧栏变为抽屉。展开 (body.nav-open) 时 #main 被向右
+ *   推出视口 —— 侧栏"挤占"而非"覆盖"内容区。仍可见的那部分内容区盖上
+ *   一层浅遮罩 (--scrim), 提示"点这里收起", 点击处理见 app.js。
+ *
+ * 本文件只负责骨架与区域摆放; 按钮 / 输入框 / 卡片等共用原语在 base.css。
+ */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
 html,
 body {
-	padding: 0;
 	margin: 0;
-
+	padding: 0;
 	width: 100%;
 	height: 100%;
 }
 
 body {
-	min-width: 100%;
-
-	/* 三区布局: 顶部导航横跨整行, 下方左侧导航 + 右侧内容区 */
 	display: grid;
-	grid-template-columns: auto 1fr;
-	grid-template-rows: auto 1fr;
+	/* 二级侧栏当前停用 (说明见文件末尾), 因此网格只有 活动栏 + 内容区 两列。
+	   恢复三列布局: 这里改回 var(--sidebar-w, 232px)、区域串补上 sidebar,
+	   并在 index.html 里加回 <aside id="side-bar">。 */
+	grid-template-columns: var(--activity-w, 44px) 1fr;
+	grid-template-rows: var(--topbar-h, 36px) 1fr;
 	grid-template-areas:
 		"top-nav top-nav"
-		"main-nav main";
+		"activity main";
+
+	font-family: var(--font-ui);
+	font-size: var(--fs);
+	line-height: var(--lh);
+	color: var(--fg);
+	background: var(--bg-app);
+
+	/* 窄屏抽屉把 #main 推出视口时, 抑制水平滚动条 */
+	overflow: hidden;
 }
 
-/* 顶部导航栏: 横跨整行的品牌栏 */
+/* 注: body.nav-collapsed 仍由 framework.js 的 renderSideBar 维护, 但二级侧栏
+   停用期间它没有样式效果 (网格已无 sidebar 列)。 */
+
+/* ==================== 顶部栏 ==================== */
+
 #top-nav {
 	grid-area: top-nav;
 
 	display: flex;
 	align-items: center;
-	min-height: 56px;
-	max-height: 20%;
-	box-sizing: border-box;
-	padding: 0 24px;
+	gap: var(--sp-2);
+	padding: 0 var(--sp-2);
+
+	background: var(--bg-activity);
+	border-bottom: 1px solid var(--border);
+	user-select: none;
 }
 
-#main-nav {
-	grid-area: main-nav;
+#top-nav .brand {
+	font-size: var(--fs-sm);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	color: var(--fg-muted);
+
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 窄屏汉堡按钮 (#nav-toggle) 随二级侧栏一起停用, 已从 index.html 移除 */
+
+/* ==================== 活动栏 (一级导航) ==================== */
+
+#activity-bar {
+	grid-area: activity;
 
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
-	/* flex-basis: 100px; */
+	align-items: center;
+
+	background: var(--bg-activity);
+	border-right: 1px solid var(--border);
+
+	overflow-y: auto;
+	overflow-x: hidden;
+	scrollbar-width: none; /* 活动栏自身不显示滚动条 */
 }
+
+/* 活动栏按钮: VSC 风格 —— 整宽命中区, 选中项左侧高亮竖条 */
+.activity-btn {
+	position: relative;
+	flex: 0 0 auto;
+
+	display: flex;
+	align-items: center;
+	justify-content: center;
+
+	width: 100%;
+	height: 40px;
+	padding: 0;
+
+	border: 0;
+	background: transparent;
+	color: var(--fg-subtle);
+	cursor: pointer;
+
+	transition: color var(--dur-fast) var(--ease),
+		background-color var(--dur-fast) var(--ease);
+}
+
+.activity-btn:hover {
+	color: var(--fg);
+	background: var(--bg-hover);
+}
+
+.activity-btn.active {
+	color: var(--fg);
+	background: var(--bg-active);
+}
+
+/* 选中态: 左侧 2px 强调色竖条 (VS Code 的活动栏选中样式) */
+.activity-btn.active::before {
+	content: "";
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: 2px;
+	background: var(--accent);
+}
+
+.activity-btn .icon {
+	width: 20px;
+	height: 20px;
+}
+
+/* ==================== 次级侧栏 ==================== */
+
+#side-bar {
+	grid-area: sidebar;
+
+	display: flex;
+	flex-direction: column;
+
+	background: var(--bg-sidebar);
+	border-right: 1px solid var(--border);
+
+	overflow-y: auto;
+	overflow-x: hidden;
+
+	transition: opacity var(--dur-slow) var(--ease);
+}
+
+/* 页面未提供次级内容时让位 (由框架切换 body.nav-collapsed) */
+body.nav-collapsed #side-bar {
+	overflow: hidden;
+	visibility: hidden;
+}
+
+/* ==================== 内容区 ==================== */
 
 #main {
 	grid-area: main;
+	position: relative; /* .spa-overlay 的定位基准 */
 
-	/* 遮罩定位基准 */
-	position: relative;
-	/* 防止长内容撑破 grid 轨道: min-height:0 让 1fr 轨道可收缩,
-	   否则内部百分比高度链失效, 内容会撑大 body */
+	/* 防止长内容撑破 grid 轨道: min-*:0 让 1fr 轨道可收缩,
+	   否则内部百分比高度链失效 */
 	min-width: 0;
 	min-height: 0;
+	overflow: hidden;
+
+	transition: transform var(--dur-slow) var(--ease),
+		opacity var(--dur-slow) var(--ease);
 }
 
-/* 页面内容容器: SPA 框架渲染目标 */
+/* 页面渲染目标: 唯一滚动容器 */
 #page-view {
 	width: 100%;
 	height: 100%;
 	overflow: auto;
-	box-sizing: border-box;
-	padding: 24px;
+	padding: var(--sp-3);
 }
 
-.main-nav-btn {
-	width: 3em;
-	height: 3em;
-	border-radius: 50%;
+/* ==================== 鉴权状态: 通过前主界面隐藏 ==================== */
 
-	/* 内容居中对齐 */
-	display: flex;
-	align-items: center;
-	justify-content: center;
-
-	/* 重置浏览器默认按钮样式, 提供交互反馈 */
-	border: 1px solid transparent;
-	background: transparent;
-	cursor: pointer;
-	font-size: 1.2em;
-	transition: background-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-/* 侧边栏按钮的 SVG 图标, 与旧的 emoji 视觉尺寸一致 */
-.main-nav-icon {
-	width: 1.2em;
-	height: 1.2em;
-	pointer-events: none;
-}
-
-/* ---- 页面通用组件 ---- */
-.card {
-	border: 1px solid rgba(0, 0, 0, 0.12);
-	border-radius: 12px;
-	padding: 16px;
-	background: rgba(255, 255, 255, 0.6);
-}
-
-.page-error {
-	border: 1px solid #d9534f;
-	border-radius: 12px;
-	padding: 16px;
-	background: rgba(217, 83, 79, 0.1);
-	color: #a94442;
-}
-
-.muted {
-	color: #888;
-}
-
-/* 窄屏顶部导航的展开按钮: 宽屏隐藏, 窄屏由媒体查询显示 */
-#nav-toggle {
-	display: none;
-}
-
-/* ---- 窄屏响应式: 侧边栏收为左侧抽屉, 顶部按钮展开 ---- */
-@media (max-width: 768px) {
-
-	/* 单列布局: 顶部导航 + 内容区, 侧边栏脱离网格 */
-	body {
-		grid-template-columns: 1fr;
-		grid-template-areas:
-			"top-nav"
-			"main";
-	}
-
-	#nav-toggle {
-		display: inline-flex;
-	}
-
-	/* 侧边栏变为左侧抽屉: 默认移出视口, body.nav-open 时滑入 */
-	#main-nav {
-		position: fixed;
-		top: 56px;
-		/* 顶部导航栏下方 */
-		bottom: 0;
-		left: 0;
-		z-index: 20;
-		margin: 24px;
-
-		visibility: hidden;
-		transform: translateX(calc(-100% - 48px));
-		transition: transform 0.25s ease, visibility 0.25s ease;
-	}
-
-	body.nav-open #main-nav {
-		visibility: visible;
-		transform: none;
-	}
-
-	/* 抽屉背后的变暗遮罩: 点击任意非侧边栏区域即可收起 (由 app.js 处理) */
-	body.nav-open::after {
-		content: "";
-		position: fixed;
-		inset: 0;
-		z-index: 15;
-		background: rgba(0, 0, 0, 0.25);
-	}
-}
-
-/* ---- 鉴权状态: 通过鉴权前主界面隐藏, 登录成功后滑入 ---- */
-#main-nav,
+#top-nav,
+#activity-bar,
+#side-bar,
 #main {
+	transition: opacity var(--dur-slow) var(--ease);
+}
+
+body:not(.authed) #top-nav,
+body:not(.authed) #activity-bar,
+body:not(.authed) #side-bar,
+body:not(.authed) #main {
 	opacity: 0;
 	pointer-events: none;
-	transition: opacity 0.35s ease, transform 0.35s ease;
 }
 
-/* 主内容区从上方滑入; 侧边栏只淡入 (不设 transform, 避免与窄屏抽屉的 translateX 冲突) */
-#main {
-	transform: translateY(-18px);
-}
+/* ==================== 登录视图: 全屏覆盖 ==================== */
 
-body.authed #main-nav,
-body.authed #main {
-	opacity: 1;
-	pointer-events: auto;
-}
-
-body.authed #main {
-	transform: translateY(0);
-}
-
-/* ---- 登录卡片: 全屏居中 ---- */
 #login-view {
 	position: fixed;
 	inset: 0;
-	z-index: 50;
+	z-index: 1000;
+
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	padding: 24px;
-	box-sizing: border-box;
+
+	background: var(--bg-app);
 }
 
-/* hidden 属性需显式覆盖: 否则 #login-view 的 display:flex 特异性更高, hidden 会失效 */
 #login-view[hidden] {
 	display: none;
 }
@@ -198,777 +231,108 @@ body.authed #main {
 .login-card {
 	display: flex;
 	flex-direction: column;
-	align-items: center;
-	width: 100%;
-	max-width: 320px;
+	align-items: stretch;
+	gap: var(--sp-3);
+
+	width: min(320px, calc(100vw - var(--sp-6)));
+	padding: var(--sp-5);
+
+	background: var(--bg-panel);
+	border: 1px solid var(--border);
+	border-radius: var(--r-lg);
+	box-shadow: var(--shadow-2);
 }
 
 .login-logo {
-	width: 100%;
-	height: 56px;
-	object-fit: contain;
+	align-self: center;
+
+	/* chirucat.svg 是 4:1 宽扁字标, 只固定宽度并保持比例 */
+	width: min(160px, 60%);
+	height: auto;
+}
+
+/* 该字标是单色黑 (fill:#000000), 深色主题下反色才可见 */
+:root[data-theme="dark"] .login-logo {
+	filter: invert(1);
 }
 
 .login-title {
 	margin: 0;
+	font-size: var(--fs-lg);
+	font-weight: 600;
+	text-align: center;
 }
 
 .login-subtitle {
-	margin: 0 0 8px;
-}
-
-.login-input {
-	width: 100%;
-	box-sizing: border-box;
-}
-
-.login-btn {
-	width: 100%;
-}
-
-.login-btn:disabled {
-	opacity: 0.6;
-	cursor: default;
+	margin: calc(-1 * var(--sp-2)) 0 0;
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+	text-align: center;
 }
 
 .login-error {
 	margin: 0;
+	font-size: var(--fs-sm);
+	color: var(--danger);
 }
 
-.icon-btn {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	cursor: pointer;
-	width: 2em;
-	height: 2em;
-}
+/* ==================== 窄屏: 侧栏挤出式抽屉 ==================== */
 
-.icon-btn img {
-	width: 100%;
-	height: 100%;
-	pointer-events: none;
-}
+@media (max-width: 768px) {
 
-.dialog-window-base {
-	position: fixed;
-	top: 0;
-	left: 0;
-	width: 100%;
-	height: 100%;
+	/* 单列布局已由基础规则提供 (网格只有两列, 宽窄屏一致)。
+	   以下为二级侧栏抽屉的规则 —— 该能力当前停用, 保留供日后恢复。 */
 
-	display: flex;
-}
-
-.dialog-window {
-	box-sizing: border-box;
-	opacity: 1;
-
-	min-width: 36%;
-	min-height: 2em;
-
-	margin: auto;
-	max-width: 80%;
-	/* 内容再长也不高过视口(上下各留 24px): 超出部分交给 .dialog-window-inner 滚动 */
-	max-height: calc(100vh - 48px);
-
-	display: flex;
-	flex-direction: column;
-}
-
-.dialog-window header {
-	display: flex;
-	flex-direction: row;
-	max-height: 20%;
-	justify-content: space-between;
-}
-
-
-
-.dialog-window-inner {
-	flex-grow: 1;
-	/* flex 子项的 min-height 默认是 auto: 不归零的话长内容会把弹窗顶出屏幕,
-	   而不是在内部产生滚动 */
-	min-height: 0;
-	overflow-y: auto;
-	/* white-space: pre-wrap; */
-}
-
-/* 标题行与按钮栏不参与压缩: 内容再长也只让中间的内容区滚动 */
-.dialog-window header,
-.dialog-window footer {
-	flex-shrink: 0;
-}
-
-.dialog-window-btns {
-	display: flex;
-	flex-direction: row-reverse;
-	min-height: 1em;
-	margin-top: 8px;
-	gap: 8px;
-	align-items: center;
-}
-
-/* ---- 对话框内表单控件 (与 .dialog-window 配套, 供各页面复用) ---- */
-.dialog-field {
-	margin-top: 10px;
-}
-
-.dialog-field:first-child {
-	margin-top: 0;
-}
-
-.dialog-label {
-	display: block;
-	margin-bottom: 4px;
-}
-
-.dialog-input {
-	width: 100%;
-	box-sizing: border-box;
-	padding: 8px 10px;
-}
-
-.dialog-hint {
-	margin: 4px 0 0;
-}
-
-.dialog-error {
-	margin: 10px 0 0;
-}
-
-.dot {
-	width: 0.6em;
-	height: 0.6em;
-	border-radius: 50%;
-	flex-shrink: 0;
-}
-
-.dot-switch {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	flex-shrink: 0;
-	width: 1.5em;
-	height: 1.5em;
-	padding: 0;
-	border-radius: 50%;
-	border: 1px solid transparent;
-	cursor: pointer;
-	user-select: none;
-	-webkit-tap-highlight-color: transparent;
-	transition: background-color 0.15s ease, border-color 0.15s ease,
-		color 0.15s ease, transform 0.1s ease;
-}
-
-.dot-switch::after {
-	content: "";
-	box-sizing: border-box;
-	width: 0.75em;
-	height: 0.75em;
-	border-radius: 50%;
-	transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.dot-switch:focus-visible {
-	outline: 2px solid rgba(74, 144, 217, 0.7);
-	outline-offset: 2px;
-}
-
-/* 启用态: 绿色系 */
-.dot-switch-on {
-	background: rgba(92, 184, 92, 0.16);
-	border-color: rgba(92, 184, 92, 0.5);
-	color: #2f6f32;
-}
-
-.dot-switch-on:hover {
-	background: rgba(92, 184, 92, 0.26);
-}
-
-/* 启用: 实心绿点 */
-.dot-switch-on::after {
-	background-color: rgba(12, 141, 12, 0.8);
-}
-
-.dot-switch-on:active {
-	background: rgba(92, 184, 92, 0.32);
-	transform: scale(0.94);
-}
-
-/* 停用态: 灰色系 */
-.dot-switch-off {
-	background: rgba(136, 136, 136, 0.12);
-	border-color: rgba(136, 136, 136, 0.38);
-	color: #6b6b6b;
-}
-
-.dot-switch-off:hover {
-	background: rgba(136, 136, 136, 0.2);
-}
-
-/* 停用: 空心灰环 */
-.dot-switch-off::after {
-	background: transparent;
-	border: 0.12em solid currentColor;
-}
-
-.dot-switch-off:active {
-	background: rgba(136, 136, 136, 0.28);
-	transform: scale(0.94);
-}
-
-.dot-switch.loading {
-	/* pointer-events: none; */
-	animation: dot-pulse 1s ease-in-out infinite;
-}
-
-@keyframes dot-pulse {
-
-	0%,
-	100% {
-		opacity: 0.85;
+	/* 活动栏层级必须高于抽屉 (z-index 20):
+	   一级导航在窄屏永不被侧栏遮挡, 始终可见可点。
+	   不依赖 z-index 顺序而依赖定位位置也行, 但两者都做着更保险。 */
+	#activity-bar {
+		position: relative;
+		z-index: 30;
 	}
 
-	50% {
-		opacity: 0.45;
+	/* 侧栏变抽屉: 默认收起 (向左整体移出视口) */
+	#side-bar {
+		position: fixed;
+		top: var(--topbar-h, 36px);
+		bottom: 0;
+		/* 从活动栏右边缘开始 —— 与下面 #main 的平移量是同一基准,
+		   两者配套才能得到"侧栏刚好占住内容区让出的位置" */
+		left: var(--activity-w, 44px);
+		right: auto;
+		z-index: 20;
+
+		width: calc(var(--drawer-w, 276px) - var(--activity-w, 44px));
+		max-width: calc(100vw - var(--activity-w, 44px));
+
+		visibility: hidden;
+		/* 偏移量必须同时覆盖自身宽度和 left 偏移 (--activity-w):
+		   只写 -100% 的话右边缘会停在 43px, 仍然压在活动栏 (0~44px) 区域上,
+		   展开/收起动画期间就会看到侧栏从活动栏身上划过。 */
+		transform: translateX(calc(-100% - var(--activity-w, 44px)));
+		transition: transform var(--dur-slow) var(--ease),
+			visibility 0s linear var(--dur-slow);
 	}
-}
 
-/* ---- 图表公共组件 (折线图 / 饼图) ---- */
-
-.chart-empty {
-	margin: 0;
-	font-size: 0.9em;
-	opacity: 0.6;
-}
-
-/* 平滑折线图 */
-.line-chart {
-	position: relative;
-	width: 100%;
-	height: 100%;
-	display: flex;
-	flex-direction: column;
-}
-
-.line-chart-plot {
-	position: relative;
-	flex: 1 1 0;
-	min-height: 0;
-}
-
-.line-chart-plot .chart-empty {
-	height: 100%;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.line-chart-svg {
-	display: block;
-}
-
-.line-chart-axis {
-	display: flex;
-	justify-content: space-between;
-	padding: 4px 6px 0;
-	font-size: 0.75em;
-	opacity: 0.55;
-	flex-shrink: 0;
-}
-
-.line-chart-tick {
-	white-space: nowrap;
-}
-
-.line-chart-tooltip {
-	position: absolute;
-	left: 0;
-	top: 0;
-	pointer-events: none;
-	padding: 4px 8px;
-	border-radius: 6px;
-	background: rgba(30, 41, 59, 0.9);
-	color: #fff;
-	font-size: 0.8em;
-	white-space: nowrap;
-	z-index: 5;
-	transition: all;
-}
-
-.line-chart-tooltip[hidden] {
-	display: none;
-}
-
-.line-chart-cursor {
-	stroke: #3b82f6;
-	stroke-width: 1;
-	stroke-dasharray: 4 4;
-	pointer-events: none;
-}
-
-.line-chart-line {
-	fill: none;
-	stroke: #3b82f6;
-	stroke-width: 2;
-	stroke-linecap: round;
-	stroke-linejoin: round;
-}
-
-.line-chart-dot {
-	fill: #fff;
-	stroke: #3b82f6;
-	stroke-width: 1.5;
-}
-
-/* 饼图 */
-.pie-chart {
-	width: 100%;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 12px;
-}
-
-.pie-chart .chart-empty {
-	padding: 12px 0;
-}
-
-.pie-chart-svg {
-	width: min(160px, 100%);
-	height: auto;
-}
-
-.pie-chart-slice {
-	stroke: rgba(255, 255, 255, 0.65);
-	stroke-width: 0.5;
-	transition: opacity 0.15s ease;
-}
-
-.pie-chart-slice:hover {
-	opacity: 0.82;
-}
-
-.pie-chart-legend {
-	list-style: none;
-	margin: 0;
-	padding: 0;
-	width: 100%;
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	font-size: 0.85em;
-}
-
-.pie-chart-legend li {
-	display: grid;
-	grid-template-columns: auto 1fr auto;
-	align-items: center;
-	gap: 8px;
-}
-
-.pie-chart-swatch {
-	width: 10px;
-	height: 10px;
-	border-radius: 3px;
-	flex-shrink: 0;
-}
-
-.pie-chart-name {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.pie-chart-pct {
-	opacity: 0.6;
-	font-variant-numeric: tabular-nums;
-}
-
-/* ---- 配置列表组件 (config-editor.js) ---- */
-
-.config-list {
-	display: flex;
-	flex-direction: column;
-	gap: 16px;
-}
-
-/* 单个配置项: 标签 / 控件槽 / 说明 纵向排列 */
-.config-group {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	max-width: 100%;
-}
-
-.config-label {
-	font-size: 0.9em;
-}
-
-.config-required {
-	font-style: normal;
-	margin-left: 3px;
-}
-
-/* 控件槽: 一行内可容纳多个元素 (如滑块 + 读数) */
-.config-field {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 10px;
-}
-
-/* group / table 的内嵌容器 */
-.config-group-box,
-.config-table-box {
-	padding: 12px;
-	overflow-x: auto;
-	min-width: 0;
-	box-sizing: border-box;
-	/* 关键：允许在 flex 里收缩 */
-}
-
-/* 分组的控件槽改为纵向排列子控件 */
-.config-field.config-group-body {
-	flex-direction: column;
-	align-items: stretch;
-	gap: 12px;
-}
-
-/* ---- 原生外观接管: 以下控件一律不再沿用系统 UI 绘制 ---- */
-
-/*
- * 表单控件默认不继承页面字体 (浏览器给的是系统 UI 字体与固定字号),
- * 这是它们与其余界面最明显的割裂来源, 必须手动接管。
- */
-input.config-input,
-textarea.config-textarea,
-.config-select,
-.config-table-add,
-.config-table-del {
-	font-family: inherit;
-	font-size: 1em;
-	-webkit-appearance: none;
-	appearance: none;
-}
-
-input.config-input,
-.config-select {
-	box-sizing: border-box;
-	/* 固定宽度而非 width:100%: 控件也会出现在纵向 flex 容器 (group body) 里 */
-	width: 220px;
-	max-width: 100%;
-	line-height: 1.4;
-	border-radius: 999px;
-	padding: 8px 12px;
-}
-
-/* 多行文本: 比单行输入宽, 高度由 rows 决定并允许纵向拉伸 */
-textarea.config-textarea {
-	box-sizing: border-box;
-	/* 横向铺满所在行, min-width: 0 保证能收缩而不是撑破容器 */
-	width: 100%;
-	max-width: 480px;
-	min-width: 160px;
-	min-height: 2.4em;
-	line-height: 1.5;
-	/* 多行控件不用胶囊圆角 */
-	border-radius: 12px;
-	padding: 8px 12px;
-	resize: vertical;
-}
-
-/* ---- 下拉选择: 触发器 + 浮层 (原生 select 的弹出层无法用 CSS 接管) ---- */
-
-.config-select-wrap {
-	position: relative;
-	display: inline-block;
-	max-width: 100%;
-}
-
-.config-select {
-	display: inline-flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	width: 160px;
-	text-align: left;
-	cursor: pointer;
-}
-
-.config-select-value {
-	/* min-width: 0 是 flex 子项上 text-overflow 生效的前提 */
-	flex: 1 1 auto;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-/* 用边框画下拉三角, 颜色跟随 currentColor */
-.config-select-arrow {
-	flex-shrink: 0;
-	width: 0;
-	height: 0;
-	border-left: 4px solid transparent;
-	border-right: 4px solid transparent;
-	border-top: 5px solid currentColor;
-	transition: transform 0.15s ease;
-}
-
-.config-select[aria-expanded="true"] .config-select-arrow {
-	transform: rotate(180deg);
-}
-
-/* 浮层: fixed 定位, 否则会被 #page-view 的 overflow 裁掉 */
-.config-select-panel {
-	position: fixed;
-	z-index: 40;
-	box-sizing: border-box;
-	min-width: 80px;
-	max-height: 240px;
-	overflow-y: auto;
-	border-radius: 12px;
-	padding: 4px;
-}
-
-.config-select-option {
-	padding: 6px 10px;
-	border-radius: 8px;
-	cursor: pointer;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-/* 多选框: 自绘圆角方框 + 勾 */
-.config-checkbox-item input {
-	box-sizing: border-box;
-	flex-shrink: 0;
-	position: relative;
-	width: 1.1em;
-	height: 1.1em;
-	margin: 0;
-	padding: 0;
-	border-radius: 5px;
-	-webkit-appearance: none;
-	appearance: none;
-	cursor: pointer;
-}
-
-/* 勾用两条边框旋转 45° 画成, 默认缩到 0 不可见 */
-.config-checkbox-item input::after {
-	content: "";
-	position: absolute;
-	left: 50%;
-	top: 50%;
-	width: 0.26em;
-	height: 0.5em;
-	border-right-width: 2px;
-	border-right-style: solid;
-	border-bottom-width: 2px;
-	border-bottom-style: solid;
-	transform: translate(-50%, -60%) rotate(45deg) scale(0);
-	transition: transform 0.12s ease;
-}
-
-.config-checkbox-group {
-	display: flex;
-	width: max-content;
-	flex-direction: column;
-	align-items: start;
-	padding: 8px;
-}
-
-/* 滑块: 轨道与滑块全部自绘 (原生 track/thumb 各平台差异极大) */
-input.config-slider {
-	-webkit-appearance: none;
-	appearance: none;
-	flex: 1 1 160px;
-	max-width: 320px;
-	/* 抬高元素本身作为触摸目标, 轨道在内部垂直居中 */
-	height: 1.5em;
-	margin: 0;
-	background: transparent;
-	cursor: pointer;
-}
-
-input.config-slider::-webkit-slider-runnable-track {
-	box-sizing: border-box;
-	width: 100%;
-	height: 6px;
-	border-radius: 999px;
-}
-
-input.config-slider::-webkit-slider-thumb {
-	-webkit-appearance: none;
-	appearance: none;
-	box-sizing: border-box;
-	width: 16px;
-	height: 16px;
-	/* 让 16px 的滑块在 6px 的轨道上垂直居中 */
-	margin-top: -5px;
-	border-radius: 50%;
-}
-
-input.config-slider::-moz-range-track {
-	box-sizing: border-box;
-	width: 100%;
-	height: 6px;
-	border-radius: 999px;
-}
-
-input.config-slider::-moz-range-thumb {
-	box-sizing: border-box;
-	width: 16px;
-	height: 16px;
-	border: none;
-	border-radius: 50%;
-}
-
-/* Firefox 会给轨道额外画一圈虚线焦点框 */
-input.config-slider::-moz-focus-outer {
-	border: 0;
-}
-
-/* ---- 配置表格 ---- */
-
-/*
- * 窄屏时的横向滚动容器。
- * 表格按内容自然宽度展开 (width: auto + 单元格 nowrap), 屏不够宽时
- * 会直接溢出并把外层容器撑破, 所以把溢出与滚动都关在这一层里。
- */
-.config-table-scroll {
-	box-sizing: border-box;
-	width: 100%;
-	max-width: 100%;
-	/* flex 子项默认不会被压到内容宽度以下, 显式放开 */
-	min-width: 0;
-	overflow-x: auto;
-	overflow-y: hidden;
-}
-
-.config-table {
-	width: auto;
-	border-collapse: collapse;
-	box-sizing: border-box;
-	border-spacing: 0;
-	font-size: 0.9em;
-}
-
-.config-table th,
-.config-table td {
-	white-space: nowrap;
-	padding: 6px 8px;
-	text-align: left;
-}
-
-/* table 行内控件: 单元格自行排版, 不再叠加外层纵向间距 */
-.config-table td .config-group {
-	gap: 0;
-}
-
-/* 标题行: label 与折叠按钮并排 */
-.config-group-head {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 6px;
-}
-
-/* 折叠按钮: 圆形可点区域 + CSS 三角 (不需要额外的图标资源) */
-.config-table-toggle {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	flex-shrink: 0;
-	width: 1.5em;
-	height: 1.5em;
-	padding: 0;
-	border-radius: 50%;
-	-webkit-appearance: none;
-	appearance: none;
-	font-family: inherit;
-	cursor: pointer;
-}
-
-/* 三角与下拉箭头同款: 展开朝下, 折叠朝右 */
-.config-table-toggle::after {
-	content: "";
-	width: 0;
-	height: 0;
-	border-left: 4px solid transparent;
-	border-right: 4px solid transparent;
-	border-top: 5px solid currentColor;
-	transition: transform 0.28s ease;
-}
-
-.config-table-box.collapsed .config-table-toggle::after {
-	transform: rotate(-90deg);
-}
-
-/* 表项数: flex-basis 100% 让它换行到 label 下方, 只在折叠时显现 */
-.config-table-count {
-	flex-basis: 100%;
-	overflow: hidden;
-	max-height: 0;
-	opacity: 0;
-	transition: max-height 0.2s ease, opacity 0.15s ease;
-}
-
-.config-table-box.collapsed .config-table-count {
-	max-height: 2.5em;
-	opacity: 1;
-}
-
-/* 表格与其下方的“添加行”按钮纵向排列; 同时也是折叠动画的作用对象 */
-.config-field.config-table-body {
-	flex-direction: column;
-	align-items: stretch;
-	gap: 8px;
-	overflow: hidden;
-	transition: max-height 0.28s ease, opacity 0.22s ease;
-}
-
-/* 操作列: 宽度只占内容, 按钮右对齐 */
-.config-table-op {
-	width: 1%;
-	white-space: nowrap;
-	text-align: right;
-}
-
-.config-table-add {
-	align-self: flex-start;
-	padding: 4px 12px;
-	cursor: pointer;
-}
-
-.config-table-del {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 1.8em;
-	height: 1.8em;
-	padding: 0;
-	cursor: pointer;
-	line-height: 1;
-}
-
-.config-checkbox-item {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	cursor: pointer;
-}
-
-.config-slider-value {
-	font-size: 0.9em;
-	opacity: 0.7;
-	font-variant-numeric: tabular-nums;
-	min-width: 2.5em;
-}
-
-.config-text {
-	margin: 0;
+	body.nav-open #side-bar,
+	body.nav-open.nav-collapsed #side-bar {
+		visibility: visible;
+		transform: none;
+		transition: transform var(--dur-slow) var(--ease),
+			visibility 0s;
+	}
+
+	/* 抽屉展开: 内容区被向右推出, 把位置让给侧栏 (挤出而非覆盖) */
+	body.nav-open #main {
+		transform: translateX(calc(var(--drawer-w, 276px) - var(--activity-w, 44px)));
+	}
+
+	/* 浅遮罩: 只覆盖仍可见的那段内容区, 提示"点这里收起" */
+	body.nav-open::after {
+		content: "";
+		position: fixed;
+		inset: 0 0 0 var(--drawer-w, 276px);
+		z-index: 15;
+		background: var(--scrim);
+	}
 }

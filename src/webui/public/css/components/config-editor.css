@@ -1,0 +1,623 @@
+/**
+ * 配置编辑器 (config-editor.js)
+ *
+ * 控件类型: 文本 / 多行文本 / 下拉 / 多选 / 滑块 / 表格 / 分组。
+ *
+ * 说明: 文字类输入 (config-input / config-textarea / config-select) 的视觉
+ * 与 base.css 的 .input 完全一致 —— 这正是"输入框只应有一套样式"的落点。
+ * 下一步让 config-editor.js 直接给这些控件加 .input 类, 即可删掉本节重复规则。
+ *
+ * 旧样式分散在两处: 结构在 layout-dec.css, 颜色在 defaulta-dec.css,
+ * 现已合并到这里并全部改用设计令牌。
+ */
+
+/* ==================== 列表与分组 ==================== */
+
+.config-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-3);
+}
+
+/* 单个配置项: 标签 / 控件槽 / 说明 纵向排列 */
+.config-group {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-width: 100%;
+}
+
+.config-label {
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+}
+
+.config-required {
+	font-style: normal;
+	margin-left: 3px;
+	color: var(--danger);
+}
+
+.config-desc {
+	font-size: var(--fs-xs);
+	color: var(--fg-subtle);
+}
+
+/* 控件槽: 一行内可容纳多个元素 (如滑块 + 读数) */
+.config-field {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--sp-2);
+}
+
+/* group / table 的内嵌容器 */
+.config-group-box,
+.config-table-box {
+	padding: var(--sp-3);
+	min-width: 0;
+	overflow-x: auto;
+
+	border: 1px solid var(--border);
+	border-radius: var(--r-md);
+	background: var(--bg-panel);
+}
+
+/* 分组的控件槽改为纵向排列子控件 */
+.config-field.config-group-body {
+	flex-direction: column;
+	align-items: stretch;
+	gap: var(--sp-2);
+}
+
+/* 标题行: label 与折叠按钮并排 */
+.config-group-head {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+/* ==================== 文字类输入 ====================
+ * 原生控件不继承页面字体 (浏览器给的是系统 UI 字体与固定字号),
+ * 这是它们与其余界面最明显的割裂来源, 必须手动接管。 */
+
+input.config-input,
+textarea.config-textarea,
+.config-select {
+	font-family: inherit;
+	font-size: var(--fs-sm);
+	-webkit-appearance: none;
+	appearance: none;
+
+	border: 1px solid var(--border-strong);
+	background-color: var(--bg-input);
+	color: var(--fg);
+	outline: none;
+
+	transition: border-color var(--dur-fast) var(--ease),
+		background-color var(--dur-fast) var(--ease),
+		box-shadow var(--dur-fast) var(--ease);
+}
+
+input.config-input::placeholder,
+textarea.config-textarea::placeholder {
+	color: var(--fg-subtle);
+}
+
+input.config-input:hover,
+textarea.config-textarea:hover,
+.config-select:hover {
+	border-color: var(--fg-subtle);
+}
+
+input.config-input:focus,
+textarea.config-textarea:focus,
+.config-select:focus {
+	border-color: var(--accent);
+	box-shadow: 0 0 0 2px var(--bg-selected);
+}
+
+input.config-input:disabled,
+textarea.config-textarea:disabled,
+.config-select:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+input.config-input,
+.config-select {
+	box-sizing: border-box;
+	/* 固定宽度而非 width:100%: 控件也会出现在纵向 flex 容器 (group body) 里 */
+	width: 220px;
+	max-width: 100%;
+	height: var(--ctl-h);
+	padding: 0 var(--sp-2);
+	line-height: 1.4;
+	border-radius: var(--r-sm);
+}
+
+/* 多行文本: 比单行宽, 高度由 rows 决定并允许纵向拉伸 */
+textarea.config-textarea {
+	box-sizing: border-box;
+	/* 横向铺满所在行; min-width: 0 保证能收缩而不是撑破容器 */
+	width: 100%;
+	max-width: 480px;
+	min-width: 160px;
+	min-height: calc(var(--ctl-h) * 2);
+	padding: var(--sp-1) var(--sp-2);
+	line-height: 1.5;
+	border-radius: var(--r-sm);
+	resize: vertical;
+}
+
+/* ==================== 下拉选择 ====================
+ * 触发器 + 浮层: 原生 select 的弹出层无法用 CSS 接管, 所以自绘。 */
+
+.config-select-wrap {
+	position: relative;
+	display: inline-block;
+	max-width: 100%;
+}
+
+.config-select {
+	display: inline-flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--sp-2);
+
+	width: 160px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.config-select-value {
+	/* min-width: 0 是 flex 子项上 text-overflow 生效的前提 */
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 下拉三角用边框画, 颜色跟随 currentColor */
+.config-select-arrow {
+	flex-shrink: 0;
+	width: 0;
+	height: 0;
+	border-left: 4px solid transparent;
+	border-right: 4px solid transparent;
+	border-top: 5px solid currentColor;
+	transition: transform var(--dur-fast) var(--ease);
+}
+
+.config-select[aria-expanded="true"] .config-select-arrow {
+	transform: rotate(180deg);
+}
+
+/* 浮层: fixed 定位, 否则会被 #page-view 的 overflow 裁掉 */
+.config-select-panel {
+	position: fixed;
+	z-index: 40;
+	box-sizing: border-box;
+
+	min-width: 80px;
+	max-height: 240px;
+	overflow-y: auto;
+	padding: var(--sp-1);
+
+	border: 1px solid var(--border);
+	border-radius: var(--r-md);
+	background: var(--glass-bg);
+	backdrop-filter: blur(var(--glass-blur));
+	box-shadow: var(--shadow-2);
+
+	color: var(--fg);
+	font-size: var(--fs-sm);
+}
+
+.config-select-option {
+	padding: 4px var(--sp-2);
+	border-radius: var(--r-sm);
+	cursor: pointer;
+
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* 键盘导航与鼠标悬停共用这个高亮态 */
+.config-select-option.active {
+	background-color: var(--accent-soft);
+}
+
+.config-select-option[aria-selected="true"] {
+	color: var(--accent);
+	font-weight: 600;
+}
+
+/* ==================== 多选框 ==================== */
+
+.config-checkbox-group {
+	display: flex;
+	width: max-content;
+	flex-direction: column;
+	align-items: start;
+	gap: var(--sp-3);
+	padding: var(--sp-2);
+
+	border: 1px solid var(--border);
+	border-radius: var(--r-md);
+	background: var(--bg-panel);
+}
+
+/* 项间分隔线: 画在间隙中间 (gap 的一半) */
+.config-checkbox-group>*+* {
+	position: relative;
+}
+
+.config-checkbox-group>*+*::before {
+	content: "";
+	position: absolute;
+	top: -6px;
+	left: 0;
+	right: 0;
+	height: 1px;
+	background: var(--border);
+}
+
+.config-checkbox-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	cursor: pointer;
+}
+
+/* 自绘圆角方框: 关掉原生 appearance */
+.config-checkbox-item input {
+	box-sizing: border-box;
+	position: relative;
+	flex-shrink: 0;
+
+	width: 1.1em;
+	height: 1.1em;
+	margin: 0;
+	padding: 0;
+
+	border: 1px solid var(--border-strong);
+	border-radius: var(--r-sm);
+	background-color: var(--bg-input);
+	-webkit-appearance: none;
+	appearance: none;
+	cursor: pointer;
+
+	transition: background-color var(--dur-fast) var(--ease),
+		border-color var(--dur-fast) var(--ease);
+}
+
+.config-checkbox-item input:hover {
+	border-color: var(--accent);
+}
+
+.config-checkbox-item input:checked {
+	background-color: var(--accent);
+	border-color: var(--accent);
+}
+
+/* 勾用两条边框旋转 45° 画成, 默认缩到 0 不可见 */
+.config-checkbox-item input::after {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+
+	width: 0.26em;
+	height: 0.5em;
+	border-right: 2px solid var(--fg-on-accent);
+	border-bottom: 2px solid var(--fg-on-accent);
+
+	transform: translate(-50%, -60%) rotate(45deg) scale(0);
+	transition: transform var(--dur-fast) var(--ease);
+}
+
+.config-checkbox-item input:checked::after {
+	transform: translate(-50%, -60%) rotate(45deg) scale(1);
+}
+
+.config-checkbox-item input:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* ==================== 滑块 ====================
+ * 轨道与滑块全部自绘: 原生 track/thumb 各平台差异极大。 */
+
+input.config-slider {
+	-webkit-appearance: none;
+	appearance: none;
+
+	flex: 1 1 160px;
+	max-width: 320px;
+	/* 抬高元素本身作为触摸目标, 轨道在内部垂直居中 */
+	height: 1.5em;
+	margin: 0;
+	background: transparent;
+	cursor: pointer;
+}
+
+input.config-slider::-webkit-slider-runnable-track {
+	box-sizing: border-box;
+	width: 100%;
+	height: 6px;
+	border-radius: 999px;
+	/* 边框用 inset 阴影画, 避免 border 影响滑块垂直居中的计算 */
+	box-shadow: inset 0 0 0 1px var(--border);
+	background-color: var(--bg-active);
+}
+
+input.config-slider::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	box-sizing: border-box;
+
+	width: 16px;
+	height: 16px;
+	/* 让 16px 的滑块在 6px 的轨道上垂直居中 */
+	margin-top: -5px;
+
+	border: 1px solid var(--accent);
+	border-radius: 50%;
+	background-color: var(--bg-panel);
+	box-shadow: var(--shadow-1);
+
+	transition: background-color var(--dur-fast) var(--ease);
+}
+
+input.config-slider:hover::-webkit-slider-thumb {
+	background-color: var(--accent-soft);
+}
+
+input.config-slider:active::-webkit-slider-thumb {
+	background-color: var(--accent);
+}
+
+input.config-slider::-moz-range-track {
+	box-sizing: border-box;
+	width: 100%;
+	height: 6px;
+	border-radius: 999px;
+	box-shadow: inset 0 0 0 1px var(--border);
+	background-color: var(--bg-active);
+}
+
+input.config-slider::-moz-range-thumb {
+	box-sizing: border-box;
+	width: 16px;
+	height: 16px;
+	border: 1px solid var(--accent);
+	border-radius: 50%;
+	background-color: var(--bg-panel);
+	box-shadow: var(--shadow-1);
+}
+
+input.config-slider:hover::-moz-range-thumb {
+	background-color: var(--accent-soft);
+}
+
+/* Firefox 会给轨道额外画一圈虚线焦点框 */
+input.config-slider::-moz-focus-outer {
+	border: 0;
+}
+
+.config-slider-value {
+	min-width: 2.5em;
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ==================== 键盘焦点环 (与 .dot-switch 约定一致) ==================== */
+
+.config-checkbox-item input:focus-visible,
+input.config-slider:focus-visible,
+.config-table-add:focus-visible,
+.config-table-del:focus-visible,
+.config-table-toggle:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+/* ==================== 配置表格 ==================== */
+
+/* 窄屏横向滚动容器: 表格按内容自然宽度展开 (width: auto + nowrap),
+   屏不够宽时会直接溢出撑破外层, 所以把溢出与滚动都关在这一层里 */
+.config-table-scroll {
+	box-sizing: border-box;
+	width: 100%;
+	max-width: 100%;
+	/* flex 子项默认不会被压到内容宽度以下, 显式放开 */
+	min-width: 0;
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+
+.config-table {
+	width: auto;
+	border-collapse: collapse;
+	border-spacing: 0;
+	box-sizing: border-box;
+	font-size: var(--fs-sm);
+}
+
+.config-table th,
+.config-table td {
+	white-space: nowrap;
+	padding: 4px var(--sp-2);
+	text-align: left;
+}
+
+.config-table th {
+	font-weight: 600;
+	color: var(--fg-muted);
+	border-bottom: 1px solid var(--border-strong);
+}
+
+.config-table tbody tr+tr td {
+	border-top: 1px solid var(--border);
+}
+
+/* table 行内控件: 单元格自行排版, 不再叠加外层纵向间距 */
+.config-table td .config-group {
+	gap: 0;
+}
+
+/* 操作列: 宽度只占内容, 按钮右对齐 */
+.config-table-op {
+	width: 1%;
+	white-space: nowrap;
+	text-align: right;
+}
+
+.config-table-add {
+	align-self: flex-start;
+	padding: var(--sp-1) var(--sp-3);
+	font-size: var(--fs-sm);
+	cursor: pointer;
+
+	border: 1px solid var(--border-strong);
+	border-radius: var(--r-sm);
+	background: transparent;
+	color: var(--fg);
+
+	transition: background-color var(--dur-fast) var(--ease);
+}
+
+.config-table-add:hover {
+	background: var(--bg-hover);
+}
+
+.config-table-del {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+
+	width: 1.8em;
+	height: 1.8em;
+	padding: 0;
+
+	border: 1px solid transparent;
+	border-radius: 50%;
+	background: transparent;
+	color: var(--fg-subtle);
+	line-height: 1;
+	cursor: pointer;
+
+	transition: background-color var(--dur-fast) var(--ease),
+		color var(--dur-fast) var(--ease);
+}
+
+.config-table-del:hover {
+	background: var(--danger-soft);
+	color: var(--danger);
+}
+
+/* ---- 表格折叠 ---- */
+
+/* 折叠按钮: 圆形可点区域 + CSS 三角 (不需要额外图标资源) */
+.config-table-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+
+	width: 1.5em;
+	height: 1.5em;
+	padding: 0;
+
+	border: 1px solid transparent;
+	border-radius: 50%;
+	background: transparent;
+	color: var(--fg-subtle);
+	font-family: inherit;
+	cursor: pointer;
+
+	transition: background-color var(--dur-fast) var(--ease),
+		color var(--dur-fast) var(--ease);
+}
+
+/* 三角与下拉箭头同款: 展开朝下, 折叠朝右 */
+.config-table-toggle::after {
+	content: "";
+	width: 0;
+	height: 0;
+	border-left: 4px solid transparent;
+	border-right: 4px solid transparent;
+	border-top: 5px solid currentColor;
+	transition: transform var(--dur-slow) var(--ease);
+}
+
+.config-table-box.collapsed .config-table-toggle::after {
+	transform: rotate(-90deg);
+}
+
+.config-table-toggle:hover {
+	background-color: var(--bg-hover);
+	color: var(--fg);
+}
+
+/* 表项数: flex-basis 100% 让它换行到 label 下方, 只在折叠时显现 */
+.config-table-count {
+	flex-basis: 100%;
+	font-size: var(--fs-xs);
+	color: var(--fg-subtle);
+
+	overflow: hidden;
+	max-height: 0;
+	opacity: 0;
+
+	transition: max-height var(--dur) var(--ease),
+		opacity var(--dur-fast) var(--ease);
+}
+
+.config-table-box.collapsed .config-table-count {
+	max-height: 2.5em;
+	opacity: 1;
+}
+
+/* 表格与其下方的"添加行"按钮纵向排列; 同时是折叠动画的作用对象 */
+.config-field.config-table-body {
+	flex-direction: column;
+	align-items: stretch;
+	gap: var(--sp-2);
+	overflow: hidden;
+
+	transition: max-height var(--dur-slow) var(--ease),
+		opacity var(--dur) var(--ease);
+}
+
+/* ==================== 校验失败: 标签与输入框同时标红 ==================== */
+
+.config-invalid>.config-label {
+	color: var(--danger);
+}
+
+.config-invalid input.config-input,
+.config-invalid textarea.config-textarea,
+.config-invalid .config-select {
+	border-color: var(--danger);
+	background-color: var(--danger-soft);
+}
+
+.config-invalid .config-checkbox-item input {
+	border-color: var(--danger);
+}
+
+.config-text {
+	margin: 0;
+	color: var(--fg-muted);
+}
+
+/* 未知控件类型的兜底提示 */
+.config-placeholder {
+	color: var(--danger);
+}

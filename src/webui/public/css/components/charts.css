@@ -1,0 +1,231 @@
+/**
+ * 图表 (line-chart.js / pie-chart.js)
+ *
+ * 折线图与饼图都用 SVG 绘制; 颜色统一从令牌取, 因此随主题切换。
+ */
+
+/* ==================== 公共 ==================== */
+
+.chart-empty {
+	margin: 0;
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+}
+
+/* ==================== 平滑折线图 ====================
+ * 用 grid 摆三块, X 轴因此能自动与绘图区左右对齐:
+ *   yaxis | plot
+ *         | axis
+ */
+
+.line-chart {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	grid-template-rows: 1fr auto;
+	grid-template-areas:
+		"yaxis plot"
+		".     axis";
+
+	width: 100%;
+	height: 100%;
+}
+
+/* Y 轴刻度: 与绘图区同高, 刻度值用绝对定位按数值落位 */
+.line-chart-yaxis {
+	grid-area: yaxis;
+	position: relative;
+
+	padding-right: var(--sp-1);
+
+	font-size: var(--fs-xs);
+	color: var(--fg-subtle);
+	font-variant-numeric: tabular-nums;
+}
+
+.line-chart-yaxis-tick {
+	position: absolute;
+	right: var(--sp-1);
+	/* 让文字垂直居中于它对应的那条网格线 */
+	transform: translateY(-50%);
+	white-space: nowrap;
+}
+
+.line-chart-plot {
+	grid-area: plot;
+	position: relative;
+	min-width: 0;
+	min-height: 0;
+
+	/* 触摸设备上允许纵向滚动页面, 横向拖动交给图表 */
+	touch-action: pan-y;
+}
+
+.line-chart-plot .chart-empty {
+	height: 100%;
+
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.line-chart-svg {
+	display: block;
+	/* 渐变用的 currentColor 取自这里 */
+	color: var(--accent);
+}
+
+/* 水平网格线 */
+.line-chart-grid {
+	stroke: var(--border);
+	stroke-width: 1;
+	shape-rendering: crispEdges;
+}
+
+/* X 轴刻度: 左右留白与绘图区的 PAD_X (6px) 对齐, 否则首尾刻度会偏出 */
+.line-chart-axis {
+	grid-area: axis;
+	display: flex;
+	justify-content: space-between;
+	padding: var(--sp-1) 6px 0;
+
+	font-size: var(--fs-xs);
+	color: var(--fg-subtle);
+}
+
+.line-chart-tick {
+	white-space: nowrap;
+}
+
+.line-chart-tooltip {
+	position: absolute;
+	left: 0;
+	top: 0;
+	z-index: 5;
+	pointer-events: none;
+
+	padding: var(--sp-1) var(--sp-2);
+	border-radius: var(--r-sm);
+
+	background: var(--fg);
+	color: var(--bg-panel);
+	font-size: var(--fs-xs);
+	white-space: nowrap;
+}
+
+.line-chart-tooltip[hidden] {
+	display: none;
+}
+
+.line-chart-cursor {
+	stroke: var(--accent);
+	stroke-width: 1;
+	stroke-dasharray: 4 4;
+	pointer-events: none;
+}
+
+.line-chart-line {
+	fill: none;
+	stroke: var(--accent);
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.line-chart-dot {
+	fill: var(--bg-panel);
+	stroke: var(--accent);
+	stroke-width: 1.5;
+}
+
+/* ==================== 饼图 ==================== */
+
+.pie-chart {
+	/* 浮窗的定位基准 */
+	position: relative;
+	width: 100%;
+
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--sp-3);
+}
+
+.pie-chart .chart-empty {
+	padding: var(--sp-3) 0;
+}
+
+.pie-chart-svg {
+	width: min(160px, 100%);
+	height: auto;
+}
+
+.pie-chart-slice {
+	stroke: var(--bg-panel);
+	stroke-width: 0.5;
+	transition: opacity var(--dur-fast) var(--ease);
+	/* 触摸时不要因为拖动而取消指针事件 */
+	touch-action: none;
+}
+
+.pie-chart-slice:hover {
+	opacity: 0.82;
+}
+
+/* 自绘浮窗: 替代原先的 SVG <title> (样式不可控且移动端不显示) */
+.pie-chart-tooltip {
+	position: absolute;
+	left: 0;
+	top: 0;
+	z-index: 5;
+	pointer-events: none;
+
+	padding: var(--sp-1) var(--sp-2);
+	border-radius: var(--r-sm);
+
+	background: var(--fg);
+	color: var(--bg-panel);
+	font-size: var(--fs-xs);
+	white-space: nowrap;
+}
+
+.pie-chart-tooltip[hidden] {
+	display: none;
+}
+
+.pie-chart-legend {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	width: 100%;
+
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+
+	font-size: var(--fs-sm);
+}
+
+.pie-chart-legend li {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	align-items: center;
+	gap: var(--sp-2);
+}
+
+.pie-chart-swatch {
+	width: 10px;
+	height: 10px;
+	border-radius: var(--r-sm);
+	flex-shrink: 0;
+}
+
+.pie-chart-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.pie-chart-pct {
+	color: var(--fg-muted);
+	font-variant-numeric: tabular-nums;
+}

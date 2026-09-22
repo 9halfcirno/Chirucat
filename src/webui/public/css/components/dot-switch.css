@@ -1,0 +1,102 @@
+/**
+ * 圆形开关 (dot-switch.js)
+ *
+ * 结构: button.dot-switch + .dot-switch-on / .dot-switch-off
+ * 圆点由 ::after 绘制: 启用实心, 停用空心环。
+ */
+
+.dot-switch {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+
+	width: 1.6em;
+	height: 1.6em;
+	padding: 0;
+
+	border: 1px solid transparent;
+	border-radius: 50%;
+	cursor: pointer;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+
+	transition: background-color var(--dur-fast) var(--ease),
+		border-color var(--dur-fast) var(--ease),
+		color var(--dur-fast) var(--ease),
+		transform var(--dur-fast) var(--ease);
+}
+
+.dot-switch::after {
+	content: "";
+	box-sizing: border-box;
+
+	width: 0.75em;
+	height: 0.75em;
+	border-radius: 50%;
+
+	transition: background-color var(--dur-fast) var(--ease),
+		border-color var(--dur-fast) var(--ease);
+}
+
+.dot-switch:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+/* ---- 启用态: 绿色实心点 ---- */
+.dot-switch-on {
+	background: var(--ok-soft);
+	border-color: var(--ok-line);
+	color: var(--ok);
+}
+
+.dot-switch-on::after {
+	background-color: var(--ok);
+}
+
+.dot-switch-on:hover {
+	background: var(--ok-soft);
+	filter: brightness(1.06);
+}
+
+.dot-switch-on:active {
+	transform: scale(0.94);
+}
+
+/* ---- 停用态: 灰色空心环 ---- */
+.dot-switch-off {
+	background: var(--bg-hover);
+	border-color: var(--border-strong);
+	color: var(--fg-muted);
+}
+
+.dot-switch-off::after {
+	background: transparent;
+	border: 0.12em solid currentColor;
+}
+
+.dot-switch-off:hover {
+	background: var(--bg-active);
+}
+
+.dot-switch-off:active {
+	transform: scale(0.94);
+}
+
+/* 状态提交中: 呼吸提示 (由 dot-switch.js 切换 .loading) */
+.dot-switch.loading {
+	animation: dot-pulse 1s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+
+	0%,
+	100% {
+		opacity: 0.85;
+	}
+
+	50% {
+		opacity: 0.45;
+	}
+}
