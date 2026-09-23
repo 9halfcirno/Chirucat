@@ -61,7 +61,7 @@
 	--type-normal-soft: rgba(111, 66, 193, 0.12);
 
 	/* ==================== 颜色 · 遮罩 / 毛玻璃 ==================== */
-	--scrim: rgba(0, 0, 0, 0.14);  /* 窄屏抽屉背后的浅遮罩: 提示"点这里收起" */
+	--scrim: rgba(0, 0, 0, 0.14);  /* 弹窗等浮层背后的遮罩 */
 	--overlay-bg: rgba(243, 243, 243, 0.6); /* SPA 加载遮罩 */
 	--glass-bg: rgba(255, 255, 255, 0.78);
 	--glass-blur: 10px;
@@ -75,7 +75,7 @@
 	--topbar-h: 36px;
 	--activity-w: 44px;
 	--sidebar-w: 232px;
-	--drawer-w: min(78vw, 276px); /* 窄屏抽屉总宽 = 活动栏 + 侧栏 */
+	--sidebar-toggle-h: 40px; /* 窄屏二级菜单 header 条的高度 (与活动栏按钮同高) */
 
 	/* ==================== 结构 · 字体与密度 ==================== */
 	--font-ui: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
@@ -106,8 +106,6 @@
 
 	/* ==================== 结构 · 层级 ====================
 	 * 集中定义, 避免各组件各写一个数字而互相盖住 (下拉浮层曾被弹窗盖住)。 */
-	--z-drawer-scrim: 15;
-	--z-drawer: 20;
 	--z-overlay: 100;
 	--z-dialog: 500;
 	/* 弹窗内的浮层 (下拉面板等): 面板挂在 body 上, 必须高于弹窗才不会被遮 */

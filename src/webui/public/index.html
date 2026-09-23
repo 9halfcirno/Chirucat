@@ -66,13 +66,13 @@
 	<!-- 活动栏: 一级导航, 由 SPA 框架根据注册的页面自动生成 -->
 	<nav id="activity-bar" aria-label="主导航"></nav>
 
-	<!-- 二级侧栏 (#side-bar) 与配套的窄屏汉堡按钮 (#nav-toggle) 当前停用:
-	     bot 管理是以弹窗形式呈现的, 接不进二级菜单。
-	     相关 CSS (layout.css 末尾的抽屉规则) 与框架能力
-	     (framework.js 的 renderSidebar) 都保留着 — 需要时把 <aside> 加回,
-	     并把 layout.css 的 grid 改回三列即可。 -->
-
+	<!-- 次级侧栏 (#side-bar): 二级菜单由页面用 sidebar 数组声明, 框架渲染并处理切换。
+	     未声明该数组、或数组为空时, 框架整块隐藏 (body.nav-collapsed)。
+	     它与 #page-view 同为 #main 的子项: 宽屏横排 (侧栏在左), 窄屏竖排
+	     (成为页面上方的折叠菜单) —— 见 layout.css 与 js/spa/sidebar.js。 -->
 	<div id="main">
+		<aside id="side-bar" aria-label="次级导航"></aside>
+
 		<!-- 页面内容渲染目标: SPA 框架把当前页面渲染到这里 -->
 		<div id="page-view"></div>
 		<noscript>

@@ -24,6 +24,7 @@ const app = createApp({
 	main: document.getElementById("main"),
 	root: document.getElementById("page-view"),
 	nav: document.getElementById("activity-bar"),
+	sidebar: document.getElementById("side-bar"),
 });
 
 /**
@@ -250,37 +251,8 @@ if (themeToggle) {
 	syncThemeLabel();
 }
 
-// ---- 窄屏侧栏抽屉: 顶部按钮展开/收起, 点遮罩或导航后自动收起 ----
-//
-// 二级侧栏当前停用, 所以下面两个元素取不到, 整块会被跳过。
-// 恢复侧栏时 (index.html 加回 <aside id="side-bar"> 与 #nav-toggle) 自动生效。
-const navToggle = document.getElementById("nav-toggle");
-const activityBar = document.getElementById("activity-bar");
-if (navToggle && activityBar) {
-	const setNavOpen = (open) => {
-		document.body.classList.toggle("nav-open", open);
-		navToggle.setAttribute("aria-expanded", String(open));
-		navToggle.setAttribute("aria-label", open ? "收起侧栏" : "展开侧栏");
-	};
-
-	navToggle.addEventListener("click", () => {
-		setNavOpen(!document.body.classList.contains("nav-open"));
-	});
-
-	// 活动栏 / 侧栏 / 开关按钮之外都算"外部": 遮罩与内容区点击即收起
-	document.addEventListener("click", (e) => {
-		if (!document.body.classList.contains("nav-open")) return;
-		if (
-			e.target.closest("#activity-bar") ||
-			e.target.closest("#side-bar") ||
-			e.target.closest("#nav-toggle")
-		) return;
-		setNavOpen(false);
-	});
-
-	// 导航切换后自动收起抽屉 (活动栏按钮/前进后退都会改 hash)
-	window.addEventListener("hashchange", () => setNavOpen(false));
-}
+// 窄屏的二级菜单 (折叠 header 条 / 展开高度) 由 js/spa/sidebar.js 负责,
+// 不再需要独立的汉堡按钮与遮罩点击收起逻辑。
 
 window.onerror = (e, source) => {
 	toast(`Error: ${e} file: ${source}`, {

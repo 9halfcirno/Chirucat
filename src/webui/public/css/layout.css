@@ -2,17 +2,34 @@
  * Chirucat WebUI 布局骨架 — 两级侧栏 (活动栏 + 次级侧栏)
  *
  * 宽屏 (> 768px):
- *   ┌──────────────────────────────────────┐
- *   │ top-nav                              │
- *   ├──────┬───────────┬───────────────────┤
- *   │活动栏 │ 次级侧栏   │   内容区 #main     │
- *   └──────┴───────────┴───────────────────┘
- *   活动栏常驻; 侧栏在页面未提供次级内容时折叠 (body.nav-collapsed)。
+ *   ┌──────────────────────────────────────────────┐
+ *   │ top-nav                                      │
+ *   ├──────┬───────────┬───────────────────────────┤
+ *   │活动栏 │ 次级侧栏   │   内容区 #page-view       │
+ *   └──────┴───────────┴───────────────────────────┘
  *
  * 窄屏 (<= 768px):
- *   活动栏常驻, 次级侧栏变为抽屉。展开 (body.nav-open) 时 #main 被向右
- *   推出视口 —— 侧栏"挤占"而非"覆盖"内容区。仍可见的那部分内容区盖上
- *   一层浅遮罩 (--scrim), 提示"点这里收起", 点击处理见 app.js。
+ *   ┌──────────────────────────────────────────────┐
+ *   │ top-nav                                      │
+ *   ├──────┬───────────────────────────────────────┤
+ *   │活动栏 │ 二级菜单 header 条 (常驻, 点击折叠/展开) │
+ *   │      ├───────────────────────────────────────┤
+ *   │      │ 菜单内容 (高度由 JS 控制, 上限 #main 80%)│
+ *   │      ├───────────────────────────────────────┤
+ *   │      │ 内容区 #page-view                     │
+ *   └──────┴───────────────────────────────────────┘
+ *
+ * 次级侧栏 (#side-bar) 与内容区 (#page-view) 同为 #main 的 flex 子项, 两种屏宽
+ * 共用同一份 DOM, 只是排列方向不同: 宽屏横排 (侧栏在左), 窄屏竖排 (菜单在上)。
+ * 因此断点处不需要搬迁节点, 只改 #main 的 flex-direction。
+ *
+ * 窄屏的菜单不是覆盖内容区的抽屉, 而是内容区上方的一条折叠面板: 它长高多少,
+ * 内容区就被往下顶多少 (内容区高度锁定为 #main 高度减去 header 条, 不随菜单
+ * 收缩), 顶出 #main 的部分由 #main 的 overflow: hidden 裁掉 —— 与宽屏"侧栏
+ * 挤占内容区"同一套心智, 只是方向从横向变成纵向。
+ *
+ * 页面未声明 sidebar 数组、或数组为空时, 侧栏整块隐藏 (body.nav-collapsed),
+ * 内容区占满 (由 js/spa/sidebar.js 切换该 class)。
  *
  * 本文件只负责骨架与区域摆放; 按钮 / 输入框 / 卡片等共用原语在 base.css。
  */
@@ -33,9 +50,8 @@ body {
 
 body {
 	display: grid;
-	/* 二级侧栏当前停用 (说明见文件末尾), 因此网格只有 活动栏 + 内容区 两列。
-	   恢复三列布局: 这里改回 var(--sidebar-w, 232px)、区域串补上 sidebar,
-	   并在 index.html 里加回 <aside id="side-bar">。 */
+	/* 两列: 活动栏 + 内容区。次级侧栏不占网格列 —— 它是 #main 的内部结构,
+	   宽窄屏切换只改 #main 的排列方向, body 网格始终两列。 */
 	grid-template-columns: var(--activity-w, 44px) 1fr;
 	grid-template-rows: var(--topbar-h, 36px) 1fr;
 	grid-template-areas:
@@ -48,12 +64,9 @@ body {
 	color: var(--fg);
 	background: var(--bg-app);
 
-	/* 窄屏抽屉把 #main 推出视口时, 抑制水平滚动条 */
+	/* 窄屏菜单把内容区顶出可视区时, 抑制多余滚动条 */
 	overflow: hidden;
 }
-
-/* 注: body.nav-collapsed 仍由 framework.js 的 renderSideBar 维护, 但二级侧栏
-   停用期间它没有样式效果 (网格已无 sidebar 列)。 */
 
 /* ==================== 顶部栏 ==================== */
 
@@ -111,8 +124,6 @@ body {
 :root[data-theme-mode="dark"] #theme-toggle .theme-icon-dark {
 	display: block;
 }
-
-/* 窄屏汉堡按钮 (#nav-toggle) 随二级侧栏一起停用, 已从 index.html 移除 */
 
 /* ==================== 活动栏 (一级导航) ==================== */
 
@@ -177,10 +188,34 @@ body {
 	height: 20px;
 }
 
+/* ==================== 内容区 (侧栏 + 页面) ==================== */
+
+#main {
+	grid-area: main;
+	position: relative; /* .spa-overlay 的定位基准 */
+
+	/* 侧栏与页面共处一个 flex 容器: 宽屏横排, 窄屏竖排 (见文件末尾的媒体查询)。
+	   用 flex 而不是把侧栏当 body 网格的一列, 是为了让窄屏下菜单的高度能动、
+	   页面能跟着被顶开 —— 两种形态共享同一份 DOM, 断点处无需搬迁。 */
+	display: flex;
+	flex-direction: row;
+
+	/* 防止长内容撑破 grid 轨道: min-*:0 让 1fr 轨道可收缩,
+	   否则内部百分比高度链失效 */
+	min-width: 0;
+	min-height: 0;
+
+	/* 窄屏: 菜单顶开页面后, 超出可视区的部分在这里裁掉 (见媒体查询) */
+	overflow: hidden;
+}
+
 /* ==================== 次级侧栏 ==================== */
 
 #side-bar {
-	grid-area: sidebar;
+	/* 固定宽度, 不参与伸缩; 窄屏下改为占满整行 (见媒体查询) */
+	flex: 0 0 auto;
+	width: var(--sidebar-w, 232px);
+	min-width: 0;
 
 	display: flex;
 	flex-direction: column;
@@ -190,36 +225,92 @@ body {
 
 	overflow-y: auto;
 	overflow-x: hidden;
-
-	transition: opacity var(--dur-slow) var(--ease);
 }
 
-/* 页面未提供次级内容时让位 (由框架切换 body.nav-collapsed) */
+/* 页面未提供次级内容时整块让位 (由 framework.js 切换 body.nav-collapsed)。
+   这里是 display: none 而不是留出一列空白 —— 页面直接占满内容区。 */
 body.nav-collapsed #side-bar {
-	overflow: hidden;
-	visibility: hidden;
+	display: none;
 }
 
-/* ==================== 内容区 ==================== */
+/* 侧栏内容宿主: 框架创建, 二级菜单项由 js/spa/sidebar.js 渲染进来。
+   纵向排列 + align-items: stretch, 每一项都占满侧栏宽度。 */
+.spa-sidebar {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
 
-#main {
-	grid-area: main;
-	position: relative; /* .spa-overlay 的定位基准 */
+	flex: 0 0 auto;
+	min-width: 0;
+}
 
-	/* 防止长内容撑破 grid 轨道: min-*:0 让 1fr 轨道可收缩,
-	   否则内部百分比高度链失效 */
+/* 二级菜单项: 纯文字 (无背景无边框), 左对齐, 撑满侧栏宽度。
+   选中态沿用活动栏的做法 (左侧 2px 强调竖条 + 底色), 两处导航观感一致。 */
+.spa-sidebar-item {
+	position: relative;
+
+	/* 不参与伸缩: 容器高度不足时 (收起态的 height: 0, 或展开后封顶的高度),
+	   该被裁掉的是溢出部分, 而不是把每一项压扁 —— 压扁不光难看, 还会让
+	   scrollHeight 量出一个偏小的"自然高度", 展开高度跟着变小。 */
+	flex: 0 0 auto;
+
+	display: block;
+	width: 100%;
+	padding: var(--sp-1) var(--sp-3);
+
+	border: 0;
+	background: transparent;
+	color: var(--fg-muted);
+	font-family: inherit;
+	font-size: var(--fs);
+	line-height: var(--lh);
+	text-align: left;
+
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+
+	cursor: pointer;
+	transition: color var(--dur-fast) var(--ease),
+		background-color var(--dur-fast) var(--ease);
+}
+
+.spa-sidebar-item:hover {
+	color: var(--fg);
+	background: var(--bg-hover);
+}
+
+.spa-sidebar-item.active {
+	color: var(--fg);
+	background: var(--bg-active);
+}
+
+/* 选中态: 左侧 2px 强调色竖条 (与活动栏按钮同款) */
+.spa-sidebar-item.active::before {
+	content: "";
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: 2px;
+	background: var(--accent);
+}
+
+.spa-sidebar-item:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+/* 窄屏折叠开关 (菜单 header 条)。宽屏不显示 —— 那里的侧栏常驻, 没有折叠这回事 */
+.sidebar-toggle {
+	display: none;
+}
+
+/* ==================== 页面渲染目标 ==================== */
+
+#page-view {
+	flex: 1 1 auto;
+
 	min-width: 0;
 	min-height: 0;
-	overflow: hidden;
-
-	transition: transform var(--dur-slow) var(--ease),
-		opacity var(--dur-slow) var(--ease);
-}
-
-/* 页面渲染目标: 唯一滚动容器 */
-#page-view {
-	width: 100%;
-	height: 100%;
 	overflow: auto;
 	padding: var(--sp-3);
 }
@@ -307,63 +398,104 @@ body:not(.authed) #main {
 	color: var(--danger);
 }
 
-/* ==================== 窄屏: 侧栏挤出式抽屉 ==================== */
+/* ==================== 窄屏: 菜单折叠在页面上方 ==================== */
 
 @media (max-width: 768px) {
 
-	/* 单列布局已由基础规则提供 (网格只有两列, 宽窄屏一致)。
-	   以下为二级侧栏抽屉的规则 —— 该能力当前停用, 保留供日后恢复。 */
-
-	/* 活动栏层级必须高于抽屉 (z-index 20):
-	   一级导航在窄屏永不被侧栏遮挡, 始终可见可点。
-	   不依赖 z-index 顺序而依赖定位位置也行, 但两者都做着更保险。 */
-	#activity-bar {
-		position: relative;
-		z-index: 30;
+	/* 竖排: 菜单在上, 页面在下 */
+	#main {
+		flex-direction: column;
 	}
 
-	/* 侧栏变抽屉: 默认收起 (向左整体移出视口) */
+	/* 菜单占满整行, 与页面之间改用横向分隔线 */
 	#side-bar {
-		position: fixed;
-		top: var(--topbar-h, 36px);
-		bottom: 0;
-		/* 从活动栏右边缘开始 —— 与下面 #main 的平移量是同一基准,
-		   两者配套才能得到"侧栏刚好占住内容区让出的位置" */
-		left: var(--activity-w, 44px);
-		right: auto;
-		z-index: var(--z-drawer);
+		width: 100%;
+		border-right: 0;
+		border-bottom: 1px solid var(--border);
 
-		width: calc(var(--drawer-w, 276px) - var(--activity-w, 44px));
-		max-width: calc(100vw - var(--activity-w, 44px));
-
-		visibility: hidden;
-		/* 偏移量必须同时覆盖自身宽度和 left 偏移 (--activity-w):
-		   只写 -100% 的话右边缘会停在 43px, 仍然压在活动栏 (0~44px) 区域上,
-		   展开/收起动画期间就会看到侧栏从活动栏身上划过。 */
-		transform: translateX(calc(-100% - var(--activity-w, 44px)));
-		transition: transform var(--dur-slow) var(--ease),
-			visibility 0s linear var(--dur-slow);
+		/* 滚动交给菜单内容 (.spa-sidebar): header 条必须常驻, 不能被一起滚走 */
+		overflow: visible;
 	}
 
-	body.nav-open #side-bar,
-	body.nav-open.nav-collapsed #side-bar {
-		visibility: visible;
-		transform: none;
-		transition: transform var(--dur-slow) var(--ease),
-			visibility 0s;
+	/* 折叠开关条: 整宽命中区, 高 --sidebar-toggle-h (与活动栏按钮一致) */
+	.sidebar-toggle {
+		display: flex;
+		align-items: center;
+		gap: var(--sp-2);
+
+		width: 100%;
+		height: var(--sidebar-toggle-h);
+		padding: 0 var(--sp-2);
+
+		border: 0;
+		background: transparent;
+		color: var(--fg-muted);
+		font-family: inherit;
+		font-size: var(--fs-sm);
+		font-weight: 600;
+		text-align: left;
+		cursor: pointer;
+
+		transition: color var(--dur-fast) var(--ease),
+			background-color var(--dur-fast) var(--ease);
 	}
 
-	/* 抽屉展开: 内容区被向右推出, 把位置让给侧栏 (挤出而非覆盖) */
-	body.nav-open #main {
-		transform: translateX(calc(var(--drawer-w, 276px) - var(--activity-w, 44px)));
+	.sidebar-toggle:hover {
+		color: var(--fg);
+		background: var(--bg-hover);
 	}
 
-	/* 浅遮罩: 只覆盖仍可见的那段内容区, 提示"点这里收起" */
-	body.nav-open::after {
-		content: "";
-		position: fixed;
-		inset: 0 0 0 var(--drawer-w, 276px);
-		z-index: var(--z-drawer-scrim);
-		background: var(--scrim);
+	.sidebar-toggle:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+
+	/* 折叠三角: 展开朝下, 收起朝右 (与配置表格 / 插件分组的折叠按钮同款) */
+	.sidebar-toggle-caret {
+		flex: 0 0 auto;
+		width: 0;
+		height: 0;
+
+		border-left: 4px solid transparent;
+		border-right: 4px solid transparent;
+		border-top: 5px solid currentColor;
+
+		transform: rotate(-90deg); /* 收起 */
+		transition: transform var(--dur-slow) var(--ease);
+	}
+
+	.sidebar-toggle[aria-expanded="true"] .sidebar-toggle-caret {
+		transform: none; /* 展开 */
+	}
+
+	.sidebar-toggle-label {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* 菜单内容: 高度由 sidebar.js 写成具体像素 (上限 = #main 的 80% 减 header 条),
+	   这里只负责动画与裁剪。高度只能在 JS 里算 —— "内容自然高度"与"容器高度的
+	   80%"里较小的那个, CSS 拿不到。
+	   时长须与 sidebar.js 的 animMs 一致 (默认 280ms, 即 --dur-slow)。 */
+	.spa-sidebar {
+		height: 0; /* 收起态; 展开时由 JS 写成具体像素 */
+		overflow: hidden;
+		transition: height var(--dur-slow) var(--ease);
+	}
+
+	/* 高度已封顶、内容仍装不下时, 由菜单自身滚动。
+	   滚动条由 JS 在高度动画结束后才放出, 免得动画途中就跟着高度一起冒出来。 */
+	.spa-sidebar.scrollable {
+		overflow-y: auto;
+	}
+
+	/* 页面: 高度锁定为 "#main 高度 - header 条"且不参与伸缩, 因此菜单长高多少,
+	   它就被顶下去多少 —— 顶出 #main 的部分由上面的 overflow: hidden 裁掉。
+	   这里刻意不做"压缩页面高度": 那会让页面底部跟着上收 (看起来像被挤扁),
+	   而不是被整个推开。 */
+	#page-view {
+		/* flex: 0 0 calc(100% - var(--sidebar-toggle-h)); */
 	}
 }

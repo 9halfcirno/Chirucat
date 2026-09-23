@@ -18,8 +18,9 @@
  *   async render(container) {   // 可选: 渲染页面内容到 container (框架提供的页面子容器)
  *     container.textContent = "hello";
  *   },
- *   async renderSidebar(container) { }, // 可选: 填充次级侧栏 (#side-bar);
- *                                      // 未实现或渲染后为空则折叠侧栏, 内容区占满
+ *   sidebar: [                  // 可选: 二级菜单项, 框架渲染侧栏并处理切换
+ *     { title: "项一", render(container) { } },
+ *   ],                          // 未提供或为空则侧栏隐藏, 内容区占满
  *   destroy() { },              // 可选: 页面被切换走时的清理
  * };
  * ```
@@ -34,6 +35,7 @@
  * ```
  */
 import { createOverlay } from "./overlay.js";
+import { createSidebar } from "./sidebar.js";
 import { attachTooltip } from "./components/tooltip.js";
 
 /**
@@ -82,6 +84,7 @@ function loadStyles(urls) {
  * @param {HTMLElement} [options.sidebar] 次级侧栏, 默认 #side-bar
  * @param {number} [options.minLoadTime=250] 加载遮罩最小时长(ms), 0 表示不限制
  * @param {number} [options.fadeMs=200] 遮罩淡入/淡出动画时长(ms), 需与 CSS 的 transition 一致
+ * @param {number} [options.sidebarAnimMs=280] 窄屏折叠菜单的高度动画时长(ms), 需与 CSS 的 --dur-slow 一致
  * @returns {{ register: Function, navigate: Function, start: Function }}
  */
 export function createApp(options = {}) {
@@ -99,6 +102,11 @@ export function createApp(options = {}) {
 	const minLoadTime = options.minLoadTime ?? 250;
 	const fadeMs = options.fadeMs ?? 200;
 	const overlay = createOverlay(main, { minShowTime: minLoadTime, fadeMs });
+
+	// 次级侧栏: 内容由页面提供, 窄屏下的折叠菜单 (header 条 / 高度上限 / 动画) 见 sidebar.js
+	const sidebar = sideBar
+		? createSidebar({ container: sideBar, main, animMs: options.sidebarAnimMs ?? 280 })
+		: null;
 
 	/** @type {Map<string, { id: string, title: string, icon?: string, load: () => Promise<object> }>} */
 	const pages = new Map();
@@ -189,30 +197,20 @@ export function createApp(options = {}) {
 	/**
 	 * 渲染当前页面的次级侧栏
 	 *
-	 * 页面模块可选实现 renderSidebar(container) 来填充 #side-bar。
-	 * 未实现、或渲染后容器为空时, 给 body 加 nav-collapsed 折叠侧栏
-	 * (宽屏下把宽度让给内容区, 窄屏下用户仍可用汉堡按钮展开抽屉)。
-	 *
-	 * 侧栏渲染失败不应连带整页失败, 所以单独捕获并只记录日志。
+	 * 页面通过 sidebar 数组声明二级菜单项, 由 sidebar.js 渲染并处理点击切换
+	 * (只换界面, 不动地址栏)。未提供或为空时整块隐藏 (body.nav-collapsed),
+	 * 内容区占满; 窄屏下侧栏是内容区上方的折叠菜单, 每次换页回到收起状态。
 	 *
 	 * @param {object} page 页面模块
+	 * @param {HTMLElement} view 页面容器, 作为菜单项内容的落点
 	 */
-	async function renderSideBar(page) {
-		if (!sideBar) return;
-
-		const host = document.createElement("div");
-		host.className = "spa-sidebar";
-		sideBar.replaceChildren(host);
-
-		if (typeof page.renderSidebar === "function") {
-			try {
-				await page.renderSidebar(host);
-			} catch (err) {
-				console.error(`[SPA] 渲染页面 ${page.id} 的次级侧栏失败:`, err);
-			}
+	async function renderSideBar(page, view) {
+		if (!sidebar) {
+			// 页面上没有 #side-bar 元素: 保持无侧栏的布局
+			document.body.classList.add("nav-collapsed");
+			return;
 		}
-
-		document.body.classList.toggle("nav-collapsed", host.childElementCount === 0);
+		await sidebar.render(page, view);
 	}
 
 	/**
@@ -288,8 +286,8 @@ export function createApp(options = {}) {
 			await page.render?.(view);
 			if (seq !== navSeq) return; // 渲染期间被更新的导航取代
 
-			// 次级侧栏: 页面可选实现 renderSidebar
-			await renderSideBar(page);
+			// 次级侧栏: 页面可选声明 sidebar 数组
+			await renderSideBar(page, view);
 			if (seq !== navSeq) return;
 		} catch (err) {
 			if (seq === navSeq) {
