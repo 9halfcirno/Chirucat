@@ -12,7 +12,7 @@
  * ```js
  * export default {
  *   id: "bots",                 // 页面唯一标识, 同时作为 hash 路由段
- *   title: "机器人",            // 页面名, 用于按钮悬停提示
+ *   title: "机器人",            // 页面名: 按钮的可访问名 + 悬停时右侧弹出的提示
  *   icon: "/img/icons/bot.svg", // 活动栏按钮图标 (SVG 资源路径, 以 mask 渲染并跟随主题色)
  *   styles: ["/js/pages/bots/bots.css"], // 可选: 页面专属样式表, 进入时动态加载, 离开时移除
  *   async render(container) {   // 可选: 渲染页面内容到 container (框架提供的页面子容器)
@@ -34,6 +34,7 @@
  * ```
  */
 import { createOverlay } from "./overlay.js";
+import { attachTooltip } from "./components/tooltip.js";
 
 /**
  * 动态加载一组页面样式表
@@ -103,6 +104,8 @@ export function createApp(options = {}) {
 	const pages = new Map();
 	/** @type {Map<string, HTMLButtonElement>} */
 	const buttons = new Map();
+	/** @type {Array<() => void>} 各按钮的浮窗解绑函数, 重建导航时先解绑旧的 */
+	const detachTooltips = [];
 
 	/** @type {{ id: string, page: object, links: HTMLLinkElement[] } | null} 当前打开的页面 */
 	let current = null;
@@ -142,13 +145,20 @@ export function createApp(options = {}) {
 
 	/** 根据注册的页面渲染侧边栏按钮 */
 	function renderNav() {
+		// 重建前先解绑旧按钮的浮窗: 旧按钮随 replaceChildren 废弃, 若它上面
+		// 还挂着正在显示的提示, 提示会停在一个已不存在的锚点旁
+		for (const detach of detachTooltips.splice(0)) detach();
+
 		nav.replaceChildren();
 		buttons.clear();
 		for (const def of pages.values()) {
 			const btn = document.createElement("button");
 			btn.type = "button";
 			btn.className = "activity-btn";
-			btn.title = def.title;
+			// 原生 title 换成了自绘浮窗 (位置由浏览器定的原生提示会压在按钮上,
+			// 而这里要的是 VS Code 那样出现在按钮右侧), 可访问名得自己补上
+			btn.setAttribute("aria-label", def.title);
+			detachTooltips.push(attachTooltip(btn, def.title));
 			if (def.icon) {
 				// mask 图标: 颜色跟随 currentColor, 从而适配深浅主题 (见 base.css 的 .icon)
 				const icon = document.createElement("span");

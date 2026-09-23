@@ -1,0 +1,41 @@
+/* 悬停提示浮窗: 导航按钮等锚点的 title 替代品 (逻辑见 js/spa/components/tooltip.js) */
+
+.spa-tooltip {
+	position: fixed;
+	/* 定位完全由 tooltip.js 写 transform 完成, left/top 固定为 0:
+	   这样每次显示只改 transform, 不触发重排 */
+	left: 0;
+	top: 0;
+	z-index: var(--z-tooltip);
+
+	/* 提示都短, 宽度自适应; 给个上限避免长文本拉成一条 */
+	max-width: min(320px, 60vw);
+	padding: 3px var(--sp-2);
+
+	background: var(--bg-elevated);
+	color: var(--fg);
+	border: 1px solid var(--border);
+	border-radius: var(--r-sm);
+	box-shadow: var(--shadow-1);
+
+	font-size: var(--fs-sm);
+	line-height: 1.35;
+
+	/* 浮窗绝不能碰鼠标: 压到锚点上会立刻触发 pointerleave,
+	   变成"一显就隐"的抖动 */
+	pointer-events: none;
+
+	/* 淡入淡出。visibility 也参与过渡 (用 0s 延迟切换):
+	   隐藏后彻底不参与命中测试, 也不被读屏看见 */
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity var(--dur-fast) var(--ease),
+		visibility 0s linear var(--dur-fast);
+}
+
+.spa-tooltip-visible {
+	opacity: 1;
+	visibility: visible;
+	transition: opacity var(--dur-fast) var(--ease),
+		visibility 0s;
+}
