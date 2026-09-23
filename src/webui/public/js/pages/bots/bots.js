@@ -162,12 +162,14 @@ function createBotCard(bot) {
 				dotSwh.setAttribute("aria-label", label);
 				dotSwh.setAttribute("aria-pressed", String(res.state));
 				toast((bot.name ?? bot.id) + (res.state ? "已启用" : "已停用"));
+				return res.state;
 			} else {
 				toast(`设置状态失败: ${res.err || "未知错误"}`, { type: "error", duration: 5000 });
 			}
-			return res.state;
+			return enabled;
 		} catch (err) {
 			toast(`设置Bot状态失败: ${err.message}`, { type: "error", duration: 5000 });
+			return enabled;
 		}
 	}, enabled);
 	dotSwh.title = enabled ? "点击停用" : "点击启用";
