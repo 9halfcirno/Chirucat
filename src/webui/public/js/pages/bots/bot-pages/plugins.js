@@ -275,7 +275,7 @@ export default {
 			const dialog = createDialogWindow(`${item.name}(${item.id})的插件配置`, inner, [
 				{ name: "保存", onclick: () => save() },
 				{ name: "取消", onclick: () => dialog.closeDialog() },
-			], true)
+			], { cancelable: true, maximize: true })
 			document.body.append(dialog)
 
 			try {

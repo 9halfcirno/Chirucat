@@ -8,6 +8,14 @@
 	height: 80vh;
 }
 
+/* 窗口最大化时, 详情体跟随撑满 —— 80vw/80vh 是普通窗口下的尺寸, 不覆盖的话
+   最大化后四周会留一圈空白。
+   百分比高度能生效, 是因为 .dialog-window-inner 在 .maximize 下有了确定高度。 */
+.dialog-window.maximize .bot-div {
+	width: 100%;
+	height: 100%;
+}
+
 /* ---- 弹窗内的图标导航条 ---- */
 .bot-nav {
 	display: flex;

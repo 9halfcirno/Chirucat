@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?><!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
+<!-- viewBox 收到路径墨迹范围 (3..21, 即 18x18; 几何中心仍是 12,12, mask 居中不偏),
+     使图形占满 viewBox 的约 86%, 与 restore.svg 的约 88% 相当 ——
+     否则两者切换时图标会明显一大一小。 -->
+<svg width="800px" height="800px" viewBox="1.5 1.5 21 21" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <path stroke="#000000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V6a2 2 0 0 1 2-2h2m8 0h2a2 2 0 0 1 2 2v2m0 8v2a2 2 0 0 1-2 2h-2m-8 0H6a2 2 0 0 1-2-2v-2"/>
+</svg>

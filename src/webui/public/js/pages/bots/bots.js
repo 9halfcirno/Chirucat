@@ -93,7 +93,7 @@ export default {
 			}, {
 				name: "取消",
 				onclick: () => dialog.closeDialog(),
-			}], true);
+			}], { cancelable: true });
 			document.body.append(dialog);
 
 			// Enter 快捷提交 (与点"确定"等价)
@@ -189,7 +189,10 @@ function createBotCard(bot) {
 			"Bot信息", 
 			createBotContent(bot),
 			[],
-			true);
+			{
+				cancelable: true,
+				maximize: true
+			});
 		document.body.append(dialog);
 	}
 

@@ -87,10 +87,10 @@ function showDeleteConfirm(bot, container) {
 		"删除Bot确认?",
 		content,
 		[
-			{ name: "确定", onclick: handleConfirm },
+			{ name: "确定", onclick: handleConfirm, danger: true },
 			{ name: "取消", onclick: () => ensure.closeDialog() }
 		],
-		true
+		{ cancelable: true }
 	)
 
 	async function handleConfirm() {

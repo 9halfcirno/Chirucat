@@ -5,10 +5,10 @@ import { createIconButton } from "./icon-button.js";
  * 
  * @param {string} title 
  * @param {string | HTMLElement} inner 
- * @param {{ name: string, onclick: (event: PointerEvent) => void}[]} btns 
- * @param {boolean} cancelable 
+ * @param {{ name: string, onclick: (event: PointerEvent) => void, danger?: boolean }[]} btns 
+ * @param {{ cancelable?: boolean, maximize?: boolean }} [option] 设置窗口属性
  */
-export function createDialogWindow(title, inner, btns, cancelable) {
+export function createDialogWindow(title, inner, btns, option = {}) {
 	const base = document.createElement("div");
 	base.classList.add("dialog-window-base");
 
@@ -24,7 +24,24 @@ export function createDialogWindow(title, inner, btns, cancelable) {
 	titleSpan.innerHTML = title || "Dialog";
 	header.append(titleSpan);
 
-	if (cancelable) {
+
+	// 窗口尺寸
+	if (option.maximize) { // 默认是正常
+		let maxBtn = createIconButton("/img/icons/maximize.svg", () => {
+			win.classList.add("maximize");
+			maxBtn.style.display = "none";
+			resBtn.style.removeProperty("display");
+		})
+		let resBtn = createIconButton("/img/icons/restore.svg", () => {
+			win.classList.remove("maximize");
+			resBtn.style.display = "none";
+			maxBtn.style.removeProperty("display");
+		})
+		resBtn.style.display = "none";
+		header.append(maxBtn, resBtn)
+	}
+
+	if (option.cancelable) {
 		// 统一的关闭出口: 移除键盘监听后再删除节点, 避免多次打开时监听器泄漏
 		const onKeydown = (e) => {
 			if (e.key === "Escape") close();
@@ -34,10 +51,6 @@ export function createDialogWindow(title, inner, btns, cancelable) {
 			base.remove();
 		};
 
-		// 点击遮罩自身关闭 (点窗口内部不关)
-		// base.onclick = (e) => {
-		// 	if (e.target === base) close();
-		// };
 		// Esc 关闭 (仅 cancelable 对话框; 生命周期随对话框, 不会串到下一个对话框)
 		document.addEventListener("keydown", onKeydown);
 
@@ -70,6 +83,9 @@ export function createDialogWindow(title, inner, btns, cancelable) {
 
 		for (let btn of btns) {
 			let btnEle = createButton(btn.name || "", btn.onclick || null);
+			if (btn.danger) {
+				btnEle.classList.add("danger");
+			}
 			btnBar.append(btnEle);
 		}
 	}

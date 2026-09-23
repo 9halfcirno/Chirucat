@@ -44,6 +44,20 @@
 	box-shadow: var(--shadow-2);
 }
 
+/* 最大化 (createDialogWindow 的 maximize 选项挂上这个类):
+   撑满视口可用区域, 只留一圈边距。宽高必须显式写死 —— 基类的
+   width: fit-content 和高度自适应都是按内容算的, 不覆盖则窗口纹丝不动。
+   高度固定后长内容照旧交给 .dialog-window-inner 内部滚动。 */
+.dialog-window.maximize {
+	width: calc(100vw - var(--sp-6));
+	height: calc(100vh - var(--sp-6));
+
+	/* 放开基类的视口上限: 宽高已自带上限, 这里并存只是重复约束,
+	   写出来是为了让"最大化不受 max-* 影响"这件事在代码里可见 */
+	max-width: none;
+	max-height: none;
+}
+
 .dialog-window header {
 	display: flex;
 	flex-direction: row;
@@ -62,7 +76,18 @@
 	height: calc(var(--ctl-h) - 4px);
 }
 
+/* 标题占满 header 的剩余空间, 把右上角的图标按钮 (最大化/还原/关闭) 推到
+   最右边并彼此紧靠。缺了 flex: 1, 这些按钮会被 space-between 均匀散开,
+   最大化和关闭之间空出一大块。 */
 .dialog-window-title {
+	flex: 1;
+	min-width: 0;
+
+	/* 标题过长时截断, 而不是换行把 header 顶高 */
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+
 	font-size: var(--fs);
 	font-weight: 600;
 	color: var(--fg);
