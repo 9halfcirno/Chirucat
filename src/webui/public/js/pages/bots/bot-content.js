@@ -1,4 +1,5 @@
 import { createIconButton } from "../../spa/components/icon-button.js";
+import { attachTooltip } from "../../spa/components/tooltip.js";
 
 /**
  * 创建bot的弹窗内容
@@ -40,7 +41,8 @@ export function createBotContent(bot) {
 			main.replaceChildren();
 			module.render(main, bot);
 		});
-		iconBtn.title = module.title;
+		iconBtn.setAttribute("aria-label", module.title);
+		attachTooltip(iconBtn, module.title);
 
 		if (currentPage === null) {
 			iconBtn.click();
