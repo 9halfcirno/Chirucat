@@ -78,6 +78,8 @@ export function createSidebar({ container, main, animMs = 280 }) {
 
 	const narrow = matchMedia(NARROW_QUERY);
 
+	let sidebarPage = null;
+
 	// ---- 当前页面的二级菜单 ----
 	/** @type {HTMLElement | null} 菜单项宿主 (每次换页重建) */
 	let host = null;
@@ -231,7 +233,8 @@ export function createSidebar({ container, main, animMs = 280 }) {
 			return;
 		}
 		if (seq !== selectSeq) return; // 已被后续点击取代
-
+		collapse(); // 关闭二级菜单
+		label.textContent = `${sidebarPage.title} / ${item.title}` ?? item.title; // 更新toggle文本
 		// 窄屏展开状态下换项: 内容高度可能变了, 重算一次, 否则新内容会被裁掉
 		if (expanded && narrow.matches) applyHeight();
 	}
@@ -264,13 +267,13 @@ export function createSidebar({ container, main, animMs = 280 }) {
 			if (e.propertyName === "height") settle();
 		});
 
+		sidebarPage = page;
 		host = next;
 		content = null;
 		buttons = [];
 		currentItems = items;
 		activeIndex = -1;
 		selectSeq++;
-		label.textContent = page.title ?? "";
 
 		// 换页即换菜单: 新宿主连同 header 条一起换上, 折叠状态回到收起
 		container.replaceChildren(toggle, next);
