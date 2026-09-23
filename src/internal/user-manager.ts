@@ -1,5 +1,6 @@
 import sqlite from "better-sqlite3";
 import { uuid } from "../utils/uuid";
+import { StateError } from "../errors/state-error";
 
 export type UserPlatformInfo = {
 	/** 用户平台id */
@@ -11,12 +12,12 @@ export type UserPlatformInfo = {
 export class UserManager {
 	db: sqlite.Database;
 
-	constructor(file: string) {
-		this.db = new sqlite(file, {});
-		this.db.pragma("foreign_keys = ON");
+	constructor(db: sqlite.Database) {
+		this.db = db;
 	}
 
 	init() {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
 		this.db.exec(`
             -- 1. 账号映射表：存储平台账号的唯一标识（账号 UUID）
             CREATE TABLE IF NOT EXISTS account_map (
@@ -44,6 +45,7 @@ export class UserManager {
 	 * @returns 账号 UUID
 	 */
 	get(platform: string, id: string): string {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
 		const getOrCreate = this.db.transaction((platformName: string, platformId: string) => {
 			// 1. 查找账号 UUID
 			let mapRow = this.db.prepare(
@@ -81,11 +83,13 @@ export class UserManager {
 	}
 
 	has(platform: string, id: string) {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
+
 		let has = this.db.transaction((p: string, id: string) => {
 			let res = this.db.prepare(`
 				SELECT EXISTS (SELECT 1 FROM account_map WHERE platform_name = ? AND platform_id = ?) AS is_exist
 			`).get(platform, id) as { is_exist: boolean } | undefined;
-			
+
 			if (!res?.is_exist) return false;
 			return true;
 		})
@@ -100,6 +104,8 @@ export class UserManager {
 	 * @param accountUuid 账号 UUID（必须已存在于 account_map）
 	 */
 	bind(internalId: string, accountUuid: string): void {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
+
 		this.db.transaction(() => {
 			// 校验账号是否存在
 			const physical = this.db.prepare(
@@ -126,6 +132,8 @@ export class UserManager {
 	 * @returns 是否成功解绑（若账号不存在或当前内部组 ID 不匹配则返回 false）
 	 */
 	unbind(internalId: string, accountUuid: string): boolean {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
+
 		return this.db.transaction(() => {
 			// 检查该账号当前所属的内部组 ID 是否匹配
 			const current = this.db.prepare(
@@ -152,6 +160,8 @@ export class UserManager {
 	 * @returns 平台信息，若不存在则返回 null
 	 */
 	query(accountUuid: string): UserPlatformInfo | null {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
+
 		const row = this.db.prepare(
 			'SELECT platform_name, platform_id FROM account_map WHERE uuid = ?'
 		).get(accountUuid) as { platform_name: string; platform_id: string } | undefined;
@@ -171,6 +181,8 @@ export class UserManager {
 	 * @returns 内部组 ID（internal id）；若账号不存在则返回 null
 	 */
 	getUnion(accountId: string): string | null {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
+
 		// 账号不存在则返回默认值 null（避免向 internal_map 写入孤立记录触发外键约束报错）
 		const exists = this.db.prepare(
 			'SELECT 1 FROM account_map WHERE uuid = ?'

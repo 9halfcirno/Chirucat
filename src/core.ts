@@ -9,15 +9,19 @@ import Logger from "./utils/logger";
 import { dirCheck } from "./utils/dir-check";
 import type { StatisticsManager } from "./statistics/manager";
 import type { WebUIServer } from "./webui/server/server";
+import sqlite from "better-sqlite3";
 
 const logger = new Logger("Core")
 
 export class Core {
+	private _disposed: boolean = false;
 	config: CoreOption = {
 		webui: true,
 	};
-	bot = new BotManager(this)
-	botHelper = new BotHelper(this)
+	bot = new BotManager(this);
+	botHelper = new BotHelper(this);
+
+	private internalDB: sqlite.Database | null = null;
 	user: UserManager | null = null;
 	session: SessionManager | null = null;
 
@@ -33,8 +37,15 @@ export class Core {
 		// 验证目录
 		await dirCheck(path.join(root, "data"));
 
-		this.user = new UserManager(path.join(root, "data", "internal.db"));
-		this.session = new SessionManager(path.join(root, "data", "internal.db"));
+		let dbPath = path.join(root, "data", "internal.db");
+
+
+		this.internalDB = new sqlite(dbPath);
+		this.internalDB.pragma('journal_mode = WAL'); // 设为WAL, 因为需要抗高并发
+		this.internalDB.pragma('synchronous = NORMAL');
+
+		this.user = new UserManager(this.internalDB);
+		this.session = new SessionManager(this.internalDB);
 
 		this.user.init()
 		this.session.init()
@@ -76,8 +87,20 @@ export class Core {
 	}
 
 	async close() {
+		if (this._disposed) return;
+		this._disposed = true;
+		this.internalDB?.close(); // 关闭数据库连接
 		await this.bot.dispose(); // 停止所有Bot, 并释放状态文件监听
 		await this.webui?.close() // 停止webui
 		this.statistics?.close(); // 冲刷统计缓冲并关闭数据库
+		this.session = null;
+		this.user = null;
+	}
+
+	/**
+	 * 核心是否已销毁
+	 */
+	get disposed() {
+		return this._disposed;
 	}
 }

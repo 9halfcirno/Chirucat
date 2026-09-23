@@ -1,6 +1,7 @@
 import sqlite from "better-sqlite3"
 import { uuid } from "../utils/uuid";
 import type { SessionType } from "../protocols/session";
+import { StateError } from "../errors/state-error";
 
 export type SessionPlatformInfo = {
 	/** 会话平台id */
@@ -13,12 +14,12 @@ export type SessionPlatformInfo = {
 
 export class SessionManager {
 	db: sqlite.Database;
-	constructor(file: string) {
-		this.db = new sqlite(file, {});
-		this.db.pragma("foreign_keys = ON")
+	constructor(db: sqlite.Database) {
+		this.db = db;
 	}
 
 	init() {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
 		this.db.exec(`
 			CREATE TABLE IF NOT EXISTS session_map (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,6 +39,7 @@ export class SessionManager {
 	 * @param id 平台会话 id
 	 */
 	get(platform: string, type: SessionType, id: string): string {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
 		const getOrCreate = this.db.transaction((platformName: string, platformType: SessionType, platformId: string) => {
 			// 1. 先尝试直接查询
 			const row = this.db.prepare(
@@ -66,6 +68,7 @@ export class SessionManager {
 	}
 
 	has(platform: string, type: SessionType, id: string) {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
 		let has = this.db.transaction((p: string, t: SessionType, id: string) => {
 			let res = this.db.prepare(`
 				SELECT EXISTS (SELECT 1 FROM session_map WHERE platform_name = ? AND platform_type = ? AND platform_id = ?) AS is_exist
@@ -83,13 +86,14 @@ export class SessionManager {
 	 * @param id 会话id
 	 */
 	query(id: string): SessionPlatformInfo | null {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
 		const row = this.db.prepare(
 			'SELECT platform_id, platform_type, platform_name FROM session_map WHERE uuid = ?'
 		).get(id) as {
 			platform_id: string,
 			platform_name: string,
 			platform_type: SessionType
-			} | undefined;
+		} | undefined;
 		if (!row) {
 			return null;
 		}
