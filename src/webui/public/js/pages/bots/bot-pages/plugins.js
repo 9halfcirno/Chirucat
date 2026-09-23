@@ -172,6 +172,7 @@ export default {
 				if (item.hasConfig) openConfigDialog(item);
 				else toast(`插件 ${item.name || item.id} 没有可配置项`)
 			})
+			configBtn.disabled = !item.hasConfig;
 			configBtn.classList.add("plugin-card-config")
 			configBtn.title = "修改插件配置"
 			configBtn.setAttribute("aria-label", "修改插件配置")
