@@ -100,6 +100,8 @@ export class Plugin {
 		this.context?.dispose();
 		this.context = null; // 上下文已释放, 断开引用避免后续误用
 		destroy && (this.module = null);
+		this.configSchema = null; // 同时卸载配置项
+    	this.config = null;
 		this.status = "disabled";
 	}
 }

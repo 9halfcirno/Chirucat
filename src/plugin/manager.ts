@@ -218,6 +218,9 @@ export class PluginManager {
 		try {
 			// 加载模块(未加载过, 或上次卸载时已释放)
 			if (!plugin.module) {
+				// 重新装配配置
+				await this.setupConfig(plugin);
+
 				const loaded = await this.loader.load(path.join(plugin.manifest.path, plugin.manifest.main));
 				if (!loaded?.default) throw new Error(`插件 ${id} 没有默认导出`)
 				plugin.module = loaded.default;
