@@ -10,6 +10,7 @@ import { dirCheck } from "./utils/dir-check";
 import type { StatisticsManager } from "./statistics/manager";
 import type { WebUIServer } from "./webui/server/server";
 import sqlite from "better-sqlite3";
+import { BindManager } from "./internal/bind";
 
 const logger = new Logger("Core")
 
@@ -23,6 +24,11 @@ export class Core {
 
 	private internalDB: sqlite.Database | null = null;
 	user: UserManager | null = null;
+	/**
+	 * 跨平台绑定对象
+	 * @internal 该字段为临时方案, 日后重构为基于service插件的功能
+	 */
+	bindManager: BindManager | null = null;
 	session: SessionManager | null = null;
 
 	webui: WebUIServer | null = null;
@@ -46,6 +52,7 @@ export class Core {
 
 		this.user = new UserManager(this.internalDB);
 		this.session = new SessionManager(this.internalDB);
+		this.bindManager = new BindManager(this.user);
 
 		this.user.init()
 		this.session.init()

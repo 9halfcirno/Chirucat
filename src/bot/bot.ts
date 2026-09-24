@@ -12,6 +12,7 @@ import type { BotActions } from "../protocols/actions";
 import type { MessageSend } from "../protocols/action/message-send";
 import { StateError } from "../errors/state-error";
 import Logger from "../utils/logger";
+import { Bind } from "./bind";
 
 /**
  * 一个 Bot: 一组插件的独立容器
@@ -27,6 +28,7 @@ export class Bot extends EventEmitter {
 	message = new MessageHandler(this);
 	command = new CommandManager({});
 	plugin = new PluginManager(this);
+	bind = new Bind(this);
 
 	/** 持久化启停状态(期望态) */
 	readonly state: BotStateManager;
@@ -80,6 +82,7 @@ export class Bot extends EventEmitter {
 	 */
 	async start() {
 		if (this.running) return; // 幂等
+		this.bind.enable();
 
 		await this.plugin.scan({ global: "plugins", bot: path.join(this.path, "plugins") });
 		await this.dropUnstartable(await this.plugin.syncState());
@@ -96,6 +99,8 @@ export class Bot extends EventEmitter {
 	async stop() {
 		if (!this.running) return; // 幂等
 		this.running = false; // 先置位, 防止重入
+
+		this.bind.disable();
 		for (const plugin of [...this.plugin.enabledPlugins]) {
 			await this.plugin.unload(plugin.id);
 		}
