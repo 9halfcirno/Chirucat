@@ -15,7 +15,7 @@ export default {
 	path: "get_plugin_config",
 	auth: true,
 
-	handler(req, core) {
+	async handler(req, core) {
 		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
 
 		const bot = core.bot.bots.get(req.body?.bot);
@@ -33,7 +33,12 @@ export default {
 					: `插件 ${id} 不存在`,
 			};
 		}
-		if (!plugin.config) throw { code: 404, err: `插件 ${id} 没有可用的配置` };
+		if (!plugin.config) {
+			// 如果没有配置, 可能是插件卸载导致的清理, 尝试重新装配一次
+			await bot.plugin.setupConfig(plugin);
+			if (!plugin.config) // 如果还没有就报错
+				throw { code: 404, err: `插件 ${id} 没有可用的配置` }
+		};
 
 		return {
 			success: true,

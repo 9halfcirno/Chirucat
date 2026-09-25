@@ -151,7 +151,7 @@ export class PluginManager {
 	 *
 	 * 未声明 config 的插件保持 config = null; 定义读取失败只记录日志, 不阻断插件注册。
 	 */
-	private async setupConfig(plugin: Plugin) {
+	async setupConfig(plugin: Plugin) {
 		const define = plugin.manifest.config;
 		if (!define) return;
 
