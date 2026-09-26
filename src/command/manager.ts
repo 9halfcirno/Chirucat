@@ -58,7 +58,7 @@ export class CommandManager {
 			const coms = this.commands.get(command)!;
 
 			let params = args || CommandParser.parse(text, {
-				argStart: command.length + 1
+				argStart: command.length
 			})
 			for (let com of coms) {
 				try {
