@@ -1,0 +1,21 @@
+{
+	"$schema": "../../../../src/config/schema.json",
+	"controls": [
+		{
+			"type": "input",
+			"id": "app_id",
+			"label": "机器人 AppID",
+			"required": true
+		},
+		{
+			"type": "input",
+			"id": "secret",
+			"label": "机器人密钥",
+			"desc": "即QQBot管理页面的secret, 注意管理平台的密钥只能查看一遍",
+			"required": true,
+			"attr": {
+				"type": "password"
+			}
+		}
+	]
+}

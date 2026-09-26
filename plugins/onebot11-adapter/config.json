@@ -1,0 +1,134 @@
+{
+	"controls": [
+		{
+			"type": "input",
+			"id": "url",
+			"label": "WebSocket 地址",
+			"default": "ws://127.0.0.1:3001",
+			"required": true,
+			"placeholder": "ws://127.0.0.1:3001",
+			"desc": "OneBot11 正向 WS 服务端地址, 插件将作为客户端连接"
+		},
+		{
+			"type": "input",
+			"id": "accessToken",
+			"label": "Access Token",
+			"default": "",
+			"desc": "留空则不携带; 会以 ?access_token=xxx 的形式附加在连接地址后"
+		},
+		{
+			"type": "switch",
+			"id": "reconnect",
+			"label": "断线自动重连",
+			"default": true
+		},
+		{
+			"type": "slider",
+			"id": "reconnectInterval",
+			"label": "重连间隔(ms)",
+			"min": 1000,
+			"max": 60000,
+			"step": 1000,
+			"default": 5000,
+			"visible": {
+				"op": "equal",
+				"ref": "reconnect",
+				"target": true
+			}
+		},
+		{
+			"type": "checkbox",
+			"id": "sessionTypes",
+			"label": "监听的消息类型",
+			"items": [
+				{
+					"label": "私聊消息",
+					"value": "private"
+				},
+				{
+					"label": "群聊消息",
+					"value": "group"
+				}
+			],
+			"default": [
+				"private",
+				"group"
+			],
+			"desc": "只有勾选的类型才会被 dispatch 给框架"
+		},
+		{
+			"type": "switch",
+			"id": "atOnly",
+			"label": "仅派发群聊中 @ 机器人的消息",
+			"default": false
+		},
+		{
+			"type": "switch",
+			"id": "ignoreSelf",
+			"label": "忽略自身发送的消息",
+			"default": true
+		},
+		{
+			"type": "switch",
+			"id": "contentFilter",
+			"label": "启用内容过滤",
+			"default": false,
+			"desc": "开启后, 只有匹配下列任一规则的消息才会被派发; 规则为空时不作过滤"
+		},
+		{
+			"type": "table",
+			"id": "filterRules",
+			"label": "内容过滤规则",
+			"default": [],
+			"visible": {
+				"op": "equal",
+				"ref": "contentFilter",
+				"target": true
+			},
+			"controls": [
+				{
+					"type": "select",
+					"id": "type",
+					"label": "匹配方式",
+					"items": [
+						{
+							"label": "包含",
+							"value": "include"
+						},
+						{
+							"label": "前缀",
+							"value": "start"
+						},
+						{
+							"label": "后缀",
+							"value": "end"
+						},
+						{
+							"label": "完全匹配",
+							"value": "full"
+						},
+						{
+							"label": "正则",
+							"value": "regex"
+						}
+					],
+					"default": "include"
+				},
+				{
+					"type": "input",
+					"id": "value",
+					"label": "匹配内容",
+					"default": "",
+					"placeholder": "如: 你好 / ^ping\\b",
+					"required": true
+				},
+				{
+					"type": "switch",
+					"id": "enabled",
+					"label": "启用",
+					"default": true
+				}
+			]
+		}
+	]
+}

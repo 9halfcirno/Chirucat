@@ -1,0 +1,10 @@
+{
+	"id": "qq-adapter",
+	"version": "1.1.0",
+	"name": "QQ适配器",
+	"author": "9halfcirno",
+	"main": "index.ts",
+	"type": "adapter",
+	"config": "config.schema.json",
+	"dependencies": {}
+}
