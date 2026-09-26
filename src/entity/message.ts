@@ -9,12 +9,14 @@ import type { MessageQuote, MessageReplyOption } from "./types";
 
 export class Message extends Entity {
 	id: string;
+
 	text: string;
 	blocks: Array<MessageBlock>
 	session: Session;
 	sender: User;
 
 	quote?: MessageQuote;
+	token: string;
 
 	constructor(event: MessageCreateEvent, meta: BotEventMeta, bot?: Bot, quoteChain?: Set<MessageCreateEvent>) {
 		if (event.type !== "message.create") throw new TypeError("Message只接收 message.create 事件, 但是收到 " + event.type + " 事件")
@@ -22,6 +24,7 @@ export class Message extends Entity {
 		this.id = event.messageId;
 		this.text = event.text;
 		this.blocks = event.richContent;
+		this.token = event.quoteToken;
 
 		this.session = {
 			id: event.sessionId,
@@ -33,9 +36,7 @@ export class Message extends Entity {
 			unionId: this.bot?.core.user?.getUnion(event.senderId) ?? null
 		}
 
-		// 引用消息: 沿引用链逐层构造。
-		// 链上事件集合拦住成环(自引用/互相引用), MAX_QUOTE_DEPTH 拦住过深链 ——
-		// 两者都是无限递归(栈溢出)的入口, 且每层都会新建一条完整 Message
+		// 引用消息
 		if (event.quote) {
 			this.quote = {
 				text: event.quote.text,
@@ -54,7 +55,10 @@ export class Message extends Entity {
 		return this.action({
 			type: "message.send",
 			session: this.session.id,
-			message
+			message,
+			quote: typeof option?.quote === "boolean" ?
+				(option.quote ? this.token : null) :
+				(option?.quote || null)
 		})
 	}
 }

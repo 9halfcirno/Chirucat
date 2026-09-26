@@ -11,8 +11,9 @@
 ### 字段
 
 - `id`: 消息的ID
+- `token`: 消息的引用令牌
 - `text`: 消息纯文本内容
-- `blocks`: 消息块(`MessageBlock`)数组
+- `blocks`: 消息块([`MessageBlock`](#messageblock对象))数组
 - `sender`: 消息发送者信息
   - `id`: 发送者账号uuid
   - `unionId`: 发送者跨平台uuid
@@ -24,7 +25,7 @@
 
 ### 方法
 
-- `reply(msg: string | MessageBlock[]): Promise<void>`: 以当前消息被动回复
+- `reply(msg: string | MessageBlock[], option?: MessageReplyOption): Promise<void>`: 以当前消息被动回复 ([`MessageReplyOption类型指路`]())
 
 # MessageQuote对象
 
@@ -41,6 +42,18 @@
   - `id`: 发送者账号uuid
   - `unionId`: 发送者跨平台uuid
   - `name`: 发送者昵称
+
+# MessageReplyOption对象
+
+## 概述
+
+该对象用于`Message.reply`方法第二个选项参数, 为可选参数
+
+## 字段
+
+以下字段均为可选, 标`*`的代表实际效果取决于适配器实现
+
+- `quote`*: 是否引用当前消息, 为`true`时会引用当前消息发送, 为字符串时会引用token为该值的目标消息
 
 # MessageBlock对象
 

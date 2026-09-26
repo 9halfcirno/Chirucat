@@ -7,6 +7,9 @@ export interface MessageCreateEvent extends BotEvent {
 
 	messageId: string;
 
+	/** 可以引用该消息的引用id */
+	quoteToken: string;
+
 	/** 发送者框架id, 从UserManager获取 */
 	senderId: string;
 	/** 发送者昵称 */

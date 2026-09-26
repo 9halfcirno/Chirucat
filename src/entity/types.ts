@@ -1,8 +1,8 @@
 import type { MessageBlock } from "../protocols/message-block";
 
 export type MessageReplyOption = {
-	/** 引用的消息token/id */
-	quote: string;
+	/** 引用的消息token/id, 为布尔true时代表引用当前消息 */
+	quote: string | boolean;
 }
 
 export type MessageQuote = {

@@ -10,11 +10,13 @@
 
 ```ts
 interface MessageSend {
+	type: "message.send";
 	// 目标会话框架id(会话uuid)
 	session: string;
 	// 消息内容
 	message: string | MessageBlock[];
-	type: "message.send";
+	// 引用的消息的引用Token
+	quote: string | null;
 }
 ```
 
@@ -23,6 +25,7 @@ interface MessageSend {
 - `type`: 固定为`message.send`
 - `session`: 目标会话的框架id(会话uuid), 适配器应使用[`ctx.session.query`](../plugin/contexts/adapter.md)解析为平台会话后再发送
 - `message`: 消息内容, 为纯文本字符串或[`MessageBlock`](../objects/message.md)数组
+- `quote`: 引用的消息的Token, 不为`null`时代表引用一条消息, 是适配器填写的`quoteToken`字段
 
 ## 处理示例
 
@@ -37,14 +40,22 @@ ctx.bot.onAction(async (action, extra) => {
 	if (!session) return;
 	const { platform, type, id } = session;
 
+	let body = {
+		msg_type: 0,
+		msg_id: extra?.msg_id,
+		content: action.message.toString()
+	};
+
+	if (action.quote) {
+		body.message_reference = {
+			message_id: action.quote
+		}
+	}
+
 	// 按会话类型调用平台API, 群消息需要extra.msg_id以完成被动回复
 	await fetch(`${BASE_URL}/v2/groups/${id}/messages`, {
 		method: "POST",
-		body: JSON.stringify({
-			msg_type: 0,
-			msg_id: extra?.msg_id,
-			content: action.message.toString()
-		})
+		body: JSON.stringify(body)
 	});
 })
 ```

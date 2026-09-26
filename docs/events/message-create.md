@@ -24,6 +24,7 @@
 - `text`: 消息纯文本内容
 - `richContent`: 消息富文本内容, 为[`MessageBlock`](../objects/message.md)数组
 - `quote`: 该消息引用的消息快照, 若平台无法提供 则不需要该字段
+- `quoteToken`: 该消息的引用Token, 用于回复时引用当前消息的字符串, 部分平台直接填消息ID即可
 
 #### 消息引用对象
 
@@ -37,13 +38,15 @@
 
 ### 与Message实体的字段对应
 
-派发后创建的`Message`实体(以及引用)与事件的字段对应关系如下(完整结构见[Message对象](../objects/message.md)):
+派发后创建的`Message`实体(以及引用)与事件的字段对应关系如下, 仅列出字段名不同的字段(完整结构见[Message对象](../objects/message.md)):
 
 - `messageId` -> `id`
 - `senderId`/`senderName` -> `sender.id`/`sender.name`
 - `sessionId`/`sessionType` -> `session.id`/`session.type`
 - `text` -> `text`
 - `richContent` -> `blocks`
+- `quote.xxx` -> *参考顶层映射*
+- `quoteToken` -> `token`
 
 ## 构造示例
 
@@ -59,6 +62,7 @@ ctx.bot.dispatch({
 	sessionId: ctx.session.get("qq", "group", data.group_openid), // 平台会话id -> 会话uuid
 	text: data.content.trim(),
 	richContent: [{ type: "text", text: data.content.trim() }],
+	quoteToken: data.message_scene.ext.find(kv => kv.startsWith("msg_idx=")).split("=")[1], // 引用消息需要的idx (Token)
 	time: Date.now(),
 	extra: {
 		msg_id: data.id // 被动回复时需要传回平台的消息id

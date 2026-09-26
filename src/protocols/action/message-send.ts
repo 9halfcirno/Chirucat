@@ -8,4 +8,7 @@ export interface MessageSend {
 
 	/** 消息内容 */
 	message: string | MessageBlock[];
+
+	/** 引用的消息 */
+	quote?: string | null;
 }
