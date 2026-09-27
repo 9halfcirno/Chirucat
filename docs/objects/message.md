@@ -26,6 +26,7 @@
 ### 方法
 
 - `reply(msg: string | MessageBlock[], option?: MessageReplyOption): Promise<void>`: 以当前消息被动回复 ([`MessageReplyOption类型指路`]())
+- `delete()`: 撤回/删除该消息对象对应的消息, 通常遇要Bot拥有对应权限
 
 # MessageQuote对象
 

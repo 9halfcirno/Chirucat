@@ -1,4 +1,5 @@
 import type { Bot } from "../bot/bot";
+import type { MessageSendResponse } from "../protocols/action/message-send";
 import type { MessageCreateEvent } from "../protocols/event/message";
 import type { BotEventMeta } from "../protocols/events";
 import type { MessageBlock } from "../protocols/message-block";
@@ -18,7 +19,7 @@ export class Message extends Entity {
 	quote?: MessageQuote;
 	token: string;
 
-	constructor(event: MessageCreateEvent, meta: BotEventMeta, bot?: Bot, quoteChain?: Set<MessageCreateEvent>) {
+	constructor(event: MessageCreateEvent, meta: BotEventMeta, bot: Bot) {
 		if (event.type !== "message.create") throw new TypeError("Message只接收 message.create 事件, 但是收到 " + event.type + " 事件")
 		super(event, meta, bot);
 		this.id = event.messageId;
@@ -51,6 +52,12 @@ export class Message extends Entity {
 		}
 	}
 
+	/**
+	 * 以当前消息进行被动回复
+	 * @param message 消息内容
+	 * @param option 消息发送选项
+	 * @returns 消息响应结果
+	 */
 	reply(message: MessageBlock[] | string, option?: MessageReplyOption) {
 		return this.action({
 			type: "message.send",
@@ -59,6 +66,18 @@ export class Message extends Entity {
 			quote: typeof option?.quote === "boolean" ?
 				(option.quote ? this.token : null) :
 				(option?.quote || null)
+		})
+	}
+
+	/**
+	 * 撤回该消息对象对应的消息, 注意!通常该消息为用户消息而非Bot发送的消息, 可能需要管理员等权限
+	 * @returns 是否撤回成功
+	 */
+	delete() {
+		return this.action({
+			type: "message.delete",
+			session: this.session.id,
+			id: this.id
 		})
 	}
 }

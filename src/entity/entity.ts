@@ -1,5 +1,5 @@
 import type { Bot } from "../bot/bot";
-import type { BotActions } from "../protocols/actions";
+import type { ActionResponses, BotActions } from "../protocols/actions";
 import type { BotEventMeta, BotEvents } from "../protocols/events";
 import { uuid } from "../utils/uuid";
 
@@ -15,7 +15,7 @@ export class Entity {
 
 	readonly source: Record<string, any> | null;
 
-	constructor(readonly event: BotEvents, readonly meta: BotEventMeta, protected bot?: Bot) {
+	constructor(readonly event: BotEvents, readonly meta: BotEventMeta, protected bot: Bot) {
 		this.type = event.type;
 		this.time = event.time;
 		this.platform = event.platform;
@@ -24,9 +24,7 @@ export class Entity {
 		this.source = event.source ? event.source : null;
 	}
 
-	action(action: BotActions) {
-		if (this.bot) {
-			return this.bot.action(action, this.meta.adapter, this.extra)
-		}
+	action<T extends BotActions>(action: T): Promise<ActionResponses[T["type"]]> {
+		return this.bot.action(action, this.meta.adapter, this.extra)
 	}
 }

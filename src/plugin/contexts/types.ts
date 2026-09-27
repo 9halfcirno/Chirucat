@@ -1,7 +1,7 @@
 import type { MakeDirectoryOptions, RmOptions, Stats } from "fs";
 import type { Command } from "../../command/types";
 import type { Message } from "../../entity/message";
-import type { BotActions } from "../../protocols/actions";
+import type { ActionResponses, BotActions } from "../../protocols/actions";
 import type { BotEvents } from "../../protocols/events";
 import type { SessionType } from "../../protocols/session";
 import type { SessionPlatformInfo } from "../../internal/session-manager";
@@ -224,7 +224,7 @@ export interface PluginConfigAPI {
 	watch(handler: PluginConfigWatcher): () => void;
 }
 
-export type ActionHandler = (action: BotActions, extra?: Record<string, any>) => any;
+export type ActionHandler = <T extends BotActions>(action: T, extra?: Record<string, any>) => Promise<ActionResponses[T["type"]] | void>;
 
 export interface PluginBotAPI {
 	id: string; // Bot ID

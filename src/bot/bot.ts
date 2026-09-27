@@ -8,7 +8,7 @@ import { EntityFactory } from "../entity/factory";
 import type { Core } from "../core";
 import { CommandManager } from "../command/manager";
 import EventEmitter from "events";
-import type { BotActions } from "../protocols/actions";
+import type { ActionResponses, BotActions } from "../protocols/actions";
 import type { MessageSend } from "../protocols/action/message-send";
 import { StateError } from "../errors/state-error";
 import Logger from "../utils/logger";
@@ -257,9 +257,9 @@ export class Bot extends EventEmitter {
 	 * @param adapter 适配器插件的id
 	 * @param extra 额外数据, 应从对应event.extra取
 	 */
-	async action(action: BotActions, adapter: string, extra?: Record<string, any>) {
+	async action<T extends BotActions>(action: T, adapter: string, extra?: Record<string, any>): Promise<ActionResponses[T["type"]]> {
 		if (action.type === "message.send") this.recordSend(action);
-		await this.plugin.handleAction(action, adapter, extra);
+		return await this.plugin.handleAction(action, adapter, extra);
 	}
 
 	/**

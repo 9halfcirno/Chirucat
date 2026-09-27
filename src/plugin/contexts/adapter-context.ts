@@ -1,6 +1,6 @@
 import type { Bot } from "../../bot/bot";
 import { StateError } from "../../errors/state-error";
-import type { BotActions } from "../../protocols/actions";
+import type { ActionResponses, BotActions } from "../../protocols/actions";
 import type { BotEvents } from "../../protocols/events";
 import type { SessionType } from "../../protocols/session";
 import type { PluginExports } from "../exports";
@@ -60,10 +60,31 @@ export class AdapterContext extends PluginContext {
 		},
 	}
 
-	async handleAction(action: BotActions, extra?: Record<string, any>) {
-		for (let handler of this.actionHandlers) {
-			await handler(action, extra)
+	async handleAction<T extends BotActions>(
+		action: T,
+		extra?: Record<string, any>
+	): Promise<ActionResponses[T["type"]]> {
+		let response: ActionResponses[T["type"]] | null = null;
+
+		for (const handler of this.actionHandlers) {
+			const r = await handler(action, extra);
+			if (r) {
+				response = r;
+				break;
+			}
 		}
+
+		// 如果遍历完都没有 handler 给出响应（或者没有适配器）
+		// 直接返回框架层统一的 success: false
+		if (!response) {
+			return {
+				success: false,
+				error: "No adapter handled this action or bot is not ready",
+				code: "ACTION_NOT_HANDLED"
+			} as ActionResponses[T["type"]];
+		}
+
+		return response;
 	}
 
 	override dispose(): void {

@@ -12,7 +12,7 @@ import { ConfigManager } from "../config/manager";
 import { readConfigDefine } from "../config/define";
 import type { Bot } from "../bot/bot";
 import type { Message } from "../entity/message";
-import type { BotActions } from "../protocols/actions";
+import type { ActionResponses, BotActions } from "../protocols/actions";
 import type { AdapterContext } from "./contexts/adapter-context";
 import Logger from "../utils/logger";
 import { dirCheck } from "../utils/dir-check";
@@ -326,12 +326,12 @@ export class PluginManager {
 		}
 	}
 
-	async handleAction(action: BotActions, adapter: string, extra?: Record<string, any>) {
+	async handleAction<T extends BotActions>(action: T, adapter: string, extra?: Record<string, any>): Promise<ActionResponses[T["type"]]> {
 		const adapterPlugin = this.enabledPlugins.find(p => p.id === adapter && p.manifest.type === "adapter");
 		if (!adapterPlugin) {
 			this.bot.logger.error(`已启用插件中找不到id为 ${adapter} 的适配器插件!`);
-			return;
+			return { success: false, error: "No adapter on this bot.", code: "ADAPTER_NOT_FOUND"};
 		}
-		await (adapterPlugin.context as AdapterContext).handleAction(action, extra);
+		return await (adapterPlugin.context as AdapterContext).handleAction(action, extra);
 	}
 }

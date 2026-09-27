@@ -2,7 +2,7 @@
 
 ## 概述
 
-该Action表示向指定会话发送一条消息, 对应Action类型`message.send`, 是当前唯一已支持的Action
+该Action表示向指定会话发送一条消息, 对应Action类型`message.send`
 
 插件通常不直接构造该Action, 而是通过[`Message`对象](../objects/message.md)的`reply`方法等实体方法触发
 
@@ -26,6 +26,18 @@ interface MessageSend {
 - `session`: 目标会话的框架id(会话uuid), 适配器应使用[`ctx.session.query`](../plugin/contexts/adapter.md)解析为平台会话后再发送
 - `message`: 消息内容, 为纯文本字符串或[`MessageBlock`](../objects/message.md)数组
 - `quote`: 引用的消息的Token, 不为`null`时代表引用一条消息, 是适配器填写的`quoteToken`字段
+
+## 响应
+
+该Action响应成功时返回如下
+
+```ts
+{
+	success: true;   // 响应成功标志
+	id: string;      // 发送出去的消息id. 可用于撤回/修改
+	token?: string;  // 发送的消息的引用token
+}
+```
 
 ## 处理示例
 
@@ -53,10 +65,18 @@ ctx.bot.onAction(async (action, extra) => {
 	}
 
 	// 按会话类型调用平台API, 群消息需要extra.msg_id以完成被动回复
-	await fetch(`${BASE_URL}/v2/groups/${id}/messages`, {
-		method: "POST",
-		body: JSON.stringify(body)
-	});
+	try {
+		let res = await fetch(`${BASE_URL}/v2/groups/${id}/messages`, {
+			method: "POST",
+			body: JSON.stringify(body)
+		}).then(r => r.json());
+
+		if (!res || !res.id) return { success: false, error: res.message } // 错误字段据真实api而定
+
+		return { success: true, id: res.id, token: res. }
+	} catch(e) {
+		return { success: false, error: (e as Error).message }
+	}
 })
 ```
 

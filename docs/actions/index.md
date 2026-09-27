@@ -35,4 +35,5 @@ ctx.bot.onAction(async (action, extra) => {
 
 目前框架支持以下Action:
 
-- [`MessageSend`](message-send.md): 向指定会话发送一条消息, 对应Action类型`message.send`
+- [`message.send`](message-send.md): 向指定会话发送一条消息
+- [`message.delete`](message-delete.md): 撤回指定会话的一条消息
