@@ -326,41 +326,45 @@ function pickSenderName(data) {
 
 
 async function handleAction(ctx, action) {
-	if (!action || action.type !== "message.send") return;
+	if (action.type === "message.send") {
+		const session = ctx.session.query(action.session);
+		if (!session) {
+			ctx.logger.warn(`[onebot11] 无法解析目标会话: ${action.session}`);
+			return;
+		}
+		if (session.platform !== PLATFORM) return;
 
-	const session = ctx.session.query(action.session);
-	if (!session) {
-		ctx.logger.warn(`[onebot11] 无法解析目标会话: ${action.session}`);
-		return;
-	}
-	if (session.platform !== PLATFORM) return;
+		let message = toOneBotMessage(action.message);
 
-	let message = toOneBotMessage(action.message);
+		if (action.quote) {
+			if (!Array.isArray(message)) {
+				message = [{ type: "text", data: { text: message } }]
+			};
+			message.unshift({
+				type: "reply",
+				data: {
+					id: action.quote
+				}
+			})
+		}
 
-	if (action.quote) {
-		if (!Array.isArray(message)) {
-			message = [{ type: "text", data: { text: message } }]
-		};
-		message.unshift({
-			type: "reply",
-			data: {
-				id: action.quote
-			}
+		if (session.type === "group") {
+			await callApi("send_group_msg", {
+				group_id: Number(session.id),
+				message,
+			});
+		} else if (session.type === "private") {
+			await callApi("send_private_msg", {
+				user_id: Number(session.id),
+				message,
+			});
+		} else {
+			ctx.logger.warn(`[onebot11] 不支持的会话类型: ${session.type}`);
+		}
+	} else if (action.type === "message.delete") {
+		await callApi("delete_msg", {
+			message_id: action.id // ob11撤回消息不需要会话id
 		})
-	}
-
-	if (session.type === "group") {
-		await callApi("send_group_msg", {
-			group_id: Number(session.id),
-			message,
-		});
-	} else if (session.type === "private") {
-		await callApi("send_private_msg", {
-			user_id: Number(session.id),
-			message,
-		});
-	} else {
-		ctx.logger.warn(`[onebot11] 不支持的会话类型: ${session.type}`);
 	}
 }
 
