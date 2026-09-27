@@ -45,11 +45,15 @@ interface MessageSend {
 
 ```ts
 ctx.bot.onAction(async (action, extra) => {
-	if (action.type !== "message.send") return;
+	if (action.type !== "message.send") {
+		return { success: false, error: `Unsupported action type: ${action.type}` };
+	}
 
-	// 将框架会话uuid解析为平台会话, 解析不到则忽略
+	// 将框架会话uuid解析为平台会话
 	const session = ctx.session.query(action.session);
-	if (!session) return;
+	if (!session) {
+		return { success: false, error: `Session not found: ${action.session}` };
+	}
 	const { platform, type, id } = session;
 
 	let body = {
@@ -73,7 +77,7 @@ ctx.bot.onAction(async (action, extra) => {
 
 		if (!res || !res.id) return { success: false, error: res.message } // 错误字段据真实api而定
 
-		return { success: true, id: res.id, token: res. }
+		return { success: true, id: res.id, token: res.ext_info?.ref_idx }
 	} catch(e) {
 		return { success: false, error: (e as Error).message }
 	}
@@ -82,6 +86,9 @@ ctx.bot.onAction(async (action, extra) => {
 
 需要注意:
 
+- **处理器必须返回一个响应对象**。动作已经由框架按事件来源的适配器路由到对应插件, 所以 "不归我管" 不是合法状态: 返回 `undefined` (或任何假值) 会被框架记为 `ACTION_NOT_HANDLED`, 调用方只能看到一个没有原因的 `success: false`。解析不到会话、平台不匹配等都应返回带 `error` 的失败响应。
 - `action.session`是框架会话uuid, 发送前必须使用`ctx.session.query`解析为平台会话id, 不能直接用于平台API
-- 富文本(`MessageBlock`数组)如何渲染为平台消息由适配器决定, 当前适配器通常只处理纯文本
+- 平台不匹配时**不要静默忽略**: 同样返回失败响应, 否则问题会被伪装成 `ACTION_NOT_HANDLED`
+- 可选字段(如`ext_info`)取值要做空值保护: 发送成功后的响应解析异常会被当作发送失败上报
 - `extra`来自源事件, 适配器在[构造事件](../events/message-create.md)时放入的平台私有数据(如`msg_id`)会原样出现在这里, 被动回复所需数据从该对象获取
+- 富文本(`MessageBlock`数组)如何渲染为平台消息由适配器决定, 当前适配器通常只处理纯文本

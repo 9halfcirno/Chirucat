@@ -17,7 +17,11 @@
 
 - `dispatch(event: BotEvent)`: 向Bot发送一个事件, 实现平台 -> Bot ([事件指路](../../events/index.md))
 
-- `onAction(handler: (action: BotAction, extra: Record<string, any>) => void)`: 注册Bot动作处理, 以实现Bot -> 平台通信 ([Action指路](../../actions/index.md))
+- `onAction(handler: (action: BotAction, extra: Record<string, any>) => Promise<ActionResponse>)`: 注册Bot动作处理, 以实现Bot -> 平台通信 ([Action指路](../../actions/index.md))
+
+  处理器**必须返回一个响应对象**(`{ success: true, ... }` 或 `{ success: false, error }`)。
+  动作已由框架按事件来源的适配器路由到本上下文, 所以返回 `undefined` 会被当作"未处理"
+  (`ACTION_NOT_HANDLED`), 调用方只会看到一个没有原因的失败。
 
 ## 用户和会话信息转换
 

@@ -224,7 +224,14 @@ export interface PluginConfigAPI {
 	watch(handler: PluginConfigWatcher): () => void;
 }
 
-export type ActionHandler = <T extends BotActions>(action: T, extra?: Record<string, any>) => Promise<ActionResponses[T["type"]] | void>;
+/**
+ * Action 处理器
+ *
+ * 必须返回一个响应对象: 动作已按 meta.adapter 路由到对应适配器,
+ * "不归我管" 不是合法状态 —— 返回 undefined 会被框架记为未处理
+ * (ACTION_NOT_HANDLED), 调用方只能拿到一个没有原因的失败。
+ */
+export type ActionHandler = <T extends BotActions>(action: T, extra?: Record<string, any>) => Promise<ActionResponses[T["type"]]>;
 
 export interface PluginBotAPI {
 	id: string; // Bot ID

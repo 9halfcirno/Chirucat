@@ -79,7 +79,17 @@ async function connect() {
 	if (!accessManager) {
 		accessManager = new AccessTokenManager(ctx, ctx.config.get("app_id"), ctx.config.get("secret"));
 	}
-	const token = await accessManager.get();
+	let token: string | null;
+	try {
+		token = await accessManager.get();
+	} catch (e: any) {
+		// AccessTokenManager 取不到 token 时会抛(refresh 内部 throw e)。
+		// 这里绝不能让异常冒到 init: 那会让整个插件加载失败, 被框架当作"起不来"
+		// 从期望启用列表里剔除。记录后按重连调度再试即可。
+		ctx.logger.error(`获取 AccessToken 异常: ${e?.message || e}`);
+		scheduleReconnect();
+		return;
+	}
 	if (!token) {
 		ctx.logger.error("获取 AccessToken 失败，停止重连");
 		return;
@@ -307,16 +317,35 @@ export default {
 		accessManager = new AccessTokenManager(context, ctx.config.get("app_id") ?? "", ctx.config.get("secret") ?? "");
 		sender = new ActionSender(context, accessManager);
 
-		context.bot.onAction(async (action, extra) => await sender!.send(action, extra));
+		// Action 处理器必须返回响应: 除了 send 内部可预期的失败, 任何异常也要转成失败响应,
+		// 否则 msg.reply() 会 reject, 调用方拿不到响应对象(也看不到框架的未处理告警)。
+		context.bot.onAction(async (action, extra) => {
+			try {
+				return await sender!.send(action, extra);
+			} catch (e) {
+				const msg = e instanceof Error ? e.message : String(e);
+				context.logger.error(`处理Action ${action.type} 时异常: ${msg}`);
+				return {
+					success: false,
+					error: msg,
+					code: "ADAPTER_ERROR"
+				};
+			}
+		});
 
 		ctx.config.watch(async (key) => {
 			if (key !== "app_id" && key !== "secret") return;
 			if (!ctx!.config.get("app_id") || !ctx!.config.get("secret")) return;
 
-			await accessManager!.refreshConfig(
-				ctx!.config.get("app_id"),
-				ctx!.config.get("secret")
-			);
+			try {
+				await accessManager!.refreshConfig(
+					ctx!.config.get("app_id"),
+					ctx!.config.get("secret")
+				);
+			} catch (e: any) {
+				// 配置改错不该变成未捕获的 rejection: 记录后交给下面的 connect 去重试
+				ctx!.logger.error(`配置变更后刷新 AccessToken 失败: ${e?.message || e}`);
+			}
 
 			// 配置变更，清空会话并完全重建
 			sessionId = null;

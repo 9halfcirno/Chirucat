@@ -20,37 +20,63 @@ export class ActionSender {
 
 	/**
 	 * 统一 Action 分发入口
+	 *
+	 * 必须为每个动作给出明确响应: 动作已按 meta.adapter 路由到本适配器,
+	 * 返回 undefined 会被框架记为"未处理"(ACTION_NOT_HANDLED), 调用方只看到失败而看不到原因。
 	 */
 	async send<T extends BotActions>(
 		action: T,
 		extra?: Record<string, any>
-	): Promise<ActionResponses[T["type"]] | undefined> {
+	): Promise<ActionResponses[T["type"]]> {
 		// 1. 处理消息撤回
 		if (action.type === "message.delete") {
 			return (await this.handleDelete(action as Extract<BotActions, { type: "message.delete" }>)) as ActionResponses[T["type"]];
 		}
 
-		// 2. 仅处理消息发送
-		if (action.type !== "message.send") return undefined;
+		// 2. 仅处理消息发送, 其余动作类型不属于本适配器(框架路由错误)
+		if (action.type !== "message.send") {
+			// 曾处理过的类型已被收窄为 never, 这里取其运行时真实类型名
+			const unsupported: string = (action as BotActions).type;
+			this.ctx.logger.error(`收到不支持的Action类型: ${unsupported}`);
+			return {
+				success: false,
+				error: `Unsupported action type: ${unsupported}`,
+				code: "UNSUPPORTED_ACTION"
+			} as ActionResponses[T["type"]];
+		}
 
 		const sendAction = action as Extract<BotActions, { type: "message.send" }>;
 		const result = this.ctx.session.query(sendAction.session);
 
 		if (!result) {
+			this.ctx.logger.error(`无法解析目标会话: ${sendAction.session}`);
 			return {
 				success: false,
-				error: `Session not found: ${sendAction.session}`
+				error: `Session not found: ${sendAction.session}`,
+				code: "SESSION_NOT_FOUND"
 			} as ActionResponses[T["type"]];
 		}
 
 		const { platform, type, id } = result;
-		if (platform !== PLATFORM) return undefined; // 非本平台动作忽略
+		if (platform !== PLATFORM) {
+			// 动作能到达本适配器, 说明会话就该属于本平台; 不匹配是真实错误, 不能静默忽略
+			this.ctx.logger.error(
+				`会话平台不匹配: 期望 ${PLATFORM}, 实际 ${platform} (会话 ${sendAction.session})`
+			);
+			return {
+				success: false,
+				error: `Platform mismatch: expected ${PLATFORM}, got ${platform}`,
+				code: "PLATFORM_MISMATCH"
+			} as ActionResponses[T["type"]];
+		}
 
 		// 频道(channel)暂不支持
 		if (type !== "group" && type !== "private") {
+			this.ctx.logger.error(`不支持的会话类型: ${type}`);
 			return {
 				success: false,
-				error: `Unsupported session type: ${type}`
+				error: `Unsupported session type: ${type}`,
+				code: "UNSUPPORTED_SESSION_TYPE"
 			} as ActionResponses[T["type"]];
 		}
 
@@ -124,17 +150,21 @@ export class ActionSender {
 	): Promise<ActionResponses["message.delete"]> {
 		const result = this.ctx.session.query(action.session);
 		if (!result || result.platform !== PLATFORM) {
+			this.ctx.logger.error(`撤回失败: 会话不存在或平台不匹配 (${action.session})`);
 			return {
 				success: false,
-				error: `Session not found or platform mismatch: ${action.session}`
+				error: `Session not found or platform mismatch: ${action.session}`,
+				code: "SESSION_NOT_FOUND"
 			};
 		}
 
 		const { type, id } = result;
 		if (type !== "group" && type !== "private") {
+			this.ctx.logger.error(`撤回失败: 不支持的会话类型 ${type}`);
 			return {
 				success: false,
-				error: `Unsupported session type for delete: ${type}`
+				error: `Unsupported session type for delete: ${type}`,
+				code: "UNSUPPORTED_SESSION_TYPE"
 			};
 		}
 
@@ -278,10 +308,19 @@ export class ActionSender {
 			const data = await resp.json();
 
 			// QQ 发送消息成功会返回带有 id 的 JSON 对象
+			if (!data?.id) {
+				this.ctx.logger.error(`请求 API 成功但响应缺少 id [${method} ${endpointPath}]: ${JSON.stringify(data)}`);
+				return {
+					success: false,
+					error: `QQ API 响应缺少消息 id: ${JSON.stringify(data)}`
+				};
+			}
+
 			return {
 				success: true,
-				id: data.id,
-				token: data.ext_info.ref_idx
+				id: String(data.id),
+				// ext_info 并非所有发送接口都会返回, 缺失时不能把整个响应判成失败
+				token: data.ext_info?.ref_idx
 			};
 
 		} catch (e: any) {

@@ -67,19 +67,37 @@ export class AdapterContext extends PluginContext {
 		let response: ActionResponses[T["type"]] | null = null;
 
 		for (const handler of this.actionHandlers) {
-			const r = await handler(action, extra);
-			if (r) {
-				response = r;
-				break;
+			// handler 抛异常不能让它直接 reject 出去: 本方法的契约是"总能给出响应对象",
+			// 否则 msg.reply() 会以一个未捕获异常的形式收场, 比 success:false 更难定位。
+			try {
+				const r = await handler(action, extra);
+				if (r) {
+					response = r;
+					break;
+				}
+			} catch (e) {
+				const msg = e instanceof Error ? e.message : String(e);
+				this.logger.error(`适配器处理动作 ${action.type} 时抛出异常: ${msg}`);
+				return {
+					success: false,
+					error: msg,
+					code: "ADAPTER_ERROR"
+				} as ActionResponses[T["type"]];
 			}
 		}
 
-		// 如果遍历完都没有 handler 给出响应（或者没有适配器）
+		// 如果遍历完都没有 handler 给出响应
 		// 直接返回框架层统一的 success: false
 		if (!response) {
+			// 静默失败会让调用方只看到 success:false 而无从定位, 这里必须留痕:
+			// 动作已由 PluginManager 按 meta.adapter 路由到本插件, 所以"没处理"是缺陷, 不是分工
+			this.logger.warn(
+				`适配器未处理动作 ${action.type}: 插件 ${this._manifest.id} 注册了 ${this.actionHandlers.length} 个Action处理器, ` +
+				`均未返回响应`
+			);
 			return {
 				success: false,
-				error: "No adapter handled this action or bot is not ready",
+				error: "Adapter did not handled this action",
 				code: "ACTION_NOT_HANDLED"
 			} as ActionResponses[T["type"]];
 		}

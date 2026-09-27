@@ -27,11 +27,15 @@ export default {
 		stopped = false;
 		selfId = null;
 
+		// Action 处理器必须返回响应: 返回 undefined 会被框架记为"未处理"(ACTION_NOT_HANDLED),
+		// 调用方只拿到失败却看不到原因。异常在这里转成失败响应, 不静默吞掉。
 		ctx.bot.onAction(async (action) => {
 			try {
-				await handleAction(ctx, action);
+				return await handleAction(ctx, action);
 			} catch (e) {
-				ctx.logger.error(`[onebot11] 处理 Action 失败: ${e?.message ?? e}`);
+				const msg = e?.message ?? String(e);
+				ctx.logger.error(`[onebot11] 处理 Action 失败: ${msg}`);
+				return { success: false, error: msg };
 			}
 		});
 
@@ -329,10 +333,14 @@ async function handleAction(ctx, action) {
 	if (action.type === "message.send") {
 		const session = ctx.session.query(action.session);
 		if (!session) {
-			ctx.logger.warn(`[onebot11] 无法解析目标会话: ${action.session}`);
-			return;
+			ctx.logger.error(`[onebot11] 无法解析目标会话: ${action.session}`);
+			return { success: false, error: `Session not found: ${action.session}`, code: "SESSION_NOT_FOUND" };
 		}
-		if (session.platform !== PLATFORM) return;
+		if (session.platform !== PLATFORM) {
+			// 动作能到达本适配器, 说明会话就该属于本平台; 不匹配是真实错误, 不能静默忽略
+			ctx.logger.error(`[onebot11] 会话平台不匹配: 期望 ${PLATFORM}, 实际 ${session.platform}`);
+			return { success: false, error: `Platform mismatch: expected ${PLATFORM}, got ${session.platform}`, code: "PLATFORM_MISMATCH" };
+		}
 
 		let message = toOneBotMessage(action.message);
 
@@ -348,24 +356,58 @@ async function handleAction(ctx, action) {
 			})
 		}
 
-		if (session.type === "group") {
-			await callApi("send_group_msg", {
-				group_id: Number(session.id),
-				message,
-			});
-		} else if (session.type === "private") {
-			await callApi("send_private_msg", {
-				user_id: Number(session.id),
-				message,
-			});
-		} else {
-			ctx.logger.warn(`[onebot11] 不支持的会话类型: ${session.type}`);
+		try {
+			if (session.type === "group") {
+				const res = await callApi("send_group_msg", {
+					group_id: Number(session.id),
+					message,
+				});
+				return sendResult(ctx, res);
+			} else if (session.type === "private") {
+				const res = await callApi("send_private_msg", {
+					user_id: Number(session.id),
+					message,
+				});
+				return sendResult(ctx, res);
+			} else {
+				ctx.logger.error(`[onebot11] 不支持的会话类型: ${session.type}`);
+				return { success: false, error: `Unsupported session type: ${session.type}`, code: "UNSUPPORTED_SESSION_TYPE" };
+			}
+		} catch (e) {
+			const msg = e?.message ?? String(e);
+			ctx.logger.error(`[onebot11] 发送消息失败: ${msg}`);
+			return { success: false, error: msg };
 		}
 	} else if (action.type === "message.delete") {
-		await callApi("delete_msg", {
-			message_id: action.id // ob11撤回消息不需要会话id
-		})
+		try {
+			await callApi("delete_msg", {
+				message_id: action.id // ob11撤回消息不需要会话id
+			});
+			return { success: true };
+		} catch (e) {
+			const msg = e?.message ?? String(e);
+			ctx.logger.error(`[onebot11] 撤回消息失败: ${msg}`);
+			return { success: false, error: msg };
+		}
 	}
+
+	ctx.logger.error(`[onebot11] 收到不支持的Action类型: ${action.type}`);
+	return { success: false, error: `Unsupported action type: ${action.type}`, code: "UNSUPPORTED_ACTION" };
+}
+
+/**
+ * 把 OneBot 发送回包转成响应
+ *
+ * 调用成功但缺少 message_id 时不能报成功: 后续撤回/引用都要用这个 id,
+ * 空 id 会把错误推到更远的地方。与 qq-adapter 的处理保持一致。
+ */
+function sendResult(ctx, res) {
+	if (res?.message_id === undefined || res?.message_id === null) {
+		const detail = JSON.stringify(res);
+		ctx.logger.error(`[onebot11] 发送调用成功但响应缺少 message_id: ${detail}`);
+		return { success: false, error: `OneBot API 响应缺少 message_id: ${detail}` };
+	}
+	return { success: true, id: String(res.message_id) };
 }
 
 function toOneBotMessage(message) {

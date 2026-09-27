@@ -71,7 +71,7 @@ export class Handler {
 			sessionType,
 			text,
 			richContent,
-			quoteToken: data.message_scene.ext.find((kv: string) => kv.startsWith("msg_idx=")).split("=")[1],
+			quoteToken: this.resolveQuoteToken(data),
 			time: Date.now(),
 			source: data,
 			type: "message.create",
@@ -87,6 +87,24 @@ export class Handler {
 		}
 
 		this.ctx.bot.dispatch(msgCreate);
+	}
+
+	/**
+	 * 从 message_scene.ext 中取出引用 Token(msg_idx)
+	 *
+	 * 该字段不一定存在, 且不同事件类型格式可能不同: 取不到时返回空字符串,
+	 * 不能因为一个可选字段就让整个事件派发失败。
+	 */
+	private resolveQuoteToken(data: Record<string, any>): string {
+		const ext = data?.message_scene?.ext;
+		if (!Array.isArray(ext)) return "";
+
+		for (const kv of ext) {
+			if (typeof kv === "string" && kv.startsWith("msg_idx=")) {
+				return kv.slice("msg_idx=".length);
+			}
+		}
+		return "";
 	}
 
 	/**
