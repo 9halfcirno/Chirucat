@@ -19,6 +19,8 @@ const api: WebUIAPI = {
 
 		try {
 			await core.botHelper.delete(id);
+			// Bot 已删除, 它的私有名单不再有意义
+			core.filterList?.removeByBot(id);
 			return { success: true };
 		} catch (e) {
 			throw { code: 500, err: `创建Bot失败: ${(e as Error).message}` };

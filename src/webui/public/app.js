@@ -64,6 +64,13 @@ function registerPages(config) {
 	});
 
 	app.register({
+		id: "filters",
+		title: "黑白名单",
+		icon: "/img/icons/shield.svg",
+		load: () => import("./js/pages/filters/filters.js"),
+	});
+
+	app.register({
 		id: "plugins",
 		title: "插件",
 		icon: "/img/icons/plugin.svg",

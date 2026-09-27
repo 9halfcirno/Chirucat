@@ -1,0 +1,125 @@
+/* 黑白名单 */
+
+.filters-page {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-4);
+	color: var(--fg);
+}
+
+.filters-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-3);
+	padding: var(--sp-4);
+}
+
+.filters-card h3 {
+	margin: 0;
+	font-size: var(--fs-sm);
+	font-weight: 600;
+}
+
+/* ---- 表单 ---- */
+.filters-form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: var(--sp-2);
+}
+
+.filters-field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-1);
+	min-width: 0;
+}
+
+.filters-field-label {
+	font-size: var(--fs-xs);
+	color: var(--fg-muted);
+}
+
+.filters-field .input {
+	width: 11em;
+	max-width: 100%;
+}
+
+/* 自绘下拉不会随内容自动撑开, 给个下限 */
+.filters-field .config-select-wrap {
+	min-width: 9em;
+}
+
+/* ---- 名单表格 ---- */
+.filters-table-wrap {
+	overflow-x: auto;
+}
+
+.filters-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--fs-sm);
+}
+
+.filters-table th,
+.filters-table td {
+	padding: var(--sp-2) var(--sp-3);
+	text-align: left;
+	white-space: nowrap;
+	border-bottom: 1px solid var(--glass-border);
+}
+
+.filters-table th {
+	font-size: var(--fs-xs);
+	font-weight: 600;
+	color: var(--fg-muted);
+}
+
+.filters-table tbody tr:hover {
+	background: var(--bg-hover);
+}
+
+.filters-table td.num {
+	font-variant-numeric: tabular-nums;
+}
+
+/* 表格行内的按钮收紧成小号 */
+.filters-table .btn {
+	height: auto;
+	padding: 0.1em 0.55em;
+	font-size: var(--fs-xs);
+}
+
+/* ---- 类型徽章 ---- */
+.filters-badge {
+	display: inline-block;
+	padding: 0.1em 0.55em;
+	border-radius: 999px;
+	font-size: var(--fs-xs);
+}
+
+.filters-badge.black {
+	background: var(--danger);
+	color: var(--fg-on-accent);
+}
+
+.filters-badge.white {
+	background: var(--accent);
+	color: var(--fg-on-accent);
+}
+
+/* 对象列 (用户 / 群 / 频道): 中性色, 不与黑/白名单抢注意力 */
+.filters-badge.object {
+	background: var(--bg-active);
+	color: inherit;
+}
+
+/* ---- 提示 ---- */
+.filters-hint {
+	margin: 0;
+	font-size: var(--fs-sm);
+}
+
+.filters-error {
+	color: var(--danger);
+}

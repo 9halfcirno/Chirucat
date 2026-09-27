@@ -23,13 +23,17 @@ export function createBotContent(bot) {
 	Promise.resolve()
 		.then(() => addPage(botNav, botMain, bot, "./bot-pages/info.js"))
 		.then(() => addPage(botNav, botMain, bot, "./bot-pages/plugins.js"))
+		.then(() => addPage(botNav, botMain, bot, "./bot-pages/filter.js"))
 		.then(() => addPage(botNav, botMain, bot, "./bot-pages/setting.js"))
 
 	async function addPage(nav, main, bot, url) {
 		/**
-		 * @type {{ icon: string; title: string; render: (div: HTMLElement) => void }}
+		 * @type {{ icon: string; title: string; styles?: string[]; render: (div: HTMLElement, bot: any) => void }}
 		 */
 		const module = (await import(url)).default;
+		// 子页声明的样式表
+		ensureStyles(module.styles);
+
 		let iconBtn = createIconButton(module.icon, () => {
 			if (currentPage === module.title) return;
 
@@ -53,4 +57,22 @@ export function createBotContent(bot) {
 	}
 
 	return div;
+}
+
+/**
+ * 按需插入子页声明的样式表
+ *
+ * framework.js 里的页面样式会随导航卸载, 弹窗子页则只做一次幂等插入 ——
+ * 弹窗生命周期短, 卸载回来还要重插, 收益不值当。
+ * @param {string[]} [urls]
+ */
+function ensureStyles(urls) {
+	for (const url of urls ?? []) {
+		if (document.head.querySelector(`link[rel="stylesheet"][href="${url}"]`)) continue;
+
+		const link = document.createElement("link");
+		link.rel = "stylesheet";
+		link.href = url;
+		document.head.appendChild(link);
+	}
 }
