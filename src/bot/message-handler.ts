@@ -1,19 +1,31 @@
 import type { Message } from "../entity/message";
 import type { MessageBlock } from "../protocols/message-block";
 import type { Bot } from "./bot";
-import { MessageFilter } from "./message-filter";
+import { FilterLayer } from "./message-filter";
 
 export class MessageHandler {
-	filter = new MessageFilter();
+	/**
+	 * 全局名单: 所有 Bot 共用
+	 *
+	 * 每层都同时约束「用户」与「会话」两个对象, 且所有层都要放行才算通过,
+	 * 因此 Bot 私有名单实际优先级更高 —— 全局白名单放行的人或会话, 仍可被
+	 * 某个 Bot 的私有名单排除; 反之, 任一层进了黑名单都会被拦下。
+	 */
+	globalFilter = new FilterLayer();
+	/** Bot 私有名单 */
+	botFilter = new FilterLayer();
 
 	constructor(private bot: Bot) {
 		
 	}
 
 	handle(msg: Message) {
-		let ok = this.filter.filter(msg);
+		const ok = this.globalFilter.allow(msg) && this.botFilter.allow(msg);
 
 		this._logMessage(msg, ok);
+
+		// 采集昵称供 WebUI 展示; 值变化才落盘, 与统计模块无关 (统计可关闭)
+		this.bot.core.profile?.touch(msg.sender.id, msg.sender.name);
 
 		// 命中时拿到指令名, 未命中为 false
 		let command: string | false = false;
@@ -30,6 +42,20 @@ export class MessageHandler {
 			filtered: !ok,
 			command: command || "",
 		});
+	}
+
+	/**
+	 * 从名单库重新装载两层名单
+	 *
+	 * Bot 初始化时调用; WebUI 改动名单后由核心通知刷新。
+	 * 名单库不可用时保持空集 (等价于全部放行), 不让过滤链路因存储问题瘫痪。
+	 */
+	loadFilterList(): void {
+		const layers = this.bot.core.filterList?.loadFor(this.bot.id);
+		if (!layers) return;
+
+		this.globalFilter.set(layers.global);
+		this.botFilter.set(layers.bot);
 	}
 
 	private _logMessage(message: Message, ok: boolean = true) {

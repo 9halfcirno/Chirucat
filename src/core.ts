@@ -11,6 +11,8 @@ import type { StatisticsManager } from "./statistics/manager";
 import type { WebUIServer } from "./webui/server/server";
 import sqlite from "better-sqlite3";
 import { BindManager } from "./internal/bind";
+import { UserProfileManager } from "./internal/user-profile";
+import { FilterListManager } from "./internal/filter-list";
 
 const logger = new Logger("Core")
 
@@ -24,6 +26,10 @@ export class Core {
 
 	private internalDB: sqlite.Database | null = null;
 	user: UserManager | null = null;
+	/** 用户档案 (昵称等展示信息) */
+	profile: UserProfileManager | null = null;
+	/** 消息过滤名单 (全局 + 各 Bot 私有) */
+	filterList: FilterListManager | null = null;
 	/**
 	 * 跨平台绑定对象
 	 * @internal 该字段为临时方案, 日后重构为基于service插件的功能
@@ -53,9 +59,13 @@ export class Core {
 		this.user = new UserManager(this.internalDB);
 		this.session = new SessionManager(this.internalDB);
 		this.bindManager = new BindManager(this.user);
+		this.profile = new UserProfileManager(this.internalDB);
+		this.filterList = new FilterListManager(this.internalDB);
 
 		this.user.init()
 		this.session.init()
+		this.profile.init()
+		this.filterList.init()
 
 		if (this.config.webui) {
 			await import("./webui/server/server").then(module => {
@@ -102,6 +112,8 @@ export class Core {
 		this.statistics?.close(); // 冲刷统计缓冲并关闭数据库
 		this.session = null;
 		this.user = null;
+		this.profile = null;
+		this.filterList = null;
 	}
 
 	/**

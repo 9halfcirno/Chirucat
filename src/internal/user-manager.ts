@@ -9,6 +9,46 @@ export type UserPlatformInfo = {
 	platform: string;
 }
 
+export type UnionMember = UserPlatformInfo & {
+	/** 账号 UUID */
+	accountId: string;
+}
+
+export type UserListItem = UserPlatformInfo & {
+	/** 账号 UUID */
+	accountId: string;
+	/** 所属跨平台ID */
+	unionId: string;
+	/** 该跨平台ID下的账号数 */
+	unionSize: number;
+}
+
+export type UserListQuery = {
+	/** 平台筛选, 缺省为全部 */
+	platform?: string;
+	/** 关键字: 匹配平台用户ID 或 账号 UUID */
+	keyword?: string;
+	/** 绑定状态: all=全部, bound=组内多于一个, single=独立成组 */
+	bound?: "all" | "bound" | "single";
+	/** 每页条数 */
+	limit: number;
+	/** 偏移量 */
+	offset: number;
+}
+
+export type UserOverview = {
+	/** 账号总数 */
+	accounts: number;
+	/** 跨平台ID 总数 */
+	unions: number;
+	/** 已绑定的跨平台ID 数 (组内多于一个账号) */
+	boundUnions: number;
+	/** 独立成组的账号数 (组内只有自己) */
+	singleAccounts: number;
+	/** 各平台账号数 */
+	platforms: { platform: string; accounts: number }[];
+}
+
 export class UserManager {
 	db: sqlite.Database;
 
@@ -32,9 +72,24 @@ export class UserManager {
             CREATE TABLE IF NOT EXISTS internal_map (
                 uuid TEXT PRIMARY KEY,              -- 账号 UUID
                 internal_id TEXT NOT NULL,          -- 内部组 ID（逻辑分组标识）
+                last_internal_id TEXT,              -- 变更前的内部组 ID, 用于回到上一个跨平台ID
                 FOREIGN KEY (uuid) REFERENCES account_map(uuid) ON DELETE CASCADE
             );
+
+            -- 按组查成员（组内成员列表 / 组内计数）
+            CREATE INDEX IF NOT EXISTS idx_internal_map_union ON internal_map(internal_id);
         `);
+
+		// 老库补列: CREATE TABLE IF NOT EXISTS 不会为已存在的表新增列
+		if (!this.#hasColumn("internal_map", "last_internal_id")) {
+			this.db.exec(`ALTER TABLE internal_map ADD COLUMN last_internal_id TEXT`);
+		}
+	}
+
+	/** 表是否已包含某列 */
+	#hasColumn(table: string, column: string): boolean {
+		const rows = this.db.pragma(`table_info(${table})`) as { name: string }[];
+		return rows.some(row => row.name === column);
 	}
 
 	/**
@@ -103,10 +158,10 @@ export class UserManager {
 	 * @param internalId 内部组 ID（逻辑分组标识）
 	 * @param accountUuid 账号 UUID（必须已存在于 account_map）
 	 */
-	bind(internalId: string, accountUuid: string): void {
+	bind(internalId: string, accountUuid: string): boolean {
 		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
 
-		this.db.transaction(() => {
+		return this.db.transaction(() => {
 			// 校验账号是否存在
 			const physical = this.db.prepare(
 				'SELECT 1 FROM account_map WHERE uuid = ?'
@@ -115,12 +170,24 @@ export class UserManager {
 				throw new Error(`bind: 账号 UUID "${accountUuid}" 不存在于 account_map，无法绑定`);
 			}
 
+			// 变更前的组 ID 先记录, 供「回到上一个跨平台ID」使用
+			const current = this.db.prepare(
+				'SELECT internal_id FROM internal_map WHERE uuid = ?'
+			).get(accountUuid) as { internal_id: string } | undefined;
+
+			// 已在该组时不算变更, 也不应覆盖历史记录
+			if (current?.internal_id === internalId) return false;
+
 			// 插入或更新 internal_map，将账号 UUID 关联到指定的内部组 ID
 			this.db.prepare(`
-				INSERT INTO internal_map (uuid, internal_id)
-				VALUES (?, ?)
-				ON CONFLICT(uuid) DO UPDATE SET internal_id = excluded.internal_id
-			`).run(accountUuid, internalId);
+				INSERT INTO internal_map (uuid, internal_id, last_internal_id)
+				VALUES (?, ?, ?)
+				ON CONFLICT(uuid) DO UPDATE SET
+					internal_id = excluded.internal_id,
+					last_internal_id = excluded.last_internal_id
+			`).run(accountUuid, internalId, current?.internal_id ?? null);
+
+			return true;
 		})();
 	}
 
@@ -144,11 +211,11 @@ export class UserManager {
 				return false;
 			}
 
-			// 分配一个新的内部组 ID，实现解绑
+			// 分配一个新的内部组 ID，实现解绑; 原组 ID 记入 last_internal_id 以便回退
 			const newInternalId = uuid();
 			const result = this.db.prepare(
-				'UPDATE internal_map SET internal_id = ? WHERE uuid = ?'
-			).run(newInternalId, accountUuid);
+				'UPDATE internal_map SET internal_id = ?, last_internal_id = ? WHERE uuid = ?'
+			).run(newInternalId, current.internal_id, accountUuid);
 
 			return result.changes > 0;
 		})();
@@ -172,6 +239,28 @@ export class UserManager {
 			platform: row.platform_name,
 			id: row.platform_id
 		};
+	}
+
+	/**
+	 * 批量查询多个账号的平台信息
+	 * @param accountIds 账号 UUID 列表
+	 */
+	queryMany(accountIds: string[]): Map<string, UserPlatformInfo> {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
+
+		const result = new Map<string, UserPlatformInfo>();
+		if (accountIds.length === 0) return result;
+
+		const placeholders = accountIds.map(() => "?").join(", ");
+		const rows = this.db.prepare(`
+			SELECT uuid, platform_name, platform_id FROM account_map WHERE uuid IN (${placeholders})
+		`).all(...accountIds) as { uuid: string; platform_name: string; platform_id: string }[];
+
+		for (const row of rows) {
+			result.set(row.uuid, { platform: row.platform_name, id: row.platform_id });
+		}
+
+		return result;
 	}
 
 	/**
@@ -207,5 +296,151 @@ export class UserManager {
 		).get(accountId) as { internal_id: string };
 
 		return result.internal_id;
+	}
+
+	/**
+	 * 纯查询: 根据平台和平台用户 ID 获取账号 UUID, 不产生任何写入。
+	 * 与 get() 的区别是账号不存在时返回 null, 而不会创建账号与内部组记录。
+	 * @returns 账号 UUID; 不存在则返回 null
+	 */
+	find(platform: string, id: string): string | null {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
+
+		const row = this.db.prepare(
+			'SELECT uuid FROM account_map WHERE platform_name = ? AND platform_id = ?'
+		).get(platform, id) as { uuid: string } | undefined;
+
+		return row?.uuid ?? null;
+	}
+
+	/**
+	 * 查询指定内部组下的全部账号
+	 * @param internalId 内部组 ID（跨平台ID）
+	 */
+	listMembers(internalId: string): UnionMember[] {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
+
+		const rows = this.db.prepare(`
+			SELECT m.uuid AS accountId, a.platform_name AS platform, a.platform_id AS id
+			FROM internal_map m
+			JOIN account_map a ON a.uuid = m.uuid
+			WHERE m.internal_id = ?
+			ORDER BY a.platform_name, a.platform_id
+		`).all(internalId) as { accountId: string; platform: string; id: string }[];
+
+		return rows.map(row => ({ accountId: row.accountId, platform: row.platform, id: row.id }));
+	}
+
+	/**
+	 * 查询账号上一次所在的内部组 ID（任何一次变更前记录的值）
+	 * @returns 内部组 ID; 无记录（新账号或从未变更）返回 null
+	 */
+	getLast(accountId: string): string | null {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
+
+		const row = this.db.prepare(
+			'SELECT last_internal_id FROM internal_map WHERE uuid = ?'
+		).get(accountId) as { last_internal_id: string | null } | undefined;
+
+		return row?.last_internal_id ?? null;
+	}
+
+	/**
+	 * 将账号恢复到上一次所在的内部组。
+	 * 目标组若已无其他成员, 恢复后该账号将独占该组 ——
+	 * 组由成员定义, 框架不存在显式建组, 因此这里不做组的存在性校验。
+	 * @param accountId 账号 UUID
+	 * @returns 恢复后的内部组 ID; 账号不存在或没有历史记录时返回 null
+	 */
+	restore(accountId: string): string | null {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
+
+		const last = this.getLast(accountId);
+		if (!last) return null;
+
+		// bind 会把“恢复前的组”再写入 last_internal_id, 因此可再次切回
+		if (!this.bind(last, accountId)) return null;
+
+		return last;
+	}
+
+	/**
+	 * 分页查询账号列表。
+	 *
+	 * 排序固定为 平台 -> 平台用户ID, 保证翻页结果稳定。活跃度等派生指标
+	 * 不在本库, 由调用方拿到本页账号后另外查询 (统计库与内部库是两个文件, 无法联表)。
+	 */
+	list(query: UserListQuery): { items: UserListItem[]; total: number } {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
+
+		const params: (string | number)[] = [];
+		let condition = "1 = 1";
+
+		if (query.platform) {
+			condition += " AND a.platform_name = ?";
+			params.push(query.platform);
+		}
+		if (query.keyword) {
+			condition += " AND (a.platform_id LIKE ? OR a.uuid LIKE ?)";
+			const like = `%${query.keyword}%`;
+			params.push(like, like);
+		}
+		if (query.bound === "bound") condition += " AND s.size > 1";
+		else if (query.bound === "single") condition += " AND s.size = 1";
+
+		const from = `
+			FROM account_map a
+			JOIN internal_map m ON m.uuid = a.uuid
+			JOIN (SELECT internal_id, COUNT(*) AS size FROM internal_map GROUP BY internal_id) s
+				ON s.internal_id = m.internal_id
+			WHERE ${condition}
+		`;
+
+		const total = (this.db.prepare(`SELECT COUNT(*) AS c ${from}`).get(...params) as { c: number }).c;
+
+		const rows = this.db.prepare(`
+			SELECT a.uuid AS accountId, a.platform_name AS platform, a.platform_id AS id,
+			       m.internal_id AS unionId, s.size AS unionSize
+			${from}
+			ORDER BY a.platform_name, a.platform_id
+			LIMIT ? OFFSET ?
+		`).all(...params, query.limit, query.offset) as {
+			accountId: string; platform: string; id: string; unionId: string; unionSize: number;
+		}[];
+
+		return {
+			items: rows.map(row => ({
+				accountId: row.accountId,
+				platform: row.platform,
+				id: row.id,
+				unionId: row.unionId,
+				unionSize: row.unionSize,
+			})),
+			total,
+		};
+	}
+
+	/** 概览: 账号与跨平台ID 的规模统计 */
+	overview(): UserOverview {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
+
+		const count = (sql: string): number => (this.db.prepare(sql).get() as { c: number }).c;
+
+		const platforms = this.db.prepare(`
+			SELECT platform_name AS platform, COUNT(*) AS accounts
+			FROM account_map GROUP BY platform_name ORDER BY accounts DESC
+		`).all() as { platform: string; accounts: number }[];
+
+		return {
+			accounts: count('SELECT COUNT(*) AS c FROM account_map'),
+			unions: count('SELECT COUNT(*) AS c FROM (SELECT internal_id FROM internal_map GROUP BY internal_id)'),
+			boundUnions: count('SELECT COUNT(*) AS c FROM (SELECT internal_id FROM internal_map GROUP BY internal_id HAVING COUNT(*) > 1)'),
+			singleAccounts: count(`
+				SELECT COUNT(*) AS c FROM internal_map m
+				JOIN (SELECT internal_id FROM internal_map GROUP BY internal_id HAVING COUNT(*) = 1) s
+					ON s.internal_id = m.internal_id
+			`),
+			platforms,
+		};
 	}
 }

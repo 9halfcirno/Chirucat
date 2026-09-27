@@ -103,4 +103,27 @@ export class SessionManager {
 			platform: row.platform_name
 		}
 	}
+
+	/** 批量查询多个会话的平台信息 */
+	queryMany(ids: string[]): Map<string, SessionPlatformInfo> {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
+
+		const result = new Map<string, SessionPlatformInfo>();
+		if (ids.length === 0) return result;
+
+		const placeholders = ids.map(() => "?").join(", ");
+		const rows = this.db.prepare(`
+			SELECT uuid, platform_id, platform_type, platform_name FROM session_map WHERE uuid IN (${placeholders})
+		`).all(...ids) as { uuid: string; platform_id: string; platform_type: SessionType; platform_name: string }[];
+
+		for (const row of rows) {
+			result.set(row.uuid, {
+				id: row.platform_id,
+				type: row.platform_type,
+				platform: row.platform_name,
+			});
+		}
+
+		return result;
+	}
 }
