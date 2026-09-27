@@ -153,8 +153,11 @@ process.on("uncaughtException", (e) => {
 process.once("SIGINT", () => void exit(0));
 process.once("SIGTERM", () => void exit(0));
 
-// 作为主入口文件运行时直接启动
-startCore().catch(async () => {
-	await exit(1);
-});
+// 作为主入口文件运行时直接启动;
+// 被其他模块 import 时不启动核心 (WebUI 启动时会扫描并 import api 目录下的所有模块)
+if (import.meta.main) {
+	startCore().catch(async () => {
+		await exit(1);
+	});
+}
 
