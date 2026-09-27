@@ -1,0 +1,349 @@
+/* 用户管理: 查询与绑定 */
+
+.users-manage {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-4);
+	color: var(--fg);
+}
+
+.users-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-3);
+	padding: var(--sp-4);
+}
+
+.users-card h3 {
+	margin: 0;
+	font-size: var(--fs-sm);
+	font-weight: 600;
+}
+
+.users-card h4 {
+	margin: 0;
+	font-size: var(--fs-sm);
+	font-weight: 600;
+	color: var(--fg-muted);
+}
+
+/* ---- 表单 ---- */
+.users-form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: var(--sp-2);
+}
+
+.users-bind {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--sp-2);
+}
+
+/* 绑定双方各成一组, 避免把两边弄混 */
+.users-bind-group {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-1);
+	padding: var(--sp-2) var(--sp-3);
+	border: 1px solid var(--glass-border);
+	border-radius: var(--r-md);
+}
+
+.users-bind-title {
+	font-size: var(--fs-xs);
+	font-weight: 600;
+	color: var(--fg-muted);
+}
+
+.users-bind-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sp-2);
+}
+
+.users-field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-1);
+	min-width: 0;
+}
+
+.users-field-label {
+	font-size: var(--fs-xs);
+	color: var(--fg-muted);
+}
+
+.users-field .input {
+	width: 12em;
+	max-width: 100%;
+}
+
+/* 绑定分组内两个输入并排, 收窄一些 */
+.users-bind-row .input {
+	width: 8.5em;
+	max-width: 100%;
+}
+
+.users-arrow {
+	padding-bottom: 0.6em;
+	color: var(--fg-muted);
+}
+
+/* ---- 查询结果 ---- */
+.users-result {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-3);
+}
+
+.users-info {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-2);
+}
+
+.users-info-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--sp-2);
+	font-size: var(--fs-sm);
+}
+
+.users-info-label {
+	min-width: 8em;
+	color: var(--fg-muted);
+}
+
+.users-info-value {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--sp-2);
+	min-width: 0;
+}
+
+/* 可点击复制的 id 块 */
+.users-id {
+	padding: 0.15em 0.4em;
+	border: 1px solid var(--glass-border);
+	border-radius: var(--r-md);
+	background: var(--bg-panel);
+	cursor: pointer;
+	transition: background-color var(--dur-fast) var(--ease);
+}
+
+.users-id:hover {
+	background: var(--bg-hover);
+}
+
+/* ---- 组内成员 ---- */
+.users-members {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-1);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.users-member {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--sp-2);
+	font-size: var(--fs-sm);
+}
+
+.users-badge {
+	padding: 0.1em 0.5em;
+	border-radius: 999px;
+	background: var(--bg-active);
+	font-size: var(--fs-xs);
+}
+
+/* 成员行内的按钮收紧成小号 */
+.users-member .btn {
+	height: auto;
+	padding: 0.1em 0.55em;
+	font-size: var(--fs-xs);
+}
+
+/* ---- 操作与提示 ---- */
+.users-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sp-2);
+}
+
+.users-hint {
+	margin: 0;
+	font-size: var(--fs-sm);
+}
+
+.users-empty {
+	margin: 0;
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+}
+
+.users-error {
+	margin: 0;
+	font-size: var(--fs-sm);
+	color: var(--danger);
+}
+
+/* ---- 确认对话框内容 ---- */
+.users-confirm-list {
+	margin: var(--sp-2) 0 0;
+	padding-left: 1.25em;
+	font-size: var(--fs-sm);
+}
+
+/* ---- 概览: 活跃统计的时间范围 ---- */
+.users-ranges {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sp-2);
+}
+
+.users-range {
+	appearance: none;
+	height: var(--ctl-h);
+	padding: 0 var(--sp-3);
+
+	border: 1px solid var(--glass-border);
+	border-radius: 999px;
+	background: var(--glass-bg);
+	color: inherit;
+
+	font: inherit;
+	font-size: var(--fs-sm);
+	cursor: pointer;
+
+	transition: background-color var(--dur-fast) var(--ease);
+}
+
+.users-range:hover {
+	background: var(--bg-hover);
+}
+
+.users-range.active {
+	background: var(--accent);
+	border-color: transparent;
+	color: var(--fg-on-accent);
+}
+
+/* ---- 概览: 统计卡片 ---- */
+.users-cards {
+	display: grid;
+	gap: var(--sp-3);
+	grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.users-stat-card {
+	padding: var(--sp-3) var(--sp-4);
+	border: 1px solid var(--glass-border);
+	border-radius: var(--r-lg);
+	background: var(--glass-bg);
+	backdrop-filter: blur(var(--glass-blur));
+}
+
+.users-stat-value {
+	font-size: var(--fs-xl);
+	font-weight: 600;
+	line-height: 1.2;
+	font-variant-numeric: tabular-nums;
+}
+
+.users-stat-label {
+	margin-top: var(--sp-1);
+	font-size: var(--fs-xs);
+	color: var(--fg-muted);
+}
+
+/* ---- 概览: 平台分布 ---- */
+.users-bars {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-2);
+}
+
+.users-bar-row {
+	display: grid;
+	grid-template-columns: minmax(60px, 30%) 1fr auto;
+	align-items: center;
+	gap: var(--sp-2);
+	font-size: var(--fs-sm);
+}
+
+.users-bar-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.users-bar-track {
+	height: 6px;
+	border-radius: 999px;
+	background: var(--bg-active);
+	overflow: hidden;
+}
+
+.users-bar-fill {
+	height: 100%;
+	border-radius: 999px;
+	background: var(--accent);
+}
+
+.users-bar-count {
+	color: var(--fg-muted);
+}
+
+/* ---- 列表: 筛选栏与表格 ---- */
+.users-filters {
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: flex-end;
+}
+
+/* 筛选栏里的下拉: 宽度贴近相邻输入框 (自绘控件不会随内容自动撑开) */
+.users-filters .config-select-wrap {
+	min-width: 9em;
+}
+
+.users-table-wrap {
+	overflow-x: auto;
+}
+
+.users-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--fs-sm);
+}
+
+.users-table th,
+.users-table td {
+	padding: var(--sp-2) var(--sp-3);
+	text-align: left;
+	white-space: nowrap;
+	border-bottom: 1px solid var(--glass-border);
+}
+
+.users-table th {
+	font-size: var(--fs-xs);
+	font-weight: 600;
+	color: var(--fg-muted);
+}
+
+.users-table tbody tr:hover {
+	background: var(--bg-hover);
+}
+
+/* 表格列里的数字/time 右对齐更易扫读 */
+.users-table td.num {
+	font-variant-numeric: tabular-nums;
+}

@@ -125,3 +125,15 @@ export type StatRankItem = {
 
 /** 聚合粒度 */
 export type RollupGranularity = "hour" | "day";
+
+/** 单个账号的活跃摘要 (仅明细期可得; 聚合表不含用户维度) */
+export type UserActivity = {
+	/** 收到的消息数 */
+	count: number;
+	/** 命中指令的消息数 */
+	commands: number;
+	/** 被过滤的消息数 */
+	filtered: number;
+	/** 最近一条消息的时间(ms) */
+	lastTime: number;
+}

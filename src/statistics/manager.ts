@@ -4,7 +4,7 @@ import { StatisticsStore } from "./store";
 import type { Message } from "../entity/message";
 import type { MessageSend } from "../protocols/action/message-send";
 import type {
-	StatFlags, StatPoint, StatRange, StatRankItem, StatRecord, StatisticsOptions, StatSendMeta, StatSummary,
+	StatFlags, StatPoint, StatRange, StatRankItem, StatRecord, StatisticsOptions, StatSendMeta, StatSummary, UserActivity,
 } from "./types";
 
 const logger = new Logger("Statistics");
@@ -141,5 +141,10 @@ export class StatisticsManager {
 	/** 已产生统计数据的 Bot id */
 	bots(): string[] {
 		return this.store.bots();
+	}
+
+	/** 批量查询一组账号的活跃摘要 (仅明细期数据) */
+	userActivity(userIds: string[], range: StatRange): Map<string, UserActivity> {
+		return this.store.userActivity(userIds, range);
 	}
 }

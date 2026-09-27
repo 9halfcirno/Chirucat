@@ -1,7 +1,7 @@
 import sqlite from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
-import type { StatDirection, StatPoint, StatRange, StatRankItem, StatRecord, StatSummary } from "./types";
+import type { StatDirection, StatPoint, StatRange, StatRankItem, StatRecord, StatSummary, UserActivity } from "./types";
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
@@ -297,6 +297,44 @@ export class StatisticsStore {
 	/** 指令命中排行 */
 	topCommands(range: StatRange, limit: number): StatRankItem[] {
 		return this.#topBy(range, "command", limit, "command != ''");
+	}
+
+	/**
+	 * 批量查询一组账号的活跃摘要
+	 *
+	 * 只查明细表 —— 聚合表不含用户维度, 因此结果仅覆盖明细保留期内的数据,
+	 * 调用方需自行说明这一限制。
+	 *
+	 * @param userIds 账号 UUID 列表
+	 * @param range 查询范围 (只统计收到的消息)
+	 */
+	userActivity(userIds: string[], range: StatRange): Map<string, UserActivity> {
+		const result = new Map<string, UserActivity>();
+		if (userIds.length === 0) return result;
+
+		const where = this.#where(range, "time");
+		const placeholders = userIds.map(() => "?").join(", ");
+
+		const rows = this.db.prepare(`
+			SELECT user_id AS id, COUNT(*) AS count,
+			       SUM(is_command) AS commands, SUM(filtered) AS filtered, MAX(time) AS lastTime
+			FROM message_stat
+			WHERE ${where.sql} AND user_id IN (${placeholders})
+			GROUP BY user_id
+		`).all(...where.params, ...userIds) as {
+			id: string; count: number; commands: number; filtered: number; lastTime: number;
+		}[];
+
+		for (const row of rows) {
+			result.set(row.id, {
+				count: row.count,
+				commands: row.commands ?? 0,
+				filtered: row.filtered ?? 0,
+				lastTime: row.lastTime,
+			});
+		}
+
+		return result;
 	}
 
 	/**
