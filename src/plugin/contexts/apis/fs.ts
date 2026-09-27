@@ -47,10 +47,10 @@ export class FileSystemAPI implements PluginFileSystemAPI {
 		}
 	}
 
-	async remove(filePath: string, option: RmOptions = { force: false, recursive: false }) {
+	async remove(filePath: string, options: RmOptions = {}): Promise<void> {
 		this.assertWritable(filePath);
 		const target = this.resolve(filePath);
-		await fs.rm(target, option);
+		await fs.rm(target, options);
 	}
 
 	async rename(filePath: string, name: string) {
@@ -67,10 +67,10 @@ export class FileSystemAPI implements PluginFileSystemAPI {
 		await fs.copyFile(old, newName);
 	}
 
-	async mkdir(filePath: string, option?: MakeDirectoryOptions): Promise<void> {
+	async mkdir(filePath: string, options?: MakeDirectoryOptions): Promise<void> {
 		this.assertWritable(filePath);
 		const target = this.resolve(filePath);
-		await fs.mkdir(target, option);
+		await fs.mkdir(target, options);
 	}
 
 	async list(filePath = "."): Promise<string[]> {

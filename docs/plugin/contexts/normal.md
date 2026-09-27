@@ -4,9 +4,11 @@
 
 该上下文提供了以下能力
 
-- [基础信息](#基础信息)
+- [信息获取](#信息获取)
   - [Bot信息](#bot对象)
   - [配置](#config对象)
+  - [用户信息](#user对象)
+  - [会话信息](#session对象)
 - [消息处理](#消息处理)
   - [普通回调](#message对象)
   - [指令回调](#command对象)
@@ -21,7 +23,7 @@
   - [插件间导入导出](#插件间导入导出exportsrequire)
 - [禁忌!!除非你知道你在做什么](#绝对不应触碰的禁忌)
 
-## 基础信息
+## 信息获取
 
 ### bot对象
 
@@ -51,7 +53,43 @@
 - 插件自己的可变状态请使用 `kv` / `fs`; 配置属于用户, 插件侧不提供写入接口
 - 未在清单里声明 `config` 的插件, `config` 为空配置(`get` 返回 `fallback`、`has` 为 `false`、`all` 为 `{}`), 无需判空
 
-## 消息处理
+### user对象
+
+该对象用于查询用户的信息
+
+该对象拥有以下方法:
+
+- `find(platform: string, id: string): string | null`: 通过平台名与用户平台id获取用户对应的框架账号id
+- `query(accountId: string): UserPlatformInfo | null`: 通过用户框架id查询对应平台信息
+- `getUnion(accountId: string): string | null`: 通过用户框架id查询对应跨平台id
+
+三方法在查询不到已有信息时会返回null
+
+```ts
+type UserPlatformInfo = {
+	id: string; // 用户平台id
+	platform: string; //该uuid所属平台
+}
+```
+
+### session对象
+
+该对象用于查询会话的信息
+
+- `find(platform: string, type: SessionType, id: string): string | null`: 通过平台名, 会话类型与会话平台id获取会话对应的框架账号id
+- `query(sessionId: string): { platform: string, type: SessionType,id: string } | null`: 通过会话框架id查询对应平台信息
+
+两方法在查询不到已有信息时会返回null
+
+```ts
+type SessionType = "private" | "group" | "channel"
+type SessionPlatformInfo = {
+	platform: string; // 会话所属平台
+	type: SessionType; // 会话类型
+	id: string; // 会话平台id
+}
+```
+
 
 ### message对象
 
@@ -79,9 +117,9 @@
 
 该对象有以下方法:
 
-- `register(command: string, handler: (msg: Message | null, args: (string | number)[]) => void)`: 注册一个指令回调, 当指令触发时, 会触发该回调函数, 并将指令参数传入回调函数, 指令名支持携带空格
+- `register(command: string, handler: (msg: Message | null, args: (string | number)[]) => void): Command`: 注册一个指令回调, 当指令触发时, 会触发该回调函数, 并将指令参数传入回调函数, 指令名支持携带空格
 
-- `unregister(command: Command)`: 注销一个指令回调
+- `unregister(command: Command)`: 注销一个指令回调, 传入`register`方法的返回值即可
 
 - `exec: (message: Message | string, args?: (string | number)[])`: 触发一个指令
   - 若第一个参数为string, 则将第二个参数作为指令参数传入, 同时目标指令回调的第一个参数会为null

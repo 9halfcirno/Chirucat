@@ -1,31 +1,49 @@
-import type { Bot } from "../../bot/bot";
-import { StateError } from "../../errors/state-error";
 import type { ActionResponses, BotActions } from "../../protocols/actions";
 import type { BotEvents } from "../../protocols/events";
-import type { SessionType } from "../../protocols/session";
 import type { PluginExports } from "../exports";
-import type { ConfigManager } from "../../config/manager";
-import type { PluginManifest } from "../types";
 import { PluginContext } from "./context";
-import type { ActionHandler, AdapterPluginBotAPI, PluginSessionAPI, PluginUserAPI } from "./types";
+import type { ActionHandler, AdapterBotAPI, AdapterSessionAPI, AdapterUserAPI } from "./types";
 import type { Plugin } from "../plugin";
 
 export class AdapterContext extends PluginContext {
+	/** 适配器注册的动作处理器, 按注册顺序依次尝试 */
 	private actionHandlers: ActionHandler[] = [];
+
+	/** 适配器视角的 Bot: 追加事件派发与动作处理注册, 运行时值在构造函数里写入 */
+	declare bot: AdapterBotAPI;
+
+	/**
+	 * 适配器视角的用户: 追加"取或建"
+	 *
+	 * 适配器是平台标识的来源, 需要在派发事件时落地账号记录;
+	 * 普通插件视角(基类)只有 find/query, 不会隐式创建。
+	 */
+	override user: AdapterUserAPI = {
+		find: (platform, id) => this._bot.core.user!.find(platform, id),
+		query: (uuid) => this._bot.core.user!.query(uuid),
+		get: (platform, id) => this._bot.core.user!.get(platform, id),
+	};
+
+	/** 适配器视角的会话: 追加"取或建", 理由同 user */
+	override session: AdapterSessionAPI = {
+		find: (platform, type, id) => this._bot.core.session!.find(platform, type, id),
+		query: (uuid) => this._bot.core.session!.query(uuid),
+		get: (platform, type, id) => this._bot.core.session!.get(platform, type, id),
+	};
+
 	constructor(plugin: Plugin, exports: PluginExports) {
 		if (plugin.manifest.type !== "adapter") throw new Error(`Plugin Context: AdapterContext仅 type: adapter 的插件可创建`)
 		super(plugin, exports);
-		/**
-		 * 为Bot触发一个BotEvent
-		 * @param event Bot事件
-		 */
+
 		this.bot = {
 			id: this._bot.id,
 			name: this._bot.name,
+			/**
+			 * 为Bot触发一个BotEvent
+			 * @param event Bot事件
+			 */
 			dispatch: (event: BotEvents) => {
-				if (this._disposed) {
-					if (this._disposed) throw new StateError(`Context已释放, 无法触发事件`);
-				}
+				this.assertAlive("触发事件");
 				this._bot.dispatch(event, {
 					adapter: this._manifest.id
 				});
@@ -40,69 +58,40 @@ export class AdapterContext extends PluginContext {
 		}
 	}
 
-	bot: AdapterPluginBotAPI;
-
-	user: PluginUserAPI = {
-		get: (platform: string, id: string) => {
-			return this._bot.core.user!.get(platform, id)
-		},
-		query: (uuid: string) => {
-			return this._bot.core.user!.query(uuid);
-		}
-	}
-
-	session: PluginSessionAPI = {
-		get: (platform: string, type: SessionType, id: string) => {
-			return this._bot.core.session!.get(platform, type, id)
-		},
-		query: (uuid) => {
-			return this._bot.core.session!.query(uuid);
-		},
-	}
-
 	async handleAction<T extends BotActions>(
 		action: T,
 		extra?: Record<string, any>
 	): Promise<ActionResponses[T["type"]]> {
-		let response: ActionResponses[T["type"]] | null = null;
-
 		for (const handler of this.actionHandlers) {
 			// handler 抛异常不能让它直接 reject 出去: 本方法的契约是"总能给出响应对象",
 			// 否则 msg.reply() 会以一个未捕获异常的形式收场, 比 success:false 更难定位。
 			try {
-				const r = await handler(action, extra);
-				if (r) {
-					response = r;
-					break;
-				}
+				const response = await handler(action, extra);
+				if (response) return response;
 			} catch (e) {
 				const msg = e instanceof Error ? e.message : String(e);
 				this.logger.error(`适配器处理动作 ${action.type} 时抛出异常: ${msg}`);
-				return {
-					success: false,
-					error: msg,
-					code: "ADAPTER_ERROR"
-				} as ActionResponses[T["type"]];
+				return this.failure<T>(msg, "ADAPTER_ERROR");
 			}
 		}
 
-		// 如果遍历完都没有 handler 给出响应
-		// 直接返回框架层统一的 success: false
-		if (!response) {
-			// 静默失败会让调用方只看到 success:false 而无从定位, 这里必须留痕:
-			// 动作已由 PluginManager 按 meta.adapter 路由到本插件, 所以"没处理"是缺陷, 不是分工
-			this.logger.warn(
-				`适配器未处理动作 ${action.type}: 插件 ${this._manifest.id} 注册了 ${this.actionHandlers.length} 个Action处理器, ` +
-				`均未返回响应`
-			);
-			return {
-				success: false,
-				error: "Adapter did not handled this action",
-				code: "ACTION_NOT_HANDLED"
-			} as ActionResponses[T["type"]];
-		}
+		// 如果遍历完都没有 handler 给出响应, 直接返回框架层统一的 success: false。
+		// 静默失败会让调用方只看到 success:false 而无从定位, 这里必须留痕:
+		// 动作已由 PluginManager 按 meta.adapter 路由到本插件, 所以"没处理"是缺陷, 不是分工
+		this.logger.warn(
+			`适配器未处理动作 ${action.type}: 插件 ${this._manifest.id} 注册了 ${this.actionHandlers.length} 个Action处理器, ` +
+			`均未返回响应`
+		);
+		return this.failure<T>("Adapter did not handled this action", "ACTION_NOT_HANDLED");
+	}
 
-		return response;
+	/** 统一的失败响应: 本方法的契约是"总能给出响应对象", 不允许 undefined */
+	private failure<T extends BotActions>(error: string, code: string): ActionResponses[T["type"]] {
+		return {
+			success: false,
+			error,
+			code
+		} as ActionResponses[T["type"]];
 	}
 
 	override dispose(): void {

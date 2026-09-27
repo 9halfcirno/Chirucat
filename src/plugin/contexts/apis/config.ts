@@ -44,7 +44,7 @@ export class PluginConfig implements PluginConfigAPI {
 	}
 
 	/** 注销全部监听, 幂等 (由 PluginContext.dispose 调用) */
-	dispose() {
+	dispose(): void {
 		for (const unwatch of this.unwatchers.splice(0)) unwatch();
 	}
 }

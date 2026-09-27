@@ -67,6 +67,21 @@ export class SessionManager {
 		return getOrCreate(platform, type, id);
 	}
 
+	/**
+	 * 纯查询: 根据平台, 类型与平台会话 ID 查找会话 UUID, 不产生任何写入。
+	 * 与 get() 的区别是会话不存在时返回 null, 而不会创建会话记录。
+	 * @returns 会话 UUID; 不存在则返回 null
+	 */
+	find(platform: string, type: SessionType, id: string): string | null {
+		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
+
+		const row = this.db.prepare(
+			'SELECT uuid FROM session_map WHERE platform_name = ? AND platform_type = ? AND platform_id = ?'
+		).get(platform, type, id) as { uuid: string } | undefined;
+
+		return row?.uuid ?? null;
+	}
+
 	has(platform: string, type: SessionType, id: string) {
 		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
 		let has = this.db.transaction((p: string, t: SessionType, id: string) => {

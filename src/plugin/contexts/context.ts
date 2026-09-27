@@ -5,19 +5,16 @@ import { Message } from "../../entity/message";
 import type { BotActions } from "../../protocols/actions";
 import type { PluginManifest } from "../types";
 import { MessageAPI } from "./apis/message";
-import Logger from "../../utils/logger";
-
-const logger = new Logger("PluginContext");
-import type { MessageCallbackEntry, PluginBotAPI, PluginCommandAPI, PluginConfigAPI, PluginFileSystemAPI, PluginKVAPI, PluginMessageAPI, ReadonlyFsAPI } from "./types";
+import type { MessageCallbackEntry, PluginBotAPI, PluginCommandAPI, PluginConfigAPI, PluginFileSystemAPI, PluginKVAPI, PluginMessageAPI, PluginSessionAPI, PluginUserAPI, ReadonlyFsAPI } from "./types";
 import { FileSystemAPI } from "./apis/fs";
 import { KVStore } from "./apis/kv";
 import { PluginConfig } from "./apis/config";
 import path from "node:path";
 import { root } from "../../utils/root";
 import type { PluginExports } from "../exports";
-import type { ConfigManager } from "../../config/manager";
 import { StateError } from "../../errors/state-error";
 import type { Plugin } from "../plugin";
+import Logger from "../../utils/logger";
 
 export class PluginContext {
 	protected _bot: Bot;
@@ -31,20 +28,20 @@ export class PluginContext {
 	kv: PluginKVAPI;
 	/** 插件配置(只读), 未声明 manifest.config 时为空配置 */
 	config: PluginConfigAPI;
-	/** 内部持有的配置视图, 供 dispose 注销监听 */
-	private _config: PluginConfig;
+	/** 当前 Bot 的只读视图 */
+	bot: PluginBotAPI;
+	/** 插件相关路径 */
 	path: {
 		/** 插件代码根目录 */
 		plugin: string;
-		/** 插件数据根目录 */
-		data: string
+		/** 插件数据根目录: bot/data/plugins/<插件id> */
+		data: string;
 	};
 
+	/** 内部持有的配置视图, 供 dispose 注销监听 */
+	private _config: PluginConfig;
 	/** 内部持有的 KV 存储实例, 供 dispose 关闭连接 */
 	private _kv: KVStore;
-
-	/** 插件存储根目录: bot/data/plugins/<插件id> */
-	private _storageRoot: string;
 
 	private _onMessageCallback: MessageCallbackEntry[] = [];
 
@@ -62,11 +59,11 @@ export class PluginContext {
 			this._onMessageCallback.push(entry);
 		});
 		// bot.path 为绝对路径, resolve 会从其重置; 若为相对路径则以 root 为基准
-		this._storageRoot = path.resolve(root, this._bot.path, "data", "plugins", this._manifest.id);
-		this.fs = new FileSystemAPI(this._storageRoot);
+		const storageRoot = path.resolve(root, this._bot.path, "data", "plugins", this._manifest.id);
+		this.fs = new FileSystemAPI(storageRoot);
 		// 插件代码目录只读: 允许读自带资源, 不允许改写安装目录
 		this.plugin = new FileSystemAPI(path.resolve(root, this._manifest.path), { writable: false });
-		this._kv = new KVStore(path.join(this._storageRoot, ".kv.db"));
+		this._kv = new KVStore(path.join(storageRoot, ".kv.db"));
 		this.kv = this._kv;
 		this._config = new PluginConfig(plugin.config);
 		this.config = this._config;
@@ -74,18 +71,17 @@ export class PluginContext {
 		this.bot = {
 			id: this._bot.id,
 			name: this._bot.name
-		}
+		};
 
 		this.path = {
 			plugin: this._manifest.path,
-			data: this._storageRoot
-		}
+			data: storageRoot
+		};
 	}
 
-	bot: PluginBotAPI;
 	command: PluginCommandAPI = {
 		register: (name, handler) => {
-			if (this._disposed) throw new StateError(`Context已释放, 无法注册指令`);
+			this.assertAlive("注册指令");
 			const command: Command = { name, handler };
 
 			this._commands.add(command);
@@ -97,9 +93,32 @@ export class PluginContext {
 			this._bot.command.unregister(command);
 		},
 		exec: (message: Message | string, args?: (string | number)[]) => {
-			if (this._disposed) throw new StateError(`Context已释放, 无法触发指令`);
+			this.assertAlive("触发指令");
 			return message instanceof Message ? this._bot.command.exec(message) : this._bot.command.exec(message, args || []);
 		}
+	}
+
+	/** 用户标识: 只查不建, 账号落账由适配器负责 */
+	user: PluginUserAPI = {
+		find: (platform, id) => {
+			return this._bot.core.user!.find(platform, id);
+		},
+		query: (uuid) => {
+			return this._bot.core.user!.query(uuid);
+		},
+		getUnion: (accountId) => {
+			return this._bot.core.user!.getUnion(accountId);
+		},
+	}
+
+	/** 会话标识: 只查不建, 会话落账由适配器负责 */
+	session: PluginSessionAPI = {
+		find: (platform, type, id) => {
+			return this._bot.core.session!.find(platform, type, id);
+		},
+		query: (uuid) => {
+			return this._bot.core.session!.query(uuid);
+		},
 	}
 
 	/**
@@ -108,7 +127,7 @@ export class PluginContext {
 	 * @param action 动作对象
 	 */
 	action(entity: Entity, action: BotActions) {
-		if (this._disposed) throw new StateError(`Context已释放, 无法发送Action`);
+		this.assertAlive("发送Action");
 		return this._bot.action(action, entity.meta.adapter, entity.extra)
 	}
 
@@ -153,12 +172,21 @@ export class PluginContext {
 				const result = entry.handler(msg);
 				if (result instanceof Promise) {
 					// 期约同步抛出, 不等待; 仅吞掉 rejection 防止 unhandledRejection
-					result.catch((e) => logger.error("Plugin message callback error:", e));
+					result.catch((e) => this.logger.error("Plugin message callback error:", e));
 				}
 			} catch (e) {
-				logger.error("Plugin message callback error:", e);
+				this.logger.error("Plugin message callback error:", e);
 			}
 		}
+	}
+
+	/**
+	 * 断言上下文仍可用
+	 * @param action 被拒绝的操作名, 用于报错
+	 * @throws 上下文已释放时抛出 StateError
+	 */
+	protected assertAlive(action: string): void {
+		if (this._disposed) throw new StateError(`Context已释放, 无法${action}`);
 	}
 
 	/**
@@ -176,7 +204,7 @@ export class PluginContext {
 
 		this._onMessageCallback = []; // 置空;
 		// 清理指令
-		for (let com of this._commands.values()) {
+		for (const com of this._commands.values()) {
 			this._bot.command.unregister(com)
 		}
 		this._commands.clear();
@@ -187,7 +215,7 @@ export class PluginContext {
 		try {
 			this._kv.close();
 		} catch (e) {
-			logger.error("Plugin context dispose: 关闭 KV 失败:", e);
+			this.logger.error("Plugin context dispose: 关闭 KV 失败:", e);
 		}
 	}
 }

@@ -13,7 +13,7 @@
 
 该对象非`Bot`实例, 而是对Bot核心方法的封装
 
-该对象在基础信息的基础上还有以下方法:
+该对象在[基础信息](./normal.md#bot对象)的基础上还有以下方法:
 
 - `dispatch(event: BotEvent)`: 向Bot发送一个事件, 实现平台 -> Bot ([事件指路](../../events/index.md))
 
@@ -27,21 +27,13 @@
 
 ### user对象
 
-该对象实现 用户平台信息 <-> 账号uuid 的转换
+该对象的额外方法用于用户平台信息 <-> 账号uuid 的转换
 
 由于框架使用账号uuid + 跨平台uuid, 所以要实现双向通信必须使用该对象
 
-该对象有以下方法:
+该对象在[基础方法](./normal.md#user对象)的基础上还有以下方法:
 
 - `get(platform: string, id: string): string`: 传入平台名和用户平台id, 返回用户账号uuid, 在构建事件时必须使用用该方法做转换
-- `query(uuid: string): UserPlatformInfo | null`: 通过账号uuid查询对应的平台信息, 如果未找到返回null
-
-```ts
-type UserPlatformInfo = {
-	id: string; // 用户平台id
-	platform: string; //该uuid所属平台
-}
-```
 
 ### session对象
 
@@ -49,19 +41,9 @@ type UserPlatformInfo = {
 
 在构建事件/向平台发送请求时必须使用该对象做转换
 
-该对象有以下方法:
+该对象在[基础方法](./normal.md#session对象)的基础上还有以下方法:
 
-- `get(platform: string, type: PlatformType, id: string): string`: 传入平台名, 聊天窗口类型和会话平台id, 返回会话uuid, 在构建事件时必须使用用该方法做转换
-- `query(uuid: string): SessionPlatformInfo | null`: 通过会话uuid查询对应的平台信息, 如果未找到返回null
-
-```ts
-type SessionType = "private" | "group" | "channel"
-type SessionPlatformInfo = {
-	platform: string; // 会话所属平台
-	type: SessionType; // 会话类型
-	id: string; // 会话平台id
-}
-```
+- `get(platform: string, type: string, id: string): string`: 传入平台名, 聊天窗口类型和会话平台id, 返回会话uuid, 在构建事件时必须使用用该方法做转换
 
 ---
 
