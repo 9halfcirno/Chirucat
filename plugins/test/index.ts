@@ -27,18 +27,18 @@ export default {
 				msg.reply(`## 测试:
 
 - 当前测试指令: /${ctx.config.get("command")}
-- 启用的测试功能: \n- ${features.join("\n- ") || "无"}`)
+- 启用的测试功能: \n  - ${features.join("\n  - ") || "无"}`)
 			} else {
 				if (args[0] === "reply") {
 					if (!features.includes("reply")) return;
-					
+
 					msg.reply(`测试引用回复: \n- 消息ID: ${msg.id}\n- 引用Token: ${msg.token}`, { quote: true })
 				} else if (args[0] === "delete") {
 					if (!features.includes("delete")) return;
 
 					let res = await msg.reply(`测试撤回: \n该消息将在 5s 后尝试撤回!`);
-					if (!res || !res.success) {
-						msg.reply(`无法进行撤回: message.send响应失败`)
+					if (!res.success) {
+						msg.reply(`无法进行撤回: message.send响应失败: ${res.error}`)
 						return;
 					};
 					let id = res.id;
