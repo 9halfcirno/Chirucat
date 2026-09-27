@@ -4,6 +4,7 @@
 	"name": "测试插件",
 	"author": "9halfcirno",
 	"main": "index.ts",
+	"config": "config.json",
 	"dependencies": {
 	}
 }
