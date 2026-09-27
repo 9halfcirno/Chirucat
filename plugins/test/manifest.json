@@ -1,9 +1,9 @@
 {
-	"id": "des",
+	"id": "test",
 	"version": "0.0.0",
-	"name": "Ping 的依赖",
+	"name": "测试插件",
 	"author": "9halfcirno",
-	"main": "index.js",
+	"main": "index.ts",
 	"dependencies": {
 	}
 }

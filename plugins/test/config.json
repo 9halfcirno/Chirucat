@@ -1,0 +1,38 @@
+{
+	"$schema": "../../src/config/schema.json",
+	"controls": [
+		{
+			"type": "switch",
+			"id": "enable",
+			"label": "启用测试指令",
+			"default": true
+		},
+		{
+			"type": "input",
+			"id": "command",
+			"label": "测试指令",
+			"default": "test",
+			"required": true
+		},
+		{
+			"type": "checkbox",
+			"id": "features",
+			"label": "启用的测试项",
+			"items": [
+				{
+					"label": "回复消息",
+					"value": "reply"
+				},
+				{
+					"label": "撤回消息",
+					"value": "delete"
+				}
+			],
+			"default": [
+				"reply",
+				"delete"
+			],
+			"desc": "控制消息在框架侧回复延迟",
+		}
+	]
+}
