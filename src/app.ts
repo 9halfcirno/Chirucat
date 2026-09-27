@@ -105,7 +105,7 @@ export async function stopCore(): Promise<void> {
 		return;
 	}
 
-	logger.log("正在关闭 Chirucat 核心喵...");
+	logger.log("正在关闭 Chirucat 核心...");
 	try {
 		await withTimeout(core.close(), CLOSE_TIMEOUT, `关闭核心超时(${CLOSE_TIMEOUT}ms)`);
 		logger.log("Chirucat 核心已关闭");

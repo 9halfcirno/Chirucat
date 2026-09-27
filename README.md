@@ -25,7 +25,7 @@
 
 > 推荐Node 24, 如果遇到依赖包版本问题请尝试降级`package.json`中的依赖包版本
 > 
-> 最低使用版本建议为Node 22
+> 最低使用版本为Node 22, 因为部分代码使用到较新语法
 
 ### 2. 获取 Chirucat
 
@@ -44,6 +44,8 @@ npm run app
 ```
 
 等待一会儿就会在本地`http://localhost:7636`打开WebUI
+
+如果是第一次启动, 会生成默认配置, WebUI的密码会打印在终端, 后续可在`configs/webui.json`中查看
 
 ### 4. 创建初始Bot
 
