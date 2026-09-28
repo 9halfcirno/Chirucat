@@ -1,11 +1,8 @@
-import fs from "fs/promises";
 import path from "path";
-import json5 from "json5";
 import { Plugin } from "./plugin";
 import { PluginLoader } from "./loader";
-import { root } from "../utils/root";
 import type { PluginManifest, PluginScope, PluginStatus } from "./types";
-import { ValidationError } from "../errors/validation-error";
+import { readManifests } from "./manifest";
 import { StateError } from "../errors/state-error";
 import { PluginContextFactory } from "./contexts/factory";
 import { ConfigManager } from "../config/manager";
@@ -15,7 +12,6 @@ import type { Message } from "../entity/message";
 import type { ActionResponses, BotActions } from "../protocols/actions";
 import type { AdapterContext } from "./contexts/adapter-context";
 import Logger from "../utils/logger";
-import { dirCheck } from "../utils/dir-check";
 import { dfs } from "../utils/dfs";
 import { PluginExports } from "./exports";
 
@@ -53,6 +49,8 @@ export class PluginManager {
 		for (const depId of Object.keys(plugin.manifest.dependencies ?? {})) {
 			const dep = this.resolve(depId);
 			if (!dep) {
+				// 服务插件已由 Core 先于所有 Bot 加载, 不进 Bot 的依赖图, 也不算缺失
+				if (this.isServiceDependency(depId)) continue;
 				this.bot.logger.warn(`插件 ${plugin.id} 的依赖 ${depId} 未注册`);
 				continue;
 			}
@@ -61,11 +59,18 @@ export class PluginManager {
 		return deps;
 	}
 
+	/** 该依赖 id 是否指向已注册的服务插件(services/ 目录, 由 Core 管理) */
+	private isServiceDependency(id: string): boolean {
+		return this.bot.core.services.registry.has(id);
+	}
+
 	/** 收集 manifest 中声明但未注册的依赖 id(缺失依赖) */
 	private getMissingDependencies(plugin: Plugin): string[] {
 		const missing: string[] = [];
 		for (const depId of Object.keys(plugin.manifest.dependencies ?? {})) {
-			if (!this.resolve(depId)) missing.push(depId);
+			// 依赖可以是普通插件, 也可以是全局服务插件
+			if (this.resolve(depId) || this.isServiceDependency(depId)) continue;
+			missing.push(depId);
 		}
 		return missing;
 	}
@@ -85,34 +90,14 @@ export class PluginManager {
 
 	/** 扫描单个插件目录并同步到对应注册表 */
 	private async scanDir(dir: string, scope: PluginScope, registry: Map<string, Plugin>) {
-		path.isAbsolute(dir) ? (dir) : (dir = path.join(root, dir)); // 转为绝对路径
-		await dirCheck(dir);
+		const collected = await readManifests(dir, (e) => this.bot.logger.error(e));
 
-		// 收集本目录清单
-		const collected = new Map<string, PluginManifest>();
-		const seen = new Set<string>();	// 防止同目录出现重复插件
-		const pluginDirs = await fs.readdir(dir);
-		for (let pluginDir of pluginDirs) {
-
-			pluginDir = path.join(dir, pluginDir);
-			const manPath = path.join(pluginDir, "manifest.json");
-			try {
-				const file = await fs.readFile(manPath, "utf-8");
-				const manifest = json5.parse(file) as PluginManifest;
-
-				if (!manifest.id) throw new ValidationError("插件清单字段不完整", "id", manPath)
-				if (!manifest.version) throw new ValidationError("插件清单字段不完整", "version", manPath)
-				if (!manifest.main) throw new ValidationError("插件清单字段不完整", "main", manPath)
-
-				if (seen.has(manifest.id)) throw new Error(`${dir} 中存在重复 id 插件: ${manifest.id}`)
-				seen.add(manifest.id);
-
-				manifest.path = pluginDir;
-				collected.set(manifest.id, manifest);
-			} catch (e) {
-				this.bot.logger.error(e);
-
-			}
+		// service 类型归 services/ 目录(由 ServiceHost 承接全局单例);
+		// 出现在 Bot 插件目录里是放错了地方 —— 按普通插件加载会每个 Bot 各起一份, 不是它的语义
+		for (const [id, manifest] of [...collected]) {
+			if (manifest.type !== "service") continue;
+			this.bot.logger.warn(`插件 ${id} 声明为 service 类型, 应放入 services/ 目录, 已跳过`);
+			collected.delete(id);
 		}
 
 		// 更新注册表
@@ -227,7 +212,7 @@ export class PluginManager {
 			}
 
 			// 启用插件
-			const context = PluginContextFactory.create(plugin, this.pluginExports);
+			const context = PluginContextFactory.create(plugin, this.pluginExports, this.bot.core.services.exports);
 			try {
 				await plugin.enable(context);
 			} catch (e) {

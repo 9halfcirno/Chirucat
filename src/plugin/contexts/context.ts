@@ -50,7 +50,12 @@ export class PluginContext {
 	/** dispose 幂等标记: enable失败/卸载/注册表丢弃都可能重复触发释放 */
 	protected _disposed = false;
 
-	constructor(plugin: Plugin, protected _pluginExports: PluginExports) {
+	constructor(
+		plugin: Plugin,
+		protected _pluginExports: PluginExports,
+		/** 上游导出表(服务插件); 本 Bot 插件未命中时回退到这里, 缺省表示没有服务层 */
+		private _serviceExports: PluginExports | null = null,
+	) {
 		this._bot = plugin.bot;
 		this._manifest = plugin.manifest;
 
@@ -132,7 +137,10 @@ export class PluginContext {
 	}
 
 	/**
-	 * 导入依赖插件的导出
+	 * 导入其他插件的导出
+	 *
+	 * 查找顺序: 本 Bot 的插件 → 服务插件。服务插件是全局单例, 因此对所有 Bot 的
+	 * 插件都可见, 而 Bot 私有插件的导出仍然只在同一个 Bot 内可见。
 	 *
 	 * 每次调用实时查询注册表, 因此不要在插件里缓存返回值 ——
 	 * 目标插件卸载后其导出即被释放, 缓存下来只会拿到已失效的对象。
@@ -140,14 +148,19 @@ export class PluginContext {
 	 * @throws 目标插件当前没有导出(未加载/未导出/已卸载)时抛出 StateError
 	 */
 	require<T = any>(pluginId: string): T {
-		if (!this._pluginExports.hasExports(pluginId)) {
-			const available = this._pluginExports.ids();
-			throw new StateError(
-				`插件 ${this._manifest.id} 导入失败: 插件 ${pluginId} 当前没有导出` +
-				(available.length ? `(当前可导入: ${available.join(", ")})` : "(当前没有任何插件提供导出)")
-			);
+		if (this._pluginExports.hasExports(pluginId)) {
+			return this._pluginExports.getExports(pluginId) as T;
 		}
-		return this._pluginExports.getExports(pluginId) as T;
+		// 回退到服务插件: 服务是全局单例, 对每个 Bot 的插件都可见
+		if (this._serviceExports?.hasExports(pluginId)) {
+			return this._serviceExports.getExports(pluginId) as T;
+		}
+
+		const available = [...this._pluginExports.ids(), ...(this._serviceExports?.ids() ?? [])];
+		throw new StateError(
+			`插件 ${this._manifest.id} 导入失败: 插件 ${pluginId} 当前没有导出` +
+			(available.length ? `(当前可导入: ${available.join(", ")})` : "(当前没有任何插件提供导出)")
+		);
 	}
 
 	/** 对外暴露的导出, 供依赖本插件的插件通过 require 获取 */

@@ -7,6 +7,8 @@ import type { MessageCreateEvent } from "./event/message";
 export type BotEventMeta = {
 	/** 适配器插件的id */
 	adapter: string;
+	/** 接收事件的bot */
+	bot: string;
 }
 
 export type BotEvents = 

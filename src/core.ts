@@ -13,6 +13,7 @@ import sqlite from "better-sqlite3";
 import { BindManager } from "./internal/bind";
 import { UserProfileManager } from "./internal/user-profile";
 import { FilterListManager } from "./internal/filter-list";
+import { ServiceHost } from "./plugin/services/host";
 
 const logger = new Logger("Core")
 
@@ -23,6 +24,8 @@ export class Core {
 	};
 	bot = new BotManager(this);
 	botHelper = new BotHelper(this);
+	/** 服务插件宿主: services/ 下的框架级插件, 全局单例, 生命周期由 Core 管理 */
+	services = new ServiceHost(this);
 
 	private internalDB: sqlite.Database | null = null;
 	user: UserManager | null = null;
@@ -98,6 +101,10 @@ export class Core {
 		}
 
 
+		// 服务插件先于 Bot 加载: Bot 的插件可能通过 ctx.require 依赖服务的导出
+		await this.services.scan();
+		await this.services.syncState();
+
 		await this.bot.scan(path.join(root, "bots")) // 扫描bot目录
 		await this.bot.syncState();
 
@@ -108,6 +115,7 @@ export class Core {
 		this._disposed = true;
 		this.internalDB?.close(); // 关闭数据库连接
 		await this.bot.dispose(); // 停止所有Bot, 并释放状态文件监听
+		await this.services.dispose(); // 卸载服务插件(基础设施最后倒, 与启动顺序相反)
 		await this.webui?.close() // 停止webui
 		this.statistics?.close(); // 冲刷统计缓冲并关闭数据库
 		this.session = null;

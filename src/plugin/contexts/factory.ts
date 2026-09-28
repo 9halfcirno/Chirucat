@@ -5,9 +5,9 @@ import type { Plugin } from "../plugin";
 
 /** 按插件类型创建运行上下文 */
 export const PluginContextFactory = {
-	create(plugin: Plugin, exports: PluginExports): PluginContext {
+	create(plugin: Plugin, exports: PluginExports, serviceExports: PluginExports | null = null): PluginContext {
 		return plugin.manifest.type === "adapter"
-			? new AdapterContext(plugin, exports)
-			: new PluginContext(plugin, exports);
+			? new AdapterContext(plugin, exports, serviceExports)
+			: new PluginContext(plugin, exports, serviceExports);
 	}
 }

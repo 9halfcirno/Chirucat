@@ -22,6 +22,8 @@ export class AdapterContext extends PluginContext {
 		find: (platform, id) => this._bot.core.user!.find(platform, id),
 		query: (uuid) => this._bot.core.user!.query(uuid),
 		get: (platform, id) => this._bot.core.user!.get(platform, id),
+		getUnion: (accountId) => this._bot.core.user!.getUnion(accountId)
+		
 	};
 
 	/** 适配器视角的会话: 追加"取或建", 理由同 user */
@@ -31,9 +33,9 @@ export class AdapterContext extends PluginContext {
 		get: (platform, type, id) => this._bot.core.session!.get(platform, type, id),
 	};
 
-	constructor(plugin: Plugin, exports: PluginExports) {
+	constructor(plugin: Plugin, exports: PluginExports, serviceExports: PluginExports | null = null) {
 		if (plugin.manifest.type !== "adapter") throw new Error(`Plugin Context: AdapterContext仅 type: adapter 的插件可创建`)
-		super(plugin, exports);
+		super(plugin, exports, serviceExports);
 
 		this.bot = {
 			id: this._bot.id,
@@ -45,7 +47,8 @@ export class AdapterContext extends PluginContext {
 			dispatch: (event: BotEvents) => {
 				this.assertAlive("触发事件");
 				this._bot.dispatch(event, {
-					adapter: this._manifest.id
+					adapter: this._manifest.id,
+					bot: this._bot.id
 				});
 			},
 			/**

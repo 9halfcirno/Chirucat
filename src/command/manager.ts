@@ -88,7 +88,10 @@ export class CommandManager {
 
 	/**
 	 * 移除指令
-	 * @param command 要移除的指令
+	 *
+	 * 最后一个同名指令被移除后一并删掉该名字的键: 否则指令表里会留下空数组,
+	 * exec 仍会“命中”这个名字(返回指令名却不调任何 handler), 把消息从
+	 * 插件消息回调里吞掉 —— 全局指令表(服务插件)长期存活, 这种残留尤其明显。
 	 */
 	unregister(command: Command) {
 		if (!this.commands.has(command.name)) return; // 没数组的话直接返回
@@ -98,5 +101,7 @@ export class CommandManager {
 		let idx = arr.indexOf(command);
 		if (idx === -1) return; // 未注册过, 防止 splice(-1, 1) 误删末尾
 		arr.splice(idx, 1);
+
+		if (arr.length === 0) this.commands.delete(command.name);
 	}
 }

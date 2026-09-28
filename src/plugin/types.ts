@@ -48,10 +48,16 @@ export type PluginOption = {
 	bot: Bot;
 }
 
-export type PluginModule = {
-	init(ctx: PluginContext): void | Promise<void>;
+/**
+ * 插件模块
+ *
+ * 默认上下文为普通插件上下文; 服务插件用 `PluginModule<ServiceContext>`
+ * 复用同一套生命周期契约。
+ */
+export type PluginModule<C = PluginContext> = {
+	init(ctx: C): void | Promise<void>;
 
-	unload?(ctx: PluginContext): void | Promise<void>;
+	unload?(ctx: C): void | Promise<void>;
 
 	/**
 	 * 生命周期异常钩子: enable/disable 流程抛错时调用

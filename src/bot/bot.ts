@@ -247,6 +247,12 @@ export class Bot extends EventEmitter {
 	}
 
 	dispatch(event: BotEvents, meta: BotEventMeta) {
+		// 服务插件可拦截事件传播: 任一过滤器返回 false, 该事件不再进入本 Bot 的处理链
+		if (!this.core.services.filterEvent(event, this)) return;
+
+		// 通过过滤的事件交给服务插件观察(含 EntityFactory 不认识的裸事件)
+		this.core.services.observeEvent(event, this);
+
 		const entity = EntityFactory.create(event, meta, this);
 		if (!entity) return;
 		if (entity.type === "message.create") {

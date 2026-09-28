@@ -78,9 +78,6 @@ export type ConfigChangeHandler = (key: string, value: unknown, oldValue: unknow
 
 /**
  * 配置管理器: 控件定义(schema) + 配置值(data) + 持久化文件(file)
- *
- * 值文件只存值, 定义文件(控件的 controls / default)由插件自带且只读 ——
- * 定义文件里通常带注释, 一旦由程序回写就会丢失。
  */
 export class ConfigManager {
 	/** 当前配置值 (内存态, 改动需显式 save / update 才落盘) */
@@ -266,6 +263,41 @@ export class ConfigManager {
 	}
 
 	/**
+	 * 热更新 Schema 定义
+	 * 
+	 * @param newSchema 新的 schema 控件定义
+	 * @param options.saveAfterUpdate 重构数据后是否立即持久化落盘（默认 true）
+	 * @param options.notifyChanges 是否对变更的字段触发 watch 监听回调（默认 true）
+	 */
+	async updateSchema(
+		newSchema: ConfigRoot,
+		options: { saveAfterUpdate?: boolean; notifyChanges?: boolean } = {}
+	): Promise<ConfigValues> {
+		const { saveAfterUpdate = true, notifyChanges = true } = options;
+
+		const oldData = this.data;
+		const oldSchema = this.schema;
+
+		// 更新 schema 引用
+		(this as { schema: ConfigRoot }).schema = newSchema;
+
+		// 使用新 schema 重新规范化数据
+		this.data = this.coerce(newSchema?.controls ?? [], oldData);
+
+		// 如果需要，通知字段变更
+		if (notifyChanges) {
+			this.notifyChanges(oldData, this.data);
+		}
+
+		// 落盘保存新结构下的配置值
+		if (saveAfterUpdate && this.file) {
+			await this.save();
+		}
+
+		return this.data;
+	}
+
+	/**
 	 * 以 controls 为骨架规范化一份值
 	 *
 	 * - 只保留 schema 已知的键, 未知键丢弃
@@ -338,5 +370,19 @@ export class ConfigManager {
 	 */
 	static fileForPlugin(botPath: string, pluginId: string): string {
 		return path.resolve(root, botPath, "configs", "plugins", `${pluginId}.json`);
+	}
+
+	/**
+	 * 服务插件配置值文件路径: `configs/services/<插件id>.json`
+	 *
+	 * 服务插件是全局单例, 不归属任何 Bot, 因此值文件也不按 Bot 隔离。
+	 * @param serviceId 服务插件id
+	 */
+	static fileForService(serviceId: string): string {
+		return path.resolve(root, "configs", "services", `${serviceId}.json`);
+	}
+
+	static fileForBot(botPath: string) {
+		return path.resolve(root, botPath, "config.json");
 	}
 }

@@ -19,7 +19,7 @@
 | `id` | string | 是 | 插件的唯一标识符, 通常由小写字母, 数字, 连字符组成, 例如`my-plugin` |
 | `main` | string | 是 | 插件的入口文件, 相对于插件根目录的路径, 例如`index.js` |
 | `version` | string | 是 | 插件的版本号, 遵循语义化版本规范, 例如`1.0.0` |
-| `type` | string | 否 | 插件的类型, 可选值为`adapter`或`normal`, 默认为`normal` |
+| `type` | string | 否 | 插件的类型, 可选值为`adapter`、`normal`或`service`, 默认为`normal`。`service` 类型的插件必须放在根目录 `services/` 下(见[服务插件](service.md)) |
 | `name` | string | 否 | 插件的名称, 用于展示给用户, 例如`My Plugin` |
 | `author` | string | 否 | 插件的作者, 用于展示给用户, 例如`Baka Cirno` |
 | `description` | string | 否 | 插件的描述, 用于展示给用户, 例如`This is my plugin` |
@@ -41,6 +41,8 @@
 上面三个方法均可以为异步函数
 
 入口文件可以导入其目录下的其他文件, 也可以导入npm包
+
+原生模块(`.node` 二进制)不参与打包: 构建时会把它标记为外部依赖, 由宿主按绝对路径加载。因此插件可以自带或依赖原生模块, 但二进制必须与运行平台的架构/ABI 匹配。
 
 ## 配置生成文件
 

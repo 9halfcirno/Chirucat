@@ -1,4 +1,5 @@
 import type { MakeDirectoryOptions, RmOptions, Stats } from "node:fs";
+import type { Bot } from "../../bot/bot";
 import type { Command } from "../../command/types";
 import type { Message } from "../../entity/message";
 import type { ActionResponses, BotActions } from "../../protocols/actions";
@@ -306,4 +307,42 @@ export interface AdapterSessionAPI extends PluginSessionAPI {
 	 * @returns 会话 UUID
 	 */
 	get(platform: string, type: SessionType, id: string): string;
+}
+
+/**
+ * 事件过滤器
+ *
+ * 返回 false 表示拦截该事件: 它不会再进入收到它的那个 Bot 的处理链。
+ * `bot` 是收到事件的 Bot, 便于做"只在某些 Bot 上放行"的判断。
+ */
+export type PluginEventFilter = (event: BotEvents, bot: Bot) => boolean;
+
+/** 事件观察回调: 事件通过全部过滤器后调用, 返回值不被等待 */
+export type PluginEventObserver = (event: BotEvents, bot: Bot) => unknown;
+
+/**
+ * 事件 API (仅服务插件可用)
+ *
+ * 适配器派发的事件先经过所有服务插件的过滤器, 再交给 Bot 处理:
+ * 任一过滤器返回 false, 该事件就被丢掉。因此它能改变事件传播本身,
+ * 而不只是“收到消息后做点什么” —— 例如只放行 `message.create`,
+ * 挡住其他类型的事件。
+ *
+ * 过滤器抛错时按放行处理并记录日志: 拦截是显式意图, 不能因为一个出错
+ * 的过滤器就让事件无声消失。
+ */
+export interface PluginEventAPI {
+	/**
+	 * 注册事件过滤器
+	 * @param predicate 返回 false 表示拦截该事件
+	 */
+	filter(predicate: PluginEventFilter): void;
+	/**
+	 * 注册事件观察回调
+	 *
+	 * 与 `filter` 的区别: 不返回拦截结果, 只观察; 对通过过滤的事件触发,
+	 * 包括 EntityFactory 不认识、不会被任何处理链消费的裸事件。
+	 * @param handler 事件回调
+	 */
+	observe(handler: PluginEventObserver): void;
 }

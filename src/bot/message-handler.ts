@@ -30,10 +30,12 @@ export class MessageHandler {
 		// 命中时拿到指令名, 未命中为 false
 		let command: string | false = false;
 		if (ok) {
-			command = this.bot.command.exec(msg);
+			// 指令匹配: Bot 自己的指令优先, 未命中再交给全局服务指令
+			command = this.bot.command.exec(msg) || this.bot.core.services.execCommand(msg);
 			if (!command) {
-				// 没有匹配指令的消息, 进入插件消息回调
+				// 没有匹配指令的消息, 进入消息回调(Bot 插件在前, 全局服务插件在后)
 				this.bot.plugin.handleMessage(msg);
+				this.bot.core.services.handleMessage(msg);
 			}
 		}
 

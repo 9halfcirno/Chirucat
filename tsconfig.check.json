@@ -1,0 +1,11 @@
+{
+	// 只检查 src/ 的类型, 不含 plugins/ 与 scripts/ (插件代码不在框架的检查范围内)
+	// 用法: tsc -p tsconfig.check.json --noEmit  (或 npm run check:types)
+	// types 显式带上 node: 主配置里为 [], 而框架源码直接用 process/Buffer 等 Node 全局量
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"types": ["node"]
+	},
+	"include": ["src/**/*.ts"]
+}
