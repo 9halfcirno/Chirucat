@@ -1,0 +1,10 @@
+{
+	"id": "chirucat-bind",
+	"version": "1.0.0",
+	"main": "index.ts",
+	"type": "service",
+	"name": "Chirucat 跨平台绑定服务",
+	"author": "9halfcirno",
+	"config": "config.schema.json",
+	"description": "在聊天中提供框架级跨平台账号绑定, 以实现用户侧账号绑定"
+}

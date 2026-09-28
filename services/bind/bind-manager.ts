@@ -1,14 +1,10 @@
 /**
  * 提供Bind功能, 使绑定两个不同账号
- * 
- * @internal 内部临时实现，未来将重构并下沉为普通插件服务
- * @todo 待重构: 日后抽离为 Service插件
- * 
  */
 
-import { TTLMap } from "../utils/ttl-map";
-import { uuid } from "../utils/uuid";
-import type { UserManager } from "./user-manager";
+import { TTLMap } from "./ttl-map";
+import { uuid } from "./uuid";
+import type { UserManager } from "../../src/internal/user-manager";
 
 export class BindManager {
 	/** token -> aid 映射 */
