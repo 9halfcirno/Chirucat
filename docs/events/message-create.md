@@ -12,11 +12,11 @@
 
 该事件继承[`BotEvent`](event.md)的全部字段(`type`, `time`, `platform`, `extra`), 其中:
 
-- `messageId`: 平台推送消息携带的消息id
 - `type`: 固定为`message.create`
 
 ### 专属字段
 
+- `messageId`: 平台推送消息携带的消息id
 - `senderId`: 发送者框架id(账号uuid), 应使用[`ctx.user.get`](../plugin/contexts/adapter.md)从发送者平台id转换得到
 - `senderName`: 发送者昵称
 - `sessionType`: 会话窗口类型, 值为`private`(私聊), `group`(群聊), `channel`(频道)其中之一

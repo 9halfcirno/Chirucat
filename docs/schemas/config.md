@@ -61,11 +61,11 @@
 
 **type**为`"select"`
 
-**产出值**为`(typeof items)[number][]`类型, 即为`items`数组项构成的子数组
+**产出值**为`(typeof items)[number]["value"]`类型, 即为`items`数组项的一个`value`值
 
 | 属性 | 类型 | 必填 | 描述 |
 |---|---|---|---|
-| `items` | `(string \| number \| boolean)[]` | 是 | 可选值列表 |
+| `items` | ``{ label: string, value: (string \| number \| boolean) }[]`` | 是 | 可选值列表 |
 
 ### 复选框控件
 
@@ -197,8 +197,8 @@
 		},
 		{
 			"type": "select",
-			"id": "sex",
-			"label": "选择",
+			"id": "mode",
+			"label": "模式选择",
 			"items": [
 				{
 					"label": "主动",

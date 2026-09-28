@@ -9,7 +9,7 @@
 ## 结构
 
 ```ts
-interface MessageSend {
+interface MessageDelete {
 	type: "message.delete";
 	// 目标会话框架id(会话uuid)
 	session: string;
