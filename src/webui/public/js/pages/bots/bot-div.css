@@ -290,10 +290,15 @@
 	height: 1em;
 }
 
-/* 类型着色: 适配器与普通插件用不同色系, 便于一眼区分 */
+/* 类型着色: 适配器 / 服务插件 / 普通插件各用一套色系, 便于一眼区分 */
 .plugin-card-type[data-type="adapter"] {
 	color: var(--type-adapter);
 	background: var(--type-adapter-soft);
+}
+
+.plugin-card-type[data-type="service"] {
+	color: var(--type-service);
+	background: var(--type-service-soft);
 }
 
 .plugin-card-type[data-type="normal"] {

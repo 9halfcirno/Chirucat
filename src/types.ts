@@ -10,4 +10,11 @@ export type CoreOption = {
 	statistics?: boolean;
 	/** 统计配置 */
 	statisticsOption?: StatisticsOptions;
+	/**
+	 * 服务插件状态文件路径
+	 *
+	 * 缺省 `configs/services/state.json`; 嵌入式与测试场景可指到临时目录, 避免
+	 * 触碰仓库里的真实状态。
+	 */
+	servicesStateFile?: string;
 }

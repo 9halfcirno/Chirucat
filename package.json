@@ -15,6 +15,7 @@
     "webui": "tsx src/webui/server/server.ts",
     "check:state": "tsx scripts/check-bot-state.ts",
     "check:services": "tsx scripts/check-services.ts",
+    "check:service-state": "tsx scripts/check-service-state.ts",
     "check:core": "tsx scripts/check-core-boot.ts",
     "check:types": "tsc -p tsconfig.check.json --noEmit"
   },

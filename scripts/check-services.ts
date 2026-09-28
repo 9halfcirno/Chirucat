@@ -107,7 +107,7 @@ export default { init() { globalThis.__calls.push("init-normal"); } };
 
 /* ---------- 1. 扫描 ---------- */
 
-const core = new Core();
+const core = new Core({ servicesStateFile: path.join(dir, "state.json") });
 await core.services.scan(dir);
 
 check(
@@ -241,17 +241,7 @@ check(
 	calls.join(","),
 );
 
-/* ---------- 8. 卸载 ---------- */
-
-calls.length = 0;
-await core.services.dispose();
-
-check("dispose 卸载全部服务插件", core.services.enabledServices.length === 0, core.services.enabledServices.map(s => s.id).join(","));
-check("卸载时释放导出", !core.services.exports.hasExports("a") && core.services.exports.ids().length === 0);
-check("卸载时注销全局指令", core.services.command.commands.size === 0);
-check("unload 钩子被调用", calls.includes("unload-a"), calls.join(","));
-
-/* ---------- 9. 插件自带原生模块(.node) ---------- */
+/* ---------- 8. 插件自带原生模块(.node) ---------- */
 
 // better-sqlite3 的 prebuild 是现成的有效原生模块, 用它验证 .node 被交给宿主 require 而非打包
 const prebuild = path.resolve("node_modules", "better-sqlite3", "prebuilds", `${process.platform}-${process.arch}.node`);
@@ -281,9 +271,18 @@ export default {
 	console.log(`  SKIP  原生模块检查(未找到 ${prebuild})`);
 }
 
+/* ---------- 9. 卸载 ---------- */
+
+calls.length = 0;
+await core.services.dispose();
+
+check("dispose 卸载全部服务插件", core.services.enabledServices.length === 0, core.services.enabledServices.map(s => s.id).join(","));
+check("卸载时释放导出", !core.services.exports.hasExports("a") && core.services.exports.ids().length === 0);
+check("卸载时注销全局指令", core.services.command.commands.size === 0);
+check("unload 钩子被调用", calls.includes("unload-a"), calls.join(","));
+
 await fs.rm(dir, { recursive: true, force: true });
 await fs.rm(restrictedDir, { recursive: true, force: true });
 await fs.rm(botSideDir, { recursive: true, force: true });
-
 console.log(`\n结果: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

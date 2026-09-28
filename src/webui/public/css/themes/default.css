@@ -54,9 +54,11 @@
 	--danger-soft: rgba(209, 52, 56, 0.12);
 	--danger-line: rgba(209, 52, 56, 0.5);
 
-	/* 插件类型标识: 适配器(蓝) / 普通插件(靖紫), 仅用于类型胶囊 */
+	/* 插件类型标识: 适配器(蓝) / 服务插件(青绿) / 普通插件(靖紫), 仅用于类型胶囊 */
 	--type-adapter: #005fb8;
 	--type-adapter-soft: rgba(0, 95, 184, 0.12);
+	--type-service: #0f7b6c;
+	--type-service-soft: rgba(15, 123, 108, 0.12);
 	--type-normal: #6f42c1;
 	--type-normal-soft: rgba(111, 66, 193, 0.12);
 

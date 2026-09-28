@@ -12,7 +12,7 @@ import type { PluginScope, PluginStatus } from "../../plugin/types";
 export type PluginViewStatus = "enabled" | "disabled" | "loading" | "unloading";
 
 /** 把内部状态收敛成对外的运行态表述 */
-function toViewStatus(status: PluginStatus): PluginViewStatus {
+export function toViewStatus(status: PluginStatus): PluginViewStatus {
 	if (status === "loading" || status === "unloading") return status;
 	return status === "enabled" ? "enabled" : "disabled";
 }

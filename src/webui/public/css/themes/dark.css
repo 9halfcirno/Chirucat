@@ -54,6 +54,8 @@
 	/* 插件类型标识: 深色下提亮, 保持与背景的对比 */
 	--type-adapter: #4a9eff;
 	--type-adapter-soft: rgba(74, 158, 255, 0.16);
+	--type-service: #3ddc97;
+	--type-service-soft: rgba(61, 220, 151, 0.16);
 	--type-normal: #b392f0;
 	--type-normal-soft: rgba(179, 146, 240, 0.16);
 

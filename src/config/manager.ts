@@ -382,6 +382,16 @@ export class ConfigManager {
 		return path.resolve(root, "configs", "services", `${serviceId}.json`);
 	}
 
+	/**
+	 * 服务插件状态文件路径: `configs/services/state.json`
+	 *
+	 * 与配置文件同目录, 但语义不同: `<插件id>.json` 是配置值(只读定义 + 可写值),
+	 * 这份是启停期望态 —— 对齐 Bot 侧 "配置一个文件、状态一个文件" 的划分。
+	 */
+	static fileForServiceState(): string {
+		return path.resolve(root, "configs", "services", "state.json");
+	}
+
 	static fileForBot(botPath: string) {
 		return path.resolve(root, botPath, "config.json");
 	}

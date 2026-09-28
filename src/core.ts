@@ -41,6 +41,9 @@ export class Core {
 
 	constructor(config?: CoreOption) {
 		this.config = Object.assign(this.config, config)
+
+		// 嵌入式/测试场景可把服务插件状态文件指到别处(默认 configs/services/state.json)
+		if (config?.servicesStateFile) this.services.setStateFile(config.servicesStateFile);
 	}
 
 	async init() {
@@ -96,7 +99,9 @@ export class Core {
 		}
 
 
-		// 服务插件先于 Bot 加载: Bot 的插件可能通过 ctx.require 依赖服务的导出
+		// 服务插件先于 Bot 加载: Bot 的插件可能通过 ctx.require 依赖服务的导出。
+		// 先装载持久化期望态, 再扫描, 最后按期望收敛 —— 被停用过的服务不会被拉起。
+		await this.services.initState();
 		await this.services.scan();
 		await this.services.syncState();
 
