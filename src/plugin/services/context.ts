@@ -2,7 +2,6 @@ import path from "node:path";
 import type { Bot } from "../../bot/bot";
 import type { CommandManager } from "../../command/manager";
 import type { Command } from "../../command/types";
-import type { Core } from "../../core";
 import { Message } from "../../entity/message";
 import { StateError } from "../../errors/state-error";
 import type { BotEvents } from "../../protocols/events";
@@ -27,6 +26,7 @@ import type {
 	ReadonlyFsAPI,
 } from "../contexts/types";
 import type { PluginManifest } from "../types";
+import { CoreAPI } from "./apis/core";
 import type { Service } from "./service";
 
 /**
@@ -38,8 +38,10 @@ import type { Service } from "./service";
  * - `command` 注册进全局指令表, 由 Bot 收到消息后转发匹配(见 MessageHandler);
  * - `message` 注册的全局回调同样经 Bot 转发;
  * - 数据目录独立于 Bot: `data/services/<插件id>`;
- * - 直接暴露 `core`: services/ 里的代码属于框架级可信插件, 需要拿到用户/会话/统计等
- *   全局设施。普通插件没有这个入口, 仍只能通过 Bot 只读视图访问。
+ * - `core` 是收窄过的核心视图(见 `CoreAPI`): services/ 里的代码属于框架级可信插件,
+ *   需要拿到用户/会话/统计等全局设施与 Bot 启停, 但拿不到 `Core` 实例本身 ——
+ *   `init` / `close` / `settings` 这类启动与释放流程不外放。普通插件没有这个入口,
+ *   仍只能通过 Bot 只读视图访问。
  *
  * 不提供 message/command 之外的 Bot 维度 API(action / 当前 Bot 视图等):
  * 服务插件不属于任何 Bot, 给了也只能是假的。
@@ -47,8 +49,8 @@ import type { Service } from "./service";
 export class ServiceContext {
 	protected _manifest: PluginManifest;
 
-	/** 框架核心; 服务插件为可信插件, 直接持有引用 */
-	readonly core: Core;
+	/** 框架核心的安全视图; 服务插件为可信插件, 拿到收窄后的设施入口 */
+	readonly core: CoreAPI;
 
 	logger: Logger;
 	message: PluginMessageAPI;
@@ -89,7 +91,7 @@ export class ServiceContext {
 		private readonly _serviceExports: PluginExports,
 		private readonly _commandManager: CommandManager,
 	) {
-		this.core = service.core;
+		this.core = new CoreAPI(service.core);
 		this._manifest = service.manifest;
 
 		this.logger = new Logger(`Service ${this._manifest.id}`);
