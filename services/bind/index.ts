@@ -24,7 +24,7 @@ export default {
 					msg.reply(`生成绑定令牌失败!`);
 					return;
 				}
-				msg.reply(`已生成绑定到此账号的绑定令牌! 请在 ${formatTime(time)} 内进行使用 "/bind [你的令牌]" 绑定!\n\n令牌: ${token}`);
+				msg.reply(`已生成绑定到此账号的绑定令牌! 请在 ${formatTime(time / 1000)} 内进行使用 "/bind [你的令牌]" 绑定!\n\n令牌: ${token}`);
 			} else { // 有令牌
 				let ori = msg.sender.id;
 				let res = bm.bind(ori, token);
