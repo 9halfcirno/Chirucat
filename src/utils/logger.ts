@@ -14,6 +14,35 @@ export const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
+/** 级别序号: 数值越大越严重 */
+const LEVEL_RANK: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
+
+/**
+ * 全局最低日志级别
+ *
+ * 低于它的条目直接丢弃 —— 控制台与日志流都不会产生。默认 `debug` 即全量输出,
+ * 与引入过滤之前的行为一致。
+ */
+let minLevel: LogLevel = "debug";
+
+/**
+ * 设置全局最低日志级别（供设置域热应用）
+ *
+ * @param level 目标级别; 非法值被忽略
+ * @returns 设置后的当前级别
+ */
+export function setLogLevel(level: unknown): LogLevel {
+    if (typeof level === "string" && (LOG_LEVELS as readonly string[]).includes(level)) {
+        minLevel = level as LogLevel;
+    }
+    return minLevel;
+}
+
+/** 当前全局最低日志级别 */
+export function getLogLevel(): LogLevel {
+    return minLevel;
+}
+
 /** 单条日志条目 */
 export interface LogEntry {
     /** 时间戳（毫秒），用于排序与存储 */
@@ -148,6 +177,9 @@ export default class Logger {
     }
 
     private write(level: LogLevel, args: unknown[]): void {
+        // 低于当前最低级别: 控制台与日志流都不产生
+        if (LEVEL_RANK[level] < LEVEL_RANK[minLevel]) return;
+
         const now = new Date();
         const time = formatTime(now);
 

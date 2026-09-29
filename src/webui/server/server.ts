@@ -36,6 +36,13 @@ export interface WebUIServerOptions {
 	port?: number;
 	/** 监听地址, 默认 127.0.0.1, 仅本机可访问 */
 	host?: string;
+	/**
+	 * 本机访问是否免密码
+	 *
+	 * 开启后仅当对端是回环地址 (127.0.0.1 / ::1) 时跳过鉴权, 局域网仍旧需要密码 ——
+	 * 适合"监听 0.0.0.0 + 自己这台机器不想每次登录"。默认 false。
+	 */
+	localNoAuth?: boolean;
 	/** 前端静态资源目录, 默认 src/webui/public */
 	staticDir?: string;
 	/** 提供给 WebUI API handler 的 Core 实例 */
@@ -44,6 +51,19 @@ export interface WebUIServerOptions {
 	apiDir?: string;
 	/** 前端页面配置 */
 	frontConfig?: WebUIFrontConfig;
+}
+
+/**
+ * 是否为回环地址
+ *
+ * 只看 TCP 对端地址, **不**看 X-Forwarded-For —— 后者由客户端提供, 可以伪造。
+ * Node 在双栈监听时会把 IPv4 回环表示成 IPv4-mapped IPv6, 一并认掉。
+ */
+function isLoopback(address: string | undefined): boolean {
+	if (!address) return false;
+	return address === "127.0.0.1"
+		|| address === "::1"
+		|| address === "::ffff:127.0.0.1";
 }
 
 /**
@@ -56,22 +76,35 @@ export class WebUIServer {
 	readonly logger = new Logger("WebUI");
 
 	private readonly app: Express = express();
-	private server?: HttpServer;
+	/** 当前监听的 server; relisten 会先关掉它并置空 */
+	private server: HttpServer | undefined;
 
-	private readonly port: number;
-	private readonly host: string;
+	/** 监听端口/地址: 可被 relisten 改写 (设置域热更新) */
+	private port: number;
+	private host: string;
 	private readonly staticDir: string;
 	private readonly apiDir: string;
 	private readonly core?: Core;
-	/** WebUI 密码; 未设置 (undefined/空串) 时所有 API 直接放行 */
-	private readonly password?: string;
+	/**
+	 * WebUI 密码; 未设置 (undefined/空串) 时所有 API 直接放行
+	 *
+	 * 声明成 `string | undefined` 而不是 `password?: string`: 热更新时需要显式
+	 * 写回 undefined(清除密码), 而 `exactOptionalPropertyTypes` 不允许给可选属性
+	 * 赋 undefined。
+	 */
+	private password: string | undefined;
+	/** 本机访问是否跳过鉴权 */
+	private localNoAuth: boolean;
 
+	/** 是否已完成"加载 API + 注册路由"; 只做一次, relisten 不会重跑 */
+	private initialized = false;
 	/** 前端配置 */
 	front?: WebUIFrontConfig;
 
 	constructor(options: WebUIServerOptions = {}) {
 		this.port = options.port ?? 7636;
 		this.host = options.host ?? "0.0.0.0";
+		this.localNoAuth = options.localNoAuth === true;
 		this.staticDir = options.staticDir ?? path.join(root, "src", "webui", "public");
 		this.apiDir = options.apiDir ?? path.join(root, "src", "webui", "server", "api");
 		options.core && (this.core = options.core);
@@ -81,17 +114,53 @@ export class WebUIServer {
 		this.setupMiddleware();
 	}
 
-	/** 启动服务器, 监听成功后 resolve */
+	/**
+	 * 启动服务器, 监听成功后 resolve
+	 *
+	 * 可重复调用: 首次会加载 API 目录并注册路由, 之后只重新监听 ——
+	 * relisten 靠这一点换地址而不重复注册 handler。
+	 */
 	async start(): Promise<void> {
-		// 启动前加载 api 目录下的 API 模块并注册路由
-		await this.loadAPIs();
-		this.setupRoutes();
+		if (!this.initialized) {
+			// 启动前加载 api 目录下的 API 模块并注册路由
+			await this.loadAPIs();
+			this.setupRoutes();
+			this.initialized = true;
+			this.logger.log(`前端资源目录: ${this.staticDir}`);
+		}
+		await this.listenOn();
+	}
 
+	/**
+	 * 换监听地址/端口
+	 *
+	 * 设置页自己就跑在这个服务器上, 所以只能"先关旧监听, 再在新地址上重开" ——
+	 * 期间连接会断开, 前端要靠轮询 `/api/health` 等它回来。
+	 * 换到被占用的端口会 reject, 此时旧监听已经关了, 调用方应把错误如实报出来。
+	 */
+	async relisten(port: number, host: string): Promise<void> {
+		await this.close();
+		this.port = port;
+		this.host = host;
+		await this.listenOn();
+	}
+
+	/** 热更新访问密码; 传空串表示清除密码(此后不再鉴权) */
+	updateSecurity(options: { password?: string | undefined; localNoAuth?: boolean }): void {
+		if (options.password !== undefined) {
+			this.password = options.password ? options.password : undefined;
+		}
+		if (options.localNoAuth !== undefined) {
+			this.localNoAuth = options.localNoAuth === true;
+		}
+	}
+
+	/** 在当前位置上监听 (可重复调用) */
+	private listenOn(): Promise<void> {
 		return new Promise((resolve, reject) => {
 			const server = this.app.listen(this.port, this.host, () => {
 				this.server = server;
 				this.logger.log(`WebUI 服务器已启动: http://${this.host}:${this.port}`);
-				this.logger.log(`前端资源目录: ${this.staticDir}`);
 				resolve();
 			});
 
@@ -103,15 +172,18 @@ export class WebUIServer {
 		});
 	}
 
-	/** 停止服务器 */
+	/** 停止服务器; 幂等 */
 	close(): Promise<void> {
 		return new Promise((resolve) => {
-			if (!this.server) {
+			const server = this.server;
+			if (!server) {
 				resolve();
 				return;
 			}
-			this.server.closeAllConnections();
-			this.server.close(() => {
+			// 先摘引用: 重复 close 或紧随其后的 relisten 都不会去关错对象
+			this.server = undefined;
+			server.closeAllConnections();
+			server.close(() => {
 				this.logger.log("WebUI 服务器已停止");
 				resolve();
 			});
@@ -182,6 +254,11 @@ export class WebUIServer {
 	private authRequired(): RequestHandler {
 		return (req: Request, res: Response, next: NextFunction) => {
 			if (!this.password) {
+				next();
+				return;
+			}
+			// 本机免密: 只看 TCP 对端地址, 不信 X-Forwarded-For
+			if (this.localNoAuth && isLoopback(req.socket?.remoteAddress)) {
 				next();
 				return;
 			}

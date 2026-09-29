@@ -106,6 +106,28 @@ export class StatisticsManager {
 		}
 	}
 
+	/**
+	 * 热更新运行参数
+	 *
+	 * 四项都是"下次用到时才读"的, 所以改值即生效; 只有冲刷间隔需要重建定时器。
+	 * 传入的是完整设置值, 未提供的项保留原值。
+	 */
+	updateOptions(options: StatisticsOptions): void {
+		if (this.closed) return;
+
+		const flushIntervalMs = options.flushIntervalMs ?? this.options.flushIntervalMs;
+		if (flushIntervalMs !== this.options.flushIntervalMs) {
+			clearInterval(this.timer);
+			this.timer = setInterval(() => this.flush(), flushIntervalMs);
+			this.timer.unref?.();
+			this.options.flushIntervalMs = flushIntervalMs;
+		}
+
+		this.options.bufferSize = options.bufferSize ?? this.options.bufferSize;
+		this.options.detailRetentionDays = options.detailRetentionDays ?? this.options.detailRetentionDays;
+		this.options.hourlyRetentionDays = options.hourlyRetentionDays ?? this.options.hourlyRetentionDays;
+	}
+
 	/** 冲刷缓冲并关闭数据库; 幂等 */
 	close() {
 		if (this.closed) return;

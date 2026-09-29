@@ -1,6 +1,8 @@
 import path from "path";
 import { PluginManager } from "../plugin/manager";
 import { BotStateManager } from "./state-manager";
+import { SettingsDomain } from "../config/settings/manager";
+import { botSettings, botSettingsFile, type BotSettings } from "../config/settings/domains/bot";
 import { MessageHandler } from "./message-handler";
 import type { BotConfig } from "./types";
 import type { BotEventMeta, BotEvents } from "../protocols/events";
@@ -31,6 +33,15 @@ export class Bot extends EventEmitter {
 	/** 持久化启停状态(期望态) */
 	readonly state: BotStateManager;
 
+	/**
+	 * 该 Bot 的设置域 (值文件就是本目录下的 config.json)
+	 *
+	 * 与 state.json 的分工: 这里放用户意图(身份与展示), 期望启停态在 state.json。
+	 * 挂在 Bot 上而不是 core.settings: 它的数量与生命周期跟随 Bot, 且不该出现在
+	 * WebUI 的全局设置列表里。
+	 */
+	readonly settings: SettingsDomain<BotSettings>;
+
 	/** Bot 是否处于运行中(已启动且未停止) */
 	running = false;
 
@@ -50,6 +61,17 @@ export class Bot extends EventEmitter {
 		this.id = config.id;
 		this.name = config.name || null;
 		this.state = new BotStateManager(path.join(this.path, "state.json"));
+		this.settings = new SettingsDomain<BotSettings>(`bot:${this.id}`, {
+			definition: botSettings,
+			file: botSettingsFile(this.path),
+			apply: (values) => { this.syncName(values); },
+			onLoad: (values) => { this.syncName(values); },
+		});
+	}
+
+	/** 把设置里的名称同步到内存; id 不可改, 无需同步 */
+	private syncName(values: BotSettings): void {
+		this.name = values.name || null;
 	}
 
 	/**
@@ -60,6 +82,9 @@ export class Bot extends EventEmitter {
 	 */
 	async initState() {
 		await this.state.load();
+
+		// 设置域与状态域同批就绪: 名称在插件初始化之前就该是对的
+		await this.settings.load();
 
 		// 装载消息过滤名单 (全局 + 本 Bot 私有)
 		this.message.loadFilterList();
@@ -238,6 +263,7 @@ export class Bot extends EventEmitter {
 		this.unwatchState?.();
 		this.unwatchState = null;
 		this.state.close();
+		this.settings.close();
 
 		if (this.running) await this.stop();
 	}
