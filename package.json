@@ -1,6 +1,6 @@
 {
   "name": "chirucat",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha",
   "description": "采用Core + Adapter架构的聊天机器人框架",
   "keywords": [
     "bot",
@@ -17,6 +17,7 @@
     "check:services": "tsx scripts/check-services.ts",
     "check:service-state": "tsx scripts/check-service-state.ts",
     "check:core": "tsx scripts/check-core-boot.ts",
+    "check:settings": "tsx scripts/check-settings.ts && tsx scripts/check-settings-api.ts",
     "check:types": "tsc -p tsconfig.check.json --noEmit"
   },
   "devDependencies": {

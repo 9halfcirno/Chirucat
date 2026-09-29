@@ -6,12 +6,16 @@
 
   - [ ] 将 bind/黑白名单 提取为service插件
 
-- [ ] 将Bot配置的`config.json`与`state.json`合并, 复用已有模块, 以减少冗余代码
+- [x] ~~将Bot配置的`config.json`与`state.json`合并~~ 已否决: 配置(用户意图, 一个文件)与状态(期望态, 一个文件)语义不同, 合并会让"收敛运行态"反过来污染用户偏好
 
 - [ ] 添加更多事件支持
 
 - [ ] WebUI可用化
 
-  - [ ] Bot设置管理
+  - [x] Bot设置管理
 
-  - [ ] 实装设置页面
+  - [x] 实装设置页面
+
+- [x] Core / 统计 / WebUI 配置接入设置层(定义驱动, 见 docs/schemas/settings.md)
+
+- [ ] 让 app.ts 直接经设置域读启动参数, 取代 readJSONOrCreate

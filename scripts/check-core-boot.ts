@@ -11,6 +11,7 @@
  *
  * 只读取仓库数据, 不启动任何 Bot; 退出码 0 表示全部通过。
  */
+import fs from "node:fs/promises";
 import path from "node:path";
 import { Core } from "../src/core";
 import { ServiceHost } from "../src/plugin/services/host";
@@ -37,7 +38,13 @@ check("webui: false 时不创建 WebUI", core.webui === null);
 /* Core.init 的顺序: 服务层先于 Bot 就绪 */
 
 await core.services.scan();
-check("services/ 可扫描", core.services.registry.size === 0, [...core.services.registry.keys()].join(","));
+// 断言注册表与 services/ 下实际的服务插件目录一致, 而不是写死为 0:
+// 后者在服务插件(such as bind)落地后就会永久失败, 一条永远红的门禁等于没有门禁
+const serviceDirCount = await fs.readdir(path.join(root, "services"), { withFileTypes: true })
+	.then((entries) => entries.filter((entry) => entry.isDirectory()).length)
+	.catch(() => 0);
+check("services/ 可扫描", core.services.registry.size === serviceDirCount,
+	`registry=${core.services.registry.size} dirs=${serviceDirCount}`);
 
 const failedIds = await core.services.syncState();
 check("空 services/ 的 syncState 无失败", failedIds.length === 0, JSON.stringify(failedIds));
