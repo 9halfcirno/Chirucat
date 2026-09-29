@@ -1,0 +1,6 @@
+.settings-domain {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-2);
+	align-items: flex-start;
+}

@@ -1,4 +1,12 @@
+/**
+ * Bot 设置页
+ *
+ * 定义与值都来自后端 (`get_bot_config`) —— 前端不持有设置项定义。此前这里
+ * 硬编码了 id/name 两个输入框, 后端改了没人知道, 也正是"设置页只能看不能存"的根源。
+ */
+import { callAPI } from "../../../spa/api.js"
 import { apiFetch } from "../../../spa/auth.js"
+import { createButton } from "../../../spa/components/button.js"
 import { createConfigList } from "../../../spa/components/config-editor.js"
 import { createDialogWindow } from "../../../spa/components/dialog-window.js"
 import { createIconButton } from "../../../spa/components/icon-button.js"
@@ -12,12 +20,26 @@ export default {
 	 * @param {HTMLElement} div
 	 * @param {{ id: string, state?: boolean }} bot
 	 */
-	render(div, bot) {
+	async render(div, bot) {
+		const status = document.createElement("p")
+		status.className = "muted"
+		status.textContent = "加载中..."
+		div.append(status)
 
-		let configList = createConfigList(createConfig(bot));
-		div.append(configList.el);
+		let payload
+		try {
+			payload = await callAPI("get_bot_config", { id: bot.id })
+		} catch (e) {
+			status.textContent = `读取Bot设置失败: ${e.message}`
+			return
+		}
+		status.remove()
 
+		const list = createConfigList(payload.define)
+		list.setValues(payload.values ?? {})
 
+		const save = createButton("保存", () => handleSave(bot, list))
+		div.append(list.el, save)
 
 		// 删除bot相关
 		const delDes = document.createElement("div")
@@ -31,6 +53,34 @@ export default {
 		delBtn.style.height = "2.75em"
 
 		div.append(delDes, delBtn)
+	}
+}
+
+/**
+ * 保存该 Bot 的设置
+ *
+ * 提交整份 getValues(): 后端按 patch 语义合并, 未提交的字段保留原值; id 是
+ * immutable, 提交不同的值会被后端拒绝。
+ *
+ * @param {{ id: string }} bot
+ * @param {ReturnType<typeof createConfigList>} list
+ */
+async function handleSave(bot, list) {
+	const errors = list.validate()
+	if (errors.length > 0) {
+		toast(`有 ${errors.length} 项未填完整, 请先修正`, { type: "warn" })
+		return
+	}
+
+	try {
+		const result = await callAPI("update_bot_config", { id: bot.id, patch: list.getValues() })
+
+		// 用后端回传的规范化值回填, 并让列表上的名称同步过来
+		if (result?.values) list.setValues(result.values)
+		toast("Bot 设置已保存", { type: "info" })
+		document.body.querySelector(".bot-refresh-btn")?.click()
+	} catch (e) {
+		toast(`保存Bot设置失败: ${e.message}`, { type: "error" })
 	}
 }
 
@@ -189,28 +239,5 @@ async function deleteBot(bot, container) {
 		document.body.querySelector(".bot-refresh-btn")?.click()
 	} catch (e) {
 		toast(`删除Bot失败: ${e.message}`, { type: "error" })
-	}
-}
-
-
-function createConfig(bot) {
-	return {
-		controls: [
-			{
-				type: "input",
-				id: "id",
-				label: "Bot ID",
-				default: bot.id,
-				desc: "Bot的标识, 更改可能导致部分数据出现异常",
-				required: true
-			},
-			{
-				type: "input",
-				id: "name",
-				label: "Bot 名称",
-				default: bot.name
-			},
-
-		]
 	}
 }
