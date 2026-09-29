@@ -282,7 +282,18 @@ export function createSidebar({ container, main, animMs = 280 }) {
 		document.body.classList.toggle("nav-collapsed", items.length === 0);
 		if (items.length === 0) return;
 
-		buttons = items.map(createItemButton);
+		for (let i = 0; i < items.length; i++) {
+			let item = items[i];
+			if (typeof item === "string") {
+				let t = document.createElement("h4");
+				t.classList.add("spa-sidebar-label");
+				t.textContent = item;
+				buttons.push(t)
+			} else {
+				buttons.push(createItemButton(item, i));
+			}
+		}
+
 		next.replaceChildren(...buttons);
 
 		if (!view) return; // 没有页面容器: 只渲染菜单, 没处放内容
@@ -292,7 +303,8 @@ export function createSidebar({ container, main, animMs = 280 }) {
 		content = body;
 		view.appendChild(body);
 
-		await select(0); // 首个项自动选中
+		let idx = items.findIndex(i => typeof i !== "string");
+		if (idx !== -1) await select(idx); // 首个项自动选中
 	}
 
 	return { render };

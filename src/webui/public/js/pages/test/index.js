@@ -52,6 +52,7 @@ export default {
 				container.innerHTML = `<h2>项二</h2><p class="muted">这里是项二的内容</p>`;
 			},
 		},
+		"测试",
 		{
 			title: "项三",
 			render(container) {

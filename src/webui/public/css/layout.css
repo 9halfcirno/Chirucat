@@ -275,6 +275,11 @@ body.nav-collapsed #side-bar {
 		background-color var(--dur-fast) var(--ease);
 }
 
+.spa-sidebar-label {
+	margin: 0;
+	padding: var(--sp-2) var(--sp-2);
+}
+
 .spa-sidebar-item:hover {
 	color: var(--fg);
 	background: var(--bg-hover);
