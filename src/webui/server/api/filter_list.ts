@@ -29,6 +29,9 @@ import type { UserProfile } from "../../../internal/user-profile";
  * 因此"提前拉黑还没发过言的人/还没出现过的群"成立。
  *
  * 变更后会立即刷新受影响的 Bot, 不需要重启。
+ *
+ * @deprecated 过滤能力将抽离为独立服务插件(services/filter), 届时这个 WebUI 端点
+ *   与 `internal/filter-list.ts` 一起迁移; 过渡期只做修复性改动。
  */
 
 const api: WebUIAPI = {

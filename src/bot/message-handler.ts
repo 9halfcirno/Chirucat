@@ -10,9 +10,12 @@ export class MessageHandler {
 	 * 每层都同时约束「用户」与「会话」两个对象, 且所有层都要放行才算通过,
 	 * 因此 Bot 私有名单实际优先级更高 —— 全局白名单放行的人或会话, 仍可被
 	 * 某个 Bot 的私有名单排除; 反之, 任一层进了黑名单都会被拦下。
+	 *
+	 * @deprecated 过滤能力将抽离为独立服务插件(services/filter): 届时名单判定改由
+	 *   服务插件的 `ctx.event.filter` 承担, 这里的字段与 `loadFilterList()` 一并移除。
 	 */
 	globalFilter = new FilterLayer();
-	/** Bot 私有名单 */
+	/** Bot 私有名单 @deprecated 同 globalFilter */
 	botFilter = new FilterLayer();
 
 	constructor(private bot: Bot) {
@@ -51,6 +54,9 @@ export class MessageHandler {
 	 *
 	 * Bot 初始化时调用; WebUI 改动名单后由核心通知刷新。
 	 * 名单库不可用时保持空集 (等价于全部放行), 不让过滤链路因存储问题瘫痪。
+	 *
+	 * @deprecated 过滤能力将抽离为独立服务插件(services/filter), 届时名单由该服务
+	 *   自行装载与刷新。
 	 */
 	loadFilterList(): void {
 		const layers = this.bot.core.filterList?.loadFor(this.bot.id);

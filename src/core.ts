@@ -57,7 +57,10 @@ export class Core {
 	user: UserManager | null = null;
 	/** 用户档案 (昵称等展示信息) */
 	profile: UserProfileManager | null = null;
-	/** 消息过滤名单 (全局 + 各 Bot 私有) */
+	/**
+	 * 消息过滤名单 (全局 + 各 Bot 私有)
+	 * @deprecated 将随过滤能力抽离为服务插件一起移除, 见 internal/filter-list.ts
+	 */
 	filterList: FilterListManager | null = null;
 
 
@@ -92,6 +95,9 @@ export class Core {
 		this.session = new SessionManager(this.internalDB);
 		this.profile = new UserProfileManager(this.internalDB);
 		this.filterList = new FilterListManager(this.internalDB);
+
+		// 顺序要求: 这些设施必须先于服务插件就绪 —— 服务插件的 ctx.core.user / session 等
+		// 直接依赖它们(见下面对 services 的加载), 这里往前挪一步就会让依赖设施的插件起不来。
 
 		this.user.init()
 		this.session.init()
@@ -271,8 +277,10 @@ export class Core {
 		await this.bot.dispose(); // 停止所有Bot, 并释放状态文件监听
 		await this.services.dispose(); // 卸载服务插件(基础设施最后倒, 与启动顺序相反)
 		await this.webui?.close() // 停止webui
+		this.webui = null; // 释放后不再把已停止的服务器给出去
 		this.settings.close(); // 释放设置域(含值文件监听)
 		this.statistics?.close(); // 冲刷统计缓冲并关闭数据库
+		this.statistics = null; // 置空后 ctx.core.statistics 才如实返回 null, 而不是已关闭的实例
 		this.session = null;
 		this.user = null;
 		this.profile = null;

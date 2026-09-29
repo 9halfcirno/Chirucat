@@ -17,6 +17,10 @@ type RateState = {
 	resetAt: number;
 }
 
+/**
+ * @deprecated 过滤能力将抽离为独立服务插件(services/filter), 判定逻辑届时归它;
+ *   过渡期只做修复性改动, 见 internal/filter-list.ts。
+ */
 export class MessageFilter {
 	by: "session" | "sender";
 	blacklist = new Set<string>();
@@ -74,6 +78,8 @@ export class MessageFilter {
  *
  * 同一层里, 用户名单与会话名单各自独立判定, 两者都放行才算通过。
  * 会话名单用于群 / 频道; 私聊会话与用户一一对应, 由用户名单覆盖即可。
+ *
+ * @deprecated 将随过滤能力抽离为独立服务插件(services/filter)。
  */
 export class FilterLayer {
 	/** 按发送者账号判定 */

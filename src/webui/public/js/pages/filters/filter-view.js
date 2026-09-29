@@ -9,6 +9,9 @@
  * - 会话名单: 按群 / 频道生效 (私聊会话与用户一一对应, 由用户名单表达)
  *
  * 名单改动立即生效, 不需要重启 Bot。
+ *
+ * @deprecated 过滤能力将抽离为独立服务插件(services/filter), 这个页面届时随
+ *   `filter_list` 端点一起迁移。
  */
 import { callAPI } from "../../spa/api.js";
 import { createButton } from "../../spa/components/button.js";

@@ -20,6 +20,7 @@ const api: WebUIAPI = {
 		try {
 			await core.botHelper.delete(id);
 			// Bot 已删除, 它的私有名单不再有意义
+			// @deprecated 过滤能力抽离为服务插件后, 这步要跟着迁移
 			core.filterList?.removeByBot(id);
 			return { success: true };
 		} catch (e) {

@@ -62,6 +62,10 @@ const CREATE_INDEX = `CREATE INDEX IF NOT EXISTS idx_filter_list_scope ON filter
  *            私聊会话与用户一一对应, 因此不单独支持, 由用户名单覆盖
  *
  * 范围分两级 (global / bot), 两级在判定时都要放行 —— 详见 MessageHandler。
+ *
+ * @deprecated 过滤能力将抽离为独立服务插件(services/filter): 名单存储、判定与
+ *   WebUI 入口届时一并迁移, `Core.filterList` 也会移除。过渡期只做修复性改动,
+ *   新代码不要再依赖本模块。
  */
 export class FilterListManager {
 	db: sqlite.Database;
