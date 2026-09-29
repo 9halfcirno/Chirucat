@@ -1,9 +1,8 @@
 import path from "node:path";
-import { atomicWriteJson } from "../utils/writeFile";
 import { readJSON } from "../utils/readJSON";
-import { dirCheck } from "../utils/dir-check";
 import { readProp } from "../utils/readProp";
 import { root } from "../utils/root";
+import { SerialQueue, cloneValue, deepEqual, isPlainObject, writeJsonFile } from "./store";
 import type { ConfigRoot, Control } from "./types";
 import { validateConfig } from "./vaildate-config";
 
@@ -14,35 +13,7 @@ import { validateConfig } from "./vaildate-config";
  */
 export type ConfigValues = Record<string, any>;
 
-/** 是否为普通对象 (排除 null 与数组) */
-function isPlainObject(value: unknown): value is Record<string, any> {
-	return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
-/** 深拷贝一份配置值 (配置值只含原始类型 / 数组 / 普通对象) */
-function cloneValue<T>(value: T): T {
-	if (Array.isArray(value)) return value.map(cloneValue) as T;
-	if (isPlainObject(value)) {
-		const out: Record<string, unknown> = {};
-		for (const key of Object.keys(value)) out[key] = cloneValue(value[key]);
-		return out as T;
-	}
-	return value;
-}
-
-/** 递归比较两个配置值 */
-function isEqual(a: unknown, b: unknown): boolean {
-	if (a === b) return true;
-	if (Array.isArray(a) && Array.isArray(b)) {
-		return a.length === b.length && a.every((item, index) => isEqual(item, b[index]));
-	}
-	if (isPlainObject(a) && isPlainObject(b)) {
-		const keys = Object.keys(a);
-		if (keys.length !== Object.keys(b).length) return false;
-		return keys.every((key) => isEqual(a[key], b[key]));
-	}
-	return false;
-}
+/* isPlainObject / cloneValue / deepEqual 已下沉到 ./store, 与设置层共用同一套值工具 */
 
 /**
  * 收集发生变化的配置项路径
@@ -66,7 +37,7 @@ function collectChangedPaths(
 
 		if (control.type === "group") {
 			changed.push(...collectChangedPaths(control.controls ?? [], oldObj[control.id], newObj[control.id], key));
-		} else if (!isEqual(oldObj[control.id], newObj[control.id])) {
+		} else if (!deepEqual(oldObj[control.id], newObj[control.id])) {
 			changed.push(key);
 		}
 	}
@@ -85,6 +56,9 @@ export class ConfigManager {
 
 	/** 变更监听器 */
 	private readonly watchers = new Set<ConfigChangeHandler>();
+
+	/** 串行化写链: 并发的两次保存不会交错落盘 */
+	private readonly queue = new SerialQueue();
 
 	constructor(readonly schema: ConfigRoot, readonly file?: string) {
 		this.data = this.defaults();
@@ -237,8 +211,7 @@ export class ConfigManager {
 		} catch (e) {
 			if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
 			loaded = this.defaults();
-			await dirCheck(path.dirname(file));
-			await atomicWriteJson(file, loaded);
+			await writeJsonFile(file, loaded);
 		}
 
 		this.data = this.coerce(this.schema?.controls ?? [], loaded);
@@ -352,13 +325,16 @@ export class ConfigManager {
 
 	/**
 	 * 保存到文件: 先建目录, 再原子写入
+	 *
+	 * 写入经过串行队列: 并发的 update/save 不会交错落盘。落盘的是调用这一刻
+	 * 的快照 —— 排队期间 data 又被改动时, 本次写的仍是当时那份值。
 	 * @param file 目标文件, 缺省用构造时传入的 file
 	 */
 	async save(file?: string) {
 		const target = file ?? this.file;
 		if (!target) throw new Error("ConfigManager 未绑定配置文件, 无法保存");
-		await dirCheck(path.dirname(target));
-		await atomicWriteJson(target, this.data);
+		const snapshot = cloneValue(this.data);
+		await this.queue.run(() => writeJsonFile(target, snapshot));
 	}
 
 	/* ---------- 路径约定 ---------- */
