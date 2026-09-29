@@ -13,3 +13,5 @@
 - [`PluginContext`](normal.md)
 
 - [`AdapterContext`](adapter.md)
+
+- [`ServiceContext`](service.md)
