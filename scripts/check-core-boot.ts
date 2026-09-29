@@ -12,6 +12,7 @@
  * 只读取仓库数据, 不启动任何 Bot; 退出码 0 表示全部通过。
  */
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { Core } from "../src/core";
 import { ServiceHost } from "../src/plugin/services/host";
@@ -30,7 +31,12 @@ function check(name: string, ok: boolean, detail = ""): void {
 	}
 }
 
-const core = new Core({ webui: false, statistics: false });
+const core = new Core({
+	webui: false,
+	statistics: false,
+	// 状态文件指到临时目录: 这个检查不该碰 configs/services/state.json
+	servicesStateFile: path.join(os.tmpdir(), `chirucat-core-state-${process.pid}.json`),
+});
 
 check("Core 上挂载 ServiceHost", core.services instanceof ServiceHost);
 check("webui: false 时不创建 WebUI", core.webui === null);
@@ -47,7 +53,64 @@ check("services/ 可扫描", core.services.registry.size === serviceDirCount,
 	`registry=${core.services.registry.size} dirs=${serviceDirCount}`);
 
 const failedIds = await core.services.syncState();
-check("空 services/ 的 syncState 无失败", failedIds.length === 0, JSON.stringify(failedIds));
+
+// 本检查刻意不 init Core, 而服务插件会依赖 Core 的设施(bind 需要 core.user):
+// 这些设施此时为空, 插件必然加载失败 —— 这是“只跑接线”的必然结果, 不是接线缺陷,
+// 因此不断言“全部加载成功”(那会让门禁依赖服务插件的具体依赖面)。
+// 这里只验证收敛流程本身: 失败逐项上报, 且插件回到关态而不是卡在切换中。
+const stuck = [...core.services.registry.values()]
+	.filter(service => service.status === "loading" || service.status === "unloading");
+check("services/ 可收敛, 加载失败后不卡在切换中", stuck.length === 0,
+	`failed=${JSON.stringify(failedIds)} stuck=${stuck.map(s => `${s.id}:${s.status}`).join(",")}`);
+if (failedIds.length) {
+	console.log(`        未加载: ${failedIds.join(", ")} (Core 未 init, 依赖其设施的服务插件起不来)`);
+}
+
+// 光允许失败不行: 那样服务层的加载/收敛彻底壤掉也是绿的。这里另起一个临时目录:
+// - probe: 不依赖 Core 设施的插件, 其 init 写一个哨兵文件 —— 既证明“加载成功”,
+//   也证明 init 真的被调用过(而不是只被标成 enabled);
+// - probe-fail: init 必抛错的插件 —— 证明失败确实被逐项上报, 而不是被吞掉。
+const probeDir = await fs.mkdtemp(path.join(os.tmpdir(), "chirucat-core-probe-"));
+const marker = path.join(probeDir, "probe-inited.marker");
+
+/** 在探针目录下写一个临时服务插件 */
+async function makeProbeService(id: string, source: string): Promise<void> {
+	const dir = path.join(probeDir, id);
+	await fs.mkdir(dir, { recursive: true });
+	await fs.writeFile(
+		path.join(dir, "manifest.json"),
+		JSON.stringify({ id, version: "0.0.0", type: "service", main: "index.ts" }, null, "\t"),
+	);
+	await fs.writeFile(path.join(dir, "index.ts"), source);
+}
+
+try {
+	// 哨兵路径用 JSON 转义后内联: Windows 路径里的反斜杠直接拼进源码会把它打断
+	await makeProbeService("probe", `
+import fs from "node:fs";
+export default { init() { fs.writeFileSync(${JSON.stringify(marker)}, "1"); } };
+`);
+	await makeProbeService("probe-fail", `
+export default { init() { throw new Error("probe init boom"); } };
+`);
+
+	await core.services.scan(probeDir);
+	const probeFailed = await core.services.syncState();
+
+	const inited = await fs.access(marker).then(() => true, () => false);
+	check(
+		"不依赖 Core 设施的服务插件可加载, 且 init 真被调用",
+		inited && core.services.enabledServices.some(service => service.id === "probe"),
+		`inited=${inited} enabled=${core.services.enabledServices.map(s => s.id).join(",")}`,
+	);
+	check(
+		"加载失败的服务插件被逐项上报",
+		probeFailed.includes("probe-fail") && !probeFailed.includes("probe"),
+		`failed=${JSON.stringify(probeFailed)}`,
+	);
+} finally {
+	await fs.rm(probeDir, { recursive: true, force: true });
+}
 
 await core.bot.scan(path.join(root, "bots"));
 check("Bot 目录可扫描", core.bot.bots.size > 0, [...core.bot.bots.keys()].join(","));

@@ -17,6 +17,7 @@
     "check:services": "tsx scripts/check-services.ts",
     "check:service-state": "tsx scripts/check-service-state.ts",
     "check:core": "tsx scripts/check-core-boot.ts",
+    "check:core-api": "tsx scripts/check-core-api.ts",
     "check:settings": "tsx scripts/check-settings.ts && tsx scripts/check-settings-api.ts",
     "check:types": "tsc -p tsconfig.check.json --noEmit"
   },
