@@ -6,7 +6,7 @@ let command: Command;
 
 export default {
 	init(ctx) {
-		const bm = new BindManager(ctx.core.user!); // !断言, 因为此时core一定处于开启
+		const bm = new BindManager(ctx.core.user); // 服务插件加载时 Core 已 init, user 必然就绪
 
 		const handler: Command["handler"] = (msg, args) => {
 			if (!msg) return; // 拿不到信息, 返回

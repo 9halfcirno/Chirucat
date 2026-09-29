@@ -4,7 +4,7 @@
 
 import { TTLMap } from "./ttl-map";
 import { uuid } from "./uuid";
-import type { UserManager } from "../../src/internal/user-manager";
+import type { UserAPI } from "../../src/plugin/services/apis/core";
 
 export class BindManager {
 	/** token -> aid 映射 */
@@ -12,7 +12,7 @@ export class BindManager {
 	/** aid -> token 反向映射，用于保证同一 aid 重新生成时刷新旧 token */
 	aidToToken = new TTLMap<string, string>();
 
-	constructor(private um: UserManager) { }
+	constructor(private um: UserAPI) { }
 
 	/**
 	 * 获取新的 bind token
