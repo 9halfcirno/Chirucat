@@ -500,7 +500,7 @@ body:not(.authed) #main {
 	   它就被顶下去多少 —— 顶出 #main 的部分由上面的 overflow: hidden 裁掉。
 	   这里刻意不做"压缩页面高度": 那会让页面底部跟着上收 (看起来像被挤扁),
 	   而不是被整个推开。 */
-	#page-view {
-		/* flex: 0 0 calc(100% - var(--sidebar-toggle-h)); */
-	}
+	/* #page-view {
+		flex: 0 0 calc(100% - var(--sidebar-toggle-h));
+	} */
 }
