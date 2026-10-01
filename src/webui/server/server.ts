@@ -3,12 +3,14 @@ import path from "path";
 import { pathToFileURL } from "url";
 import type { Server as HttpServer } from "http";
 import express from "express";
-import type { ErrorRequestHandler, Express, NextFunction, Request, RequestHandler, Response } from "express";
+import type { ErrorRequestHandler, Express, NextFunction, Request, RequestHandler, Response, Router } from "express";
 import Logger from "../../utils/logger";
+import { StateError } from "../../errors/state-error";
 import { AUTH_COOKIE, TOKEN_TTL_MS, readAuthToken, safeEqualPassword, signToken, verifyToken } from "./auth";
 import { root } from "../../utils/root";
 import type { Core } from "../../core";
 import type { WebUIAPI, WebUIFrontConfig } from "./types";
+import { ServicePageRegistry, type ServicePageDef, type ServicePageView } from "./service-pages";
 
 /**
  * handler 抛出的自定义错误对象, 用于向前端返回带 HTTP 状态码的错误响应。
@@ -26,6 +28,57 @@ function isAPIError(err: unknown): err is APIError {
 	if (!err || typeof err !== "object") return false;
 	const candidate = err as Record<string, unknown>;
 	return typeof candidate.err === "string" && typeof candidate.code === "number";
+}
+
+/** 支持的请求方法; 核心 API 模块与服务插件路由共用同一份列表 */
+const SUPPORTED_METHODS = ["get", "post", "put", "delete", "patch", "options", "head"] as const;
+
+/** 服务插件 WebUI 的挂载根: `/service/<插件id>/api/...` 与 `/service/<插件id>/public` */
+const SERVICE_ROOT = "/service";
+
+/**
+ * 运行期注册的服务插件路由
+ *
+ * 端点落在 `/service/<插件id>/api/<path>` 下(命名空间与归属由框架拼装, 插件只给
+ * 相对路径), 只交给插件"已解析的请求体 + 返回值", 不交出 req / res —— 插件不需要、
+ * 也不该触碰 HTTP 连接的完整生命周期(那是核心 API 模块与 stream 处理器的事)。
+ */
+export interface ServiceAPIRoute {
+	/** 相对 `/service/<插件id>/api` 的路径, 必须是单段(形如 `filter_list`, 不含 `/`) */
+	path: string;
+	/** 请求方法, 取值同核心 API */
+	method: string;
+	/**
+	 * 是否需要鉴权; 缺省 `true`(与核心 API 的默认一致, 插件端点不会意外裸奔)
+	 *
+	 * 显式写成 `boolean | undefined`: 调用方可能原样透传一个可选值, 而
+	 * `exactOptionalPropertyTypes` 下"可选"与"可以是 undefined"不是一回事。
+	 */
+	auth?: boolean | undefined;
+	/**
+	 * 处理器: 入参是已解析的 JSON 请求体, 返回值按普通 JSON API 的规则写出
+	 * (undefined → 204, string → 原样发送, 其余 → JSON)。
+	 * 可抛出 `{ err, code }` 对象定制错误响应, code 作为 HTTP 状态码。
+	 */
+	handler: (body: unknown) => unknown;
+}
+
+/** 一条已注册的服务插件路由 */
+interface ServiceRouteEntry {
+	/** 注册者(服务插件 id), 仅用于错误信息 */
+	owner: string;
+	/** 是否需要鉴权 */
+	auth: boolean;
+	/** 处理器 */
+	handler: (body: unknown) => unknown;
+	/** 是否活跃: 归属上下文释放后置为 false, 请求返回 503 而不是 404 */
+	active: boolean;
+}
+
+/** 一个服务插件的静态资源挂载 */
+interface ServiceStaticEntry {
+	/** 是否活跃: 归属上下文释放后置为 false, 请求落到 404 兜底 */
+	active: boolean;
 }
 
 /** WebUI 服务器配置选项 */
@@ -76,6 +129,39 @@ export class WebUIServer {
 	readonly logger = new Logger("WebUI");
 
 	private readonly app: Express = express();
+	/**
+	 * 核心 API 模块注册到的 router, 挂在 `/api`
+	 *
+	 * 服务插件**不**走这里: 它们有自己的命名空间(见 `serviceRouter`)。
+	 * 两个 router 都挂在各自的 404 兜底之前, 因此服务器启动后仍能往里加路由。
+	 */
+	private readonly apiRouter: Router = express.Router();
+	/**
+	 * 服务插件 WebUI 的 router, 挂在 `/service`
+	 *
+	 * 每个插件独占 `/service/<插件id>/` 前缀:
+	 * - 端点注册在 `/service/<插件id>/api/<路径>`
+	 * - 插件代码目录下的 `public/` 挂在 `/service/<插件id>/public`
+	 *
+	 * 带上命名空间之后, 插件之间、插件与核心端点之间都不会撞路径 —— 插件既抢不走
+	 * 核心端点, 也看不到别的插件的端点。
+	 */
+	private readonly serviceRouter: Router = express.Router();
+	/** 运行期注册的服务插件端点, 键为 `METHOD /service/<id>/api/<路径>` */
+	private readonly serviceRoutes = new Map<string, ServiceRouteEntry>();
+	/** 已挂到 serviceRouter 上的端点键: 重复注册只换条目, 不重复挂载 */
+	private readonly mountedRouteKeys = new Set<string>();
+	/** 已挂载的插件静态目录, 键为 `/service/<id>/public` */
+	private readonly serviceStatics = new Map<string, ServiceStaticEntry>();
+	/** 已占用的插件命名空间: 小写 id -> 原始 id; 拒绝只有大小写不同的重复 id */
+	private readonly serviceNamespaces = new Map<string, string>();
+	/**
+	 * 服务插件注册的 WebUI 页面 (活动栏一级导航 + Bot 详情窗口的二级导航)
+	 *
+	 * 前端通过 `GET /api/get_webui_pages` 拉取这份清单, 并按版本号做幂等对账;
+	 * 清单里只有活着的页面 —— 服务上下文释放时注册表条目会被注销函数清掉。
+	 */
+	private readonly servicePages = new ServicePageRegistry();
 	/** 当前监听的 server; relisten 会先关掉它并置空 */
 	private server: HttpServer | undefined;
 
@@ -143,6 +229,17 @@ export class WebUIServer {
 		this.port = port;
 		this.host = host;
 		await this.listenOn();
+	}
+
+	/**
+	 * 当前监听的地址; 未监听时为 null
+	 *
+	 * 端口配置为 0(由系统分配)时, 这里拿到的是**实际绑定**的端口, 供测试与诊断使用。
+	 */
+	get listening(): { host: string; port: number } | null {
+		const address = this.server?.address();
+		if (!address || typeof address === "string") return null;
+		return { host: this.host, port: address.port };
 	}
 
 	/** 热更新访问密码; 传空串表示清除密码(此后不再鉴权) */
@@ -253,48 +350,55 @@ export class WebUIServer {
 	 */
 	private authRequired(): RequestHandler {
 		return (req: Request, res: Response, next: NextFunction) => {
-			if (!this.password) {
+			if (this.isAuthorized(req)) {
 				next();
 				return;
 			}
-			// 本机免密: 只看 TCP 对端地址, 不信 X-Forwarded-For
-			if (this.localNoAuth && isLoopback(req.socket?.remoteAddress)) {
-				next();
-				return;
-			}
-			const token = readAuthToken(req);
-			if (!token || !verifyToken(token, this.password)) {
-				res.status(401).json({ err: "未登录或登录已过期", code: 401 });
-				return;
-			}
-			next();
+			res.status(401).json({ err: "未登录或登录已过期", code: 401 });
 		};
 	}
 
-	/** 将单个 API 定义注册为 express 路由 */
+	/** 该请求是否已通过鉴权: 未配置密码 / 本机免密 / 有效 Cookie 三者之一 */
+	private isAuthorized(req: Request): boolean {
+		if (!this.password) return true;
+		// 本机免密: 只看 TCP 对端地址, 不信 X-Forwarded-For
+		if (this.localNoAuth && isLoopback(req.socket?.remoteAddress)) return true;
+		const token = readAuthToken(req);
+		return Boolean(token && verifyToken(token, this.password) !== null);
+	}
+
+	/** 归一化请求方法; 不在支持列表内时返回 null */
+	private normalizeMethod(method: string): (typeof SUPPORTED_METHODS)[number] | null {
+		const lower = method.toLowerCase();
+		return (SUPPORTED_METHODS as readonly string[]).includes(lower)
+			? lower as (typeof SUPPORTED_METHODS)[number]
+			: null;
+	}
+
+	/** 将单个 API 定义注册为 express 路由 (核心 API 模块启动时调用) */
 	private registerAPI(api: WebUIAPI, file: string): void {
-		const supportedMethods = ["get", "post", "put", "delete", "patch", "options", "head"] as const;
-		const method = api.method.toLowerCase();
-		if (!(supportedMethods as readonly string[]).includes(method)) {
+		const method = this.normalizeMethod(api.method);
+		if (!method) {
 			this.logger.warn(`跳过 API ${api.path}: 不支持的请求方法 ${api.method} (${file})`);
 			return;
 		}
 
-		const routePath = `/api/${api.path.replace(/^\/+/, "")}`;
-		// this.logger.log(`注册 API: ${api.method.toUpperCase()} ${routePath} (${file})`);
+		// router 内部的路径不含挂载前缀(`apiRouter` 已挂在 /api 上), 对外 URL 才带
+		const routePath = `/${api.path.replace(/^\/+/, "")}`;
+		const urlPath = `/api${routePath}`;
+		// this.logger.log(`注册 API: ${method.toUpperCase()} ${urlPath} (${file})`);
 
-		const routeMethod = method as (typeof supportedMethods)[number];
 		// 声明 auth:true 的 API 在 handler 之前先过鉴权中间件
 		const middlewares: RequestHandler[] = api.auth ? [this.authRequired()] : [];
 
 		// 流式 API (SSE): 直接交给处理器, 由处理器负责连接完整生命周期
 		const stream = api.stream;
 		if (stream) {
-			this.app[routeMethod](routePath, ...middlewares, (req, res) => {
+			this.apiRouter[method](routePath, ...middlewares, (req, res) => {
 				try {
 					void stream({ core: this.core, req, res });
 				} catch (err) {
-					this.logger.error(`API ${routePath} 处理流式请求时出错`, err);
+					this.logger.error(`API ${urlPath} 处理流式请求时出错`, err);
 					if (res.headersSent) {
 						res.end();
 					} else {
@@ -306,46 +410,229 @@ export class WebUIServer {
 		}
 
 		// 普通 JSON API
-		this.app[routeMethod](routePath, ...middlewares, async (_req, res) => {
-			try {
-				// if (!this.core) {
-				// 	this.logger.error(`API ${routePath} 需要 core 实例, 但 WebUIServer 未配置 core`);
-				// 	res.status(500).json({ error: "Internal Server Error" });
-				// 	return;
-				// }
-
-				const result: unknown = await api.handler?.(_req, this.core);
-				if (result === undefined) {
-					res.status(204).end();
-				} else if (typeof result === "string") {
-					res.send(result);
-				} else {
-					res.json(result);
-				}
-			} catch (err) {
-				this.logger.error(`API ${routePath} 处理请求时出错`, err);
-
-				// handler 可抛出 { err, code } 对象, 将 code 作为 HTTP 状态码, 原样返回给前端
-				if (isAPIError(err)) {
-					const status =
-						Number.isInteger(err.code) && err.code >= 400 && err.code <= 599
-							? err.code
-							: 500;
-					// details 存在时一并透传(字段级校验错误等), 否则保持原来的响应形状
-					res.status(status).json(
-						err.details === undefined
-							? { err: err.err, code: status }
-							: { err: err.err, code: status, details: err.details },
-					);
-					return;
-				}
-
-				res.status(500).json({ error: "Internal Server Error" });
-			}
+		this.apiRouter[method](routePath, ...middlewares, (req, res) => {
+			void this.respond(res, urlPath, () => api.handler?.(req, this.core));
 		});
 	}
 
+	/**
+	 * 运行期注册一条服务插件端点
+	 *
+	 * 端点落在**该插件自己的命名空间**里: `/service/<插件id>/api/<路径>`, 因此
+	 * 插件之间、插件与核心 `/api/*` 之间都不会撞路径。
+	 *
+	 * 约定:
+	 * - `path` 必须是**单段**(形如 `filter_list`, 不含 `/`), 不允许用前缀或通配扩张;
+	 * - 同一个插件重复注册同一路径只换处理器(服务停用后重新启用是正常路径);
+	 * - 服务器启动后也能注册: `serviceRouter` 挂在 404 兜底之前(见 setupRoutes)。
+	 *
+	 * @param owner 注册者(服务插件 id), 同时构成 URL 里的命名空间
+	 * @param route 路由定义
+	 * @returns 注销函数; 注销后该路径返回 503(而不是消失), 前端能拿到明确原因
+	 */
+	registerServiceAPI(owner: string, route: ServiceAPIRoute): () => void {
+		const segment = this.serviceSegment(owner);
+
+		if (typeof route?.path !== "string" || !/^[A-Za-z0-9_-]+$/.test(route.path)) {
+			throw new StateError(
+				`服务插件 ${owner} 注册端点失败: path 必须是单段(字母/数字/下划线/连字符), 收到 ${JSON.stringify(route?.path)}`,
+			);
+		}
+
+		const method = this.normalizeMethod(String(route.method));
+		if (!method) {
+			throw new StateError(`服务插件 ${owner} 注册端点 ${route.path} 失败: 不支持的请求方法 ${String(route.method)}`);
+		}
+		if (typeof route.handler !== "function") {
+			throw new StateError(`服务插件 ${owner} 注册端点 ${route.path} 失败: handler 必须是函数`);
+		}
+
+		// router 内部的路径不含挂载前缀(`serviceRouter` 已挂在 /service 上), 对外 URL 才带
+		const innerPath = `${segment}/api/${route.path}`;
+		const urlPath = `${SERVICE_ROOT}${innerPath}`;
+		const key = `${method} ${urlPath}`;
+
+		const entry: ServiceRouteEntry = {
+			owner,
+			auth: route.auth !== false,
+			handler: route.handler,
+			active: true,
+		};
+		this.serviceRoutes.set(key, entry);
+
+		// 处理器只在首次注册时挂到 router 上: 之后靠条目查表, 重新注册只换条目
+		if (!this.mountedRouteKeys.has(key)) {
+			this.mountedRouteKeys.add(key);
+			this.serviceRouter[method](innerPath, (req, res) => {
+				void this.handleServiceRequest(key, req, res);
+			});
+		}
+
+		this.logger.log(`服务插件 ${owner} 已注册端点: ${method.toUpperCase()} ${urlPath}`);
+
+		return () => {
+			// 只把本次注册的条目置为非活跃: 归属校验为同一个对象, 重新注册后的新条目不受影响
+			const current = this.serviceRoutes.get(key);
+			if (current === entry) entry.active = false;
+		};
+	}
+
+	/**
+	 * 运行期注册一个属于本服务插件的 WebUI 页面
+	 *
+	 * 与 `registerServiceAPI` 同构: 插件只给**相对 public/ 的路径**, 命名空间、
+	 * 版本化的模块 URL 都由框架拼装; 返回的注销函数由服务上下文代管, 因此
+	 * **服务停用即页面消失**(前端下一次对账就会把它从导航里摘掉)。
+	 *
+	 * @param owner 服务插件 id (同时是 `/service/<id>/` 的命名空间)
+	 * @param scope 作用域: app = 活动栏一级导航, bot = Bot 详情窗口的二级导航
+	 * @param def 页面定义
+	 * @returns 注销函数
+	 */
+	registerServicePage(owner: string, scope: "app" | "bot", def: ServicePageDef): () => void {
+		// 先过命名空间校验: 非法 id / 大小写冲突在这里就报出来, 而不是等到拼 URL
+		const segment = this.serviceSegment(owner);
+		const dispose = this.servicePages.register(owner, segment, scope, def);
+		this.logger.log(`服务插件 ${owner} 已注册 WebUI 页面: ${scope}/${def?.id}`);
+		return dispose;
+	}
+
+	/** 当前的服务插件页面清单 (按 order 升序, URL 已拼好并带版本参数) */
+	getServicePages(): ServicePageView[] {
+		return this.servicePages.list();
+	}
+
+	/** 页面清单版本号: 每次增删都变, 前端据此判断要不要重新对账 */
+	get servicePagesVersion(): number {
+		return this.servicePages.version;
+	}
+
+	/**
+	 * 挂载一个服务插件的静态资源目录
+	 *
+	 * 约定: 插件代码目录下的 `public/` 对应 `/service/<插件id>/public`。目录不存在时
+	 * 不挂载(没有静态资源的插件不占这个位置), 挂载由框架在服务加载时完成, 插件不必
+	 * (也无法)自己处理静态文件。
+	 *
+	 * 静态资源与核心前端一样**不鉴权**: 它只是页面用的 js/css/图片, 真正的数据入口
+	 * 是同一命名空间下的 `/api`, 那里默认要求鉴权。
+	 *
+	 * @param owner 服务插件 id
+	 * @param dir 静态目录的绝对路径
+	 * @returns 注销函数; 注销后该前缀返回 404
+	 */
+	mountServicePublic(owner: string, dir: string): () => void {
+		const segment = this.serviceSegment(owner);
+		const innerPath = `${segment}/public`;
+		const handler = express.static(dir, { index: false, redirect: false });
+
+		let entry = this.serviceStatics.get(innerPath);
+		if (!entry) {
+			entry = { active: true };
+			this.serviceStatics.set(innerPath, entry);
+			this.serviceRouter.use(innerPath, (req, res, next) => {
+				const current = this.serviceStatics.get(innerPath);
+				if (!current || !current.active) {
+					next(); // 服务未启用: 交给后续的 404 兜底
+					return;
+				}
+				handler(req, res, next);
+			});
+			this.logger.log(`服务插件 ${owner} 已挂载静态资源: ${SERVICE_ROOT}${innerPath}`);
+		}
+		entry.active = true;
+
+		const mounted = entry;
+		return () => {
+			// 同上: 只有当前条目还是本次挂载的那一个才置为非活跃
+			if (this.serviceStatics.get(innerPath) === mounted) mounted.active = false;
+		};
+	}
+
+	/**
+	 * 取一个服务插件在 `serviceRouter` 里的路径段 `/<id>`, 顺带校验 id 能安全地做路径段
+	 *
+	 * manifest 的 id 没有字符集约束, 直接拼进 URL 会带来 `..` / `/` 这类路径问题,
+	 * 也会让两个只在大小写上有差别的 id 抢同一个命名空间(express 路由默认不分大小写)。
+	 */
+	private serviceSegment(owner: string): string {
+		if (typeof owner !== "string" || !/^[A-Za-z0-9_-]+$/.test(owner)) {
+			throw new StateError(
+				`服务插件 id 不能用作 WebUI 命名空间: ${JSON.stringify(owner)} (只允许字母/数字/下划线/连字符)`,
+			);
+		}
+
+		const lower = owner.toLowerCase();
+		const existing = this.serviceNamespaces.get(lower);
+		if (existing !== undefined && existing !== owner) {
+			throw new StateError(`服务插件 ${owner} 的 WebUI 命名空间与 ${existing} 冲突(路由不分大小写)`);
+		}
+		this.serviceNamespaces.set(lower, owner);
+
+		return `/${owner}`;
+	}
+
+	/** 处理一条服务插件端点的请求: 服务未启用 → 503, 鉴权失败 → 401, 其余交给处理器 */
+	private async handleServiceRequest(key: string, req: Request, res: Response): Promise<void> {
+		const entry = this.serviceRoutes.get(key);
+		if (!entry || !entry.active) {
+			const owner = entry?.owner ?? "?";
+			res.status(503).json({ err: `服务插件 ${owner} 未启用`, code: 503 });
+			return;
+		}
+		if (entry.auth && !this.isAuthorized(req)) {
+			res.status(401).json({ err: "未登录或登录已过期", code: 401 });
+			return;
+		}
+		await this.respond(res, key, () => entry.handler(req.body));
+	}
+
+	/**
+	 * 执行一个 API 处理器并把结果/错误写进响应
+	 *
+	 * 核心 API 模块与服务插件路由共用同一份错误映射(`{ err, code }` → HTTP 状态码)。
+	 * @param label 日志与错误信息里标识该端点的文本
+	 * @param run 调用处理器的闭包
+	 */
+	private async respond(res: Response, label: string, run: () => unknown): Promise<void> {
+		try {
+			const result = await run();
+			if (result === undefined) {
+				res.status(204).end();
+			} else if (typeof result === "string") {
+				res.send(result);
+			} else {
+				res.json(result);
+			}
+		} catch (err) {
+			this.logger.error(`API ${label} 处理请求时出错`, err);
+
+			// handler 可抛出 { err, code } 对象, 将 code 作为 HTTP 状态码, 原样返回给前端
+			if (isAPIError(err)) {
+				const status =
+					Number.isInteger(err.code) && err.code >= 400 && err.code <= 599
+						? err.code
+						: 500;
+				// details 存在时一并透传(字段级校验错误等), 否则保持原来的响应形状
+				res.status(status).json(
+					err.details === undefined
+						? { err: err.err, code: status }
+						: { err: err.err, code: status, details: err.details },
+				);
+				return;
+			}
+
+			res.status(500).json({ error: "Internal Server Error" });
+		}
+	}
+
 	private setupRoutes() {
+		// 核心 API 模块与服务插件运行期注册的端点都在各自 router 里;
+		// 必须先于两处 404 兜底挂载, 否则后加的路由永远匹配不到
+		this.app.use("/api", this.apiRouter);
+		// 服务插件命名空间: /service/<插件id>/api/... 与 /service/<插件id>/public
+		this.app.use(SERVICE_ROOT, this.serviceRouter);
+
 		// 健康检查, 供前端确认后端存活
 		this.app.get("/api/health", (_req, res) => {
 			res.json({

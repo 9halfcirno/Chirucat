@@ -69,6 +69,50 @@ WebUI 的**插件**页面下有"服务"子页面, 可以:
 
 WebUI 的读取与改动都走 `ServiceHost`, 不会绕过期望态直接启停某个服务。
 
+## 自带的 WebUI 端点、静态资源与页面
+
+服务插件可以自己提供 WebUI 用的接口、前端资源与导航页面, 各有固定的命名空间, **不需要(也无法)**注册核心的路由表:
+
+| 内容 | 位置 | 谁来挂 |
+| --- | --- | --- |
+| HTTP 端点 | `/service/<插件id>/api/<路径>` | 插件在 `init` 里 `ctx.core.webui?.register({ path, method, auth?, handler })` |
+| 静态资源 | `/service/<插件id>/public` | 框架: 插件代码目录下的 `public/` 自动挂载 |
+| 一级导航页面 | 活动栏 | 插件在 `init` 里 `ctx.core.webui?.pages.register({ id, title, module, ... })` |
+| Bot 窗口页面 | Bot 详情窗口的二级导航 | 插件在 `init` 里 `ctx.core.webui?.bot.pages.register({ id, title, module, ... })` |
+
+```js
+export default {
+	init(ctx) {
+		ctx.core.webui?.register({
+			path: "filter_list",
+			method: "POST",
+			auth: true,            // 缺省 true
+			handler: body => ({ entries: [] })
+		});
+
+		// 管理界面: 页面模块与样式都在本插件 public/ 下
+		ctx.core.webui?.pages.register({
+			id: "global", title: "黑白名单", icon: "shield.svg",
+			module: "global.js", styles: ["filters.css"], order: 50,
+		});
+		ctx.core.webui?.bot.pages.register({
+			id: "filter", title: "名单", icon: "shield.svg",
+			module: "bot.js", styles: ["filters.css"], order: 30,
+		});
+	}
+};
+```
+
+约定:
+
+- 端点、静态资源与页面都落在**本插件自己的命名空间**里, 与核心的 `/api/*`、其它插件的端点完全隔离;
+- 端点默认**要求鉴权**(与核心 API 同一套密码 / 本机免密 / Cookie), 静态资源不鉴权;
+- 服务被停用后, 端点返回 503("服务插件 xxx 未启用"), 静态资源回到 404, **注册的页面从导航里消失**(已经打开的 Bot 详情窗口也会当场去掉那一项);
+- WebUI 未启用时 `ctx.core.webui` 为 `null`, 跳过注册即可, 服务的本职工作(如消息过滤)不受影响;
+- 上下文释放时框架会自动注销这些注册, 插件不必自己记。
+
+完整 API、页面模块的写法与缓存注意事项见[服务插件上下文](contexts/service.md#corewebui对象)与[自带静态资源](contexts/service.md#自带静态资源)、[WebUI 前端 SPA](../webui/spa.md)。
+
 ## 清单
 
 与普通插件一致, 差别只在 `type`:

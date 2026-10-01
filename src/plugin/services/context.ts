@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import type { Bot } from "../../bot/bot";
 import type { CommandManager } from "../../command/manager";
@@ -41,7 +42,8 @@ import type { Service } from "./service";
  * - `core` 是收窄过的核心视图(见 `CoreAPI`): services/ 里的代码属于框架级可信插件,
  *   需要拿到用户/会话/统计等全局设施与 Bot 启停, 但拿不到 `Core` 实例本身 ——
  *   `init` / `close` / `settings` 这类启动与释放流程不外放。普通插件没有这个入口,
- *   仍只能通过 Bot 只读视图访问。
+ *   仍只能通过 Bot 只读视图访问。该视图的 `webui` 还允许服务插件在运行期注册自己的
+ *   HTTP 端点(`core.webui.register`), 注册产生的注销由本上下文在释放时代管。
  *
  * 不提供 message/command 之外的 Bot 维度 API(action / 当前 Bot 视图等):
  * 服务插件不属于任何 Bot, 给了也只能是假的。
@@ -83,6 +85,12 @@ export class ServiceContext {
 
 	private _commands = new Set<Command>();
 
+	/** 本上下文注册的 WebUI 路由与页面注销函数 (dispose 时统一注销) */
+	private _webuiDisposers: (() => void)[] = [];
+
+	/** 本上下文挂载的插件静态目录注销函数 (dispose 时注销) */
+	private _unmountPublic: (() => void) | null = null;
+
 	/** dispose 幂等标记: enable失败/卸载/注册表丢弃都可能重复触发释放 */
 	protected _disposed = false;
 
@@ -91,7 +99,11 @@ export class ServiceContext {
 		private readonly _serviceExports: PluginExports,
 		private readonly _commandManager: CommandManager,
 	) {
-		this.core = new CoreAPI(service.core);
+		// WebUI 路由与页面的注销函数记在上下文里: 插件在 init 里注册后不用自己记住,
+		// 卸载时统一注销, 避免"服务停了端点还活着/导航里还留着它注册的页面"
+		this.core = new CoreAPI(service.core, service.id, (dispose) => {
+			this._webuiDisposers.push(dispose);
+		});
 		this._manifest = service.manifest;
 
 		this.logger = new Logger(`Service ${this._manifest.id}`);
@@ -116,6 +128,32 @@ export class ServiceContext {
 			plugin: this._manifest.path,
 			data: storageRoot
 		};
+
+		this.mountServicePublic(service);
+	}
+
+	/**
+	 * 挂载插件自带的静态资源目录
+	 *
+	 * 约定: `services/<插件id>/public` ↔ `/service/<插件id>/public`。由框架在服务
+	 * 加载时完成, 插件不必(也无法)自己处理静态文件; 目录不存在就不挂 —— 没有前端
+	 * 资源的插件不占这个位置。
+	 *
+	 * WebUI 未启用时 `Core.webui` 为 null, 直接跳过(过滤等功能不依赖 WebUI);
+	 * id 不能用作路径段这类配置问题只记日志, 不拖垮整个服务插件。
+	 */
+	private mountServicePublic(service: Service) {
+		const server = service.core.webui;
+		if (!server) return;
+
+		const dir = path.resolve(this._manifest.path, "public");
+		if (!fs.existsSync(dir)) return;
+
+		try {
+			this._unmountPublic = server.mountServicePublic(this._manifest.id, dir);
+		} catch (e) {
+			this.logger.warn(`挂载插件静态目录失败 (${dir}): ${e instanceof Error ? e.message : e}`);
+		}
 	}
 
 	/** 全局指令: 注册进 ServiceHost 的共享指令表, 由各个 Bot 的消息处理转发匹配 */
@@ -260,6 +298,23 @@ export class ServiceContext {
 			this._commandManager.unregister(com)
 		}
 		this._commands.clear();
+		// 注销本上下文注册的 WebUI 路由与页面: 之后该路径返回 503(服务未启用)而不是 404,
+		// 页面则从导航清单里消失(前端下一次对账就会摘掉它)
+		for (const disposeWebUI of this._webuiDisposers) {
+			try {
+				disposeWebUI();
+			} catch (e) {
+				this.logger.error("Service context dispose: 注销 WebUI 路由/页面失败:", e);
+			}
+		}
+		this._webuiDisposers = [];
+		// 注销插件静态目录挂载: 服务停了, 它的前端资源也不再对外提供
+		try {
+			this._unmountPublic?.();
+		} catch (e) {
+			this.logger.error("Service context dispose: 注销插件静态目录失败:", e);
+		}
+		this._unmountPublic = null;
 		// 注销配置变更监听
 		this._config.dispose();
 		// 关闭 KV 连接(插件可能从未使用 KV, 未初始化时不应视为异常);
