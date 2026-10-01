@@ -3,9 +3,11 @@
  *
  * 直接以假上下文调用 `services/filter` 的模块契约, 因此不依赖 Core, 也不碰仓库数据:
  * 数据目录落在系统临时目录里。检查的是"跑起来才知道"的部分:
- * - 判定语义(黑名单优先 / 白名单非空仅放行 / 用户与会话各自独立 / 全局与 Bot 两层 AND);
- * - 名单改动立即生效(内存集合与库同步, 不需要重新装载);
- * - 管理端点的请求/响应形状与错误码(它与迁移前的核心端点必须一致);
+ * - 判定语义(每层一个模式 all / black / white; 黑名单优先; 白名单只在 white 模式下
+ *   参与; 用户与会话各自独立; 全局与 Bot 两层 AND);
+ * - 模式与名单的改动立即生效(内存判定层与库同步, 不需要重新装载);
+ * - 重启后各层自行装载: 全局层与 **Bot 私有层**都要生效, 而不是等被触碰;
+ * - 管理端点的请求/响应形状与错误码(list 带模式, setMode 校验);
  * - 端点确实注册到了 WebUI(路径 / 方法 / 鉴权), 且导出对其它插件可用。
  *
  * 用法:
@@ -218,6 +220,8 @@ console.log("-- 加载与接线 --");
 filterModule.init(ctx);
 const exported = ctx.exports as {
 	list(scope: string, botId?: string, targetType?: string): any[];
+	mode(scope: string, botId?: string): string;
+	setMode(scope: string, botId: string, mode: string): string;
 	add(scope: string, botId: string, kind: string, targetType: string, target: string, reason?: string): any;
 	remove(id: number): any;
 	removeByBot(botId: string): number;
@@ -253,8 +257,8 @@ check(
 	&& await fs.access(path.join(pluginDir, "public", "filter-view.js")).then(() => true, () => false),
 );
 check(
-	"导出提供 list / add / remove / removeByBot",
-	["list", "add", "remove", "removeByBot"].every(name => typeof (exported as any)[name] === "function"),
+	"导出提供 list / mode / setMode / add / remove / removeByBot",
+	["list", "mode", "setMode", "add", "remove", "removeByBot"].every(name => typeof (exported as any)[name] === "function"),
 );
 check("库文件落在插件数据目录", await fs.access(path.join(dataDir, "filter.db")).then(() => true, () => false));
 
@@ -265,21 +269,25 @@ console.log("-- 判定语义 --");
 const alice = user.get("test", "alice");
 const bob = user.get("test", "bob");
 const group = session.get("test", "group", "g1");
+const group2 = session.get("test", "group", "g2");
 
 check("空名单全部放行", allow(message(alice, group)) && allow(message(bob, group)));
+check("未设置过的层默认是 black 模式", exported.mode("global", "") === "black", exported.mode("global", ""));
+
+/* ---- black 模式(默认): 只有黑名单参与判定 ---- */
 
 exported.add("global", "", "black", "user", alice, "不受欢迎");
 check("用户黑名单拦下本人", !allow(message(alice, group)));
 check("用户黑名单不影响他人", allow(message(bob, group)));
 
 exported.remove(exported.list("global", "").find(e => e.target === alice)!.id);
-check("移除后立即恢复通行(内存集合已同步)", allow(message(alice, group)));
+check("移除后立即恢复通行(内存判定层已同步)", allow(message(alice, group)));
 
 exported.add("global", "", "white", "user", alice, "");
-check("白名单非空时只放行集合内", allow(message(alice, group)) && !allow(message(bob, group)));
+check("black 模式下白名单不参与判定", allow(message(alice, group)) && allow(message(bob, group)));
 
 exported.add("global", "", "black", "user", alice, "黑优先");
-check("黑名单优先于白名单", !allow(message(alice, group)));
+check("black 模式下黑名单照样拦", !allow(message(alice, group)));
 
 // 清空全局名单, 交给后续用例
 for (const entry of exported.list("global", "")) exported.remove(entry.id);
@@ -287,40 +295,83 @@ check("清空后全部放行", allow(message(alice, group)));
 
 exported.add("global", "", "black", "session", group, "");
 check("会话黑名单拦下该会话", !allow(message(alice, group)));
-check("会话名单不影响其它会话", allow(message(alice, session.get("test", "group", "g2"))));
+check("会话名单不影响其它会话", allow(message(alice, group2)));
 exported.remove(exported.list("global", "").find(e => e.targetType === "session")!.id);
 
-exported.add("global", "", "black", "user", bob, "");
-exported.add("global", "", "white", "user", alice, "");
+exported.add("global", "", "black", "user", alice, "");
+exported.add("global", "", "black", "session", group, "");
 check(
-	"同层里用户与会话各自独立(都要放行)",
-	allow(message(alice, group)) && !allow(message(bob, group)),
+	"同层里用户与会话各自独立(任一边命中都拦)",
+	!allow(message(alice, group)) && !allow(message(bob, group))
+	&& !allow(message(alice, group2)) && allow(message(bob, group2)),
 );
 for (const entry of exported.list("global", "")) exported.remove(entry.id);
+
+/* ---- white 模式: 白名单参与判定 ---- */
+
+exported.setMode("global", "", "white");
+check("setMode 后判定立即改口径", exported.mode("global", "") === "white");
+
+exported.add("global", "", "white", "session", group, "");
+check(
+	"white 模式下只放行白名单内的会话, 而没配名单的维度不限制",
+	allow(message(alice, group)) && allow(message(bob, group)) && !allow(message(alice, group2)),
+);
+
+// 白名单为空 = 该维度不限制(而不是把所有人都拦下)
+exported.remove(exported.list("global", "").find(e => e.targetType === "session")!.id);
+check(
+	"white 模式下维度白名单为空时不限制该维度",
+	allow(message(alice, group2)) && allow(message(bob, group2)),
+);
+
+exported.add("global", "", "black", "user", bob, "黑优先");
+check("white 模式下黑名单仍然优先拦截", !allow(message(bob, group)) && allow(message(alice, group)));
+
+/* ---- all 模式: 黑名单与白名单都不参与判定 ---- */
+
+exported.setMode("global", "", "all");
+check(
+	"all 模式下黑白名单都不参与判定",
+	allow(message(bob, group)) && allow(message(bob, group2)) && allow(message(alice, group2)),
+);
+
+exported.setMode("global", "", "black");
+for (const entry of exported.list("global", "")) exported.remove(entry.id);
+check("切回 black 并清空后全部放行", allow(message(alice, group)) && allow(message(bob, group)));
 
 /* ---------- 3. 两层 AND ---------- */
 
 console.log("-- 全局层与 Bot 私有层 --");
 
+const carolId = user.get("test", "carol");
+
+// 全局: white 模式 + 白名单 alice; bot-a: 默认 black 模式 + 黑名单 alice
+exported.setMode("global", "", "white");
 exported.add("global", "", "white", "user", alice, "");
 exported.add("bot", "bot-a", "black", "user", alice, "bot-a 不欢迎");
 
 check("全局白名单放行 + 该 Bot 私有黑名单 → 拦", !allow(message(alice, group), "bot-a"));
 check("同一个人的消息在别的 Bot 上仍放行", allow(message(alice, group), "bot-b"));
 
-// 清掉全局层, 单独看 Bot 私有层
+// 全局层不再限制, 单看 Bot 私有层自己的模式
 for (const entry of exported.list("global", "")) exported.remove(entry.id);
+exported.setMode("global", "", "black");
 
 exported.add("bot", "bot-a", "white", "user", bob, "");
-const carolId = user.get("test", "carol");
+exported.setMode("bot", "bot-a", "white");
 check(
-	"Bot 私有白名单非空时只放行集合内",
+	"Bot 私有层切到 white 后只放行白名单内",
 	allow(message(bob, group), "bot-a") && !allow(message(carolId, group), "bot-a"),
 );
-check("Bot 私有名单不外溢到别的 Bot", allow(message(carolId, group), "bot-b") && allow(message(bob, group), "bot-b"));
+check("Bot 私有层里黑名单仍然优先", !allow(message(alice, group), "bot-a"));
+check("Bot 私有层的模式不外溢到别的 Bot", allow(message(carolId, group), "bot-b") && allow(message(alice, group), "bot-b"));
 
 exported.removeByBot("bot-a");
-check("removeByBot 清掉该 Bot 的私有层", allow(message(carolId, group), "bot-a"));
+check(
+	"removeByBot 清掉该 Bot 的私有层与它的模式",
+	allow(message(carolId, group), "bot-a") && exported.mode("bot", "bot-a") === "black",
+);
 check("removeByBot 不动全局层(全局为空即全部放行)", allow(message(alice, group), "bot-a") && allow(message(bob, group), "bot-b"));
 
 /* ---------- 4. 只管消息事件 ---------- */
@@ -346,17 +397,53 @@ check("add 带回平台信息", added.entry?.platform === "test" && added.entry?
 
 const carol = ctxUser.byKey.get("test\u0000carol")!;
 profile.names.set(carol, "卡罗尔");
-const listed = callAPI({ action: "list", scope: "global" }) as { entries: any[] };
+const listed = callAPI({ action: "list", scope: "global" }) as { entries: any[]; mode: string };
 check("list 返回条目并带上昵称", listed.entries.length === 1 && listed.entries[0].name === "卡罗尔", JSON.stringify(listed.entries));
+check("list 同时返回该范围的模式", listed.mode === "black", String(listed.mode));
 check("端点列出的名单与判定一致", !allow(message(carol, ctxSession.get("test", "group", "g9"))));
 
 const removed = callAPI({ action: "remove", scope: "global", id: listed.entries[0].id });
 check("remove 返回 { removed: true }", (removed as any).removed === true);
 check("端点移除后立即放行", allow(message(carol, ctxSession.get("test", "group", "g9"))));
 
+// ---- setMode ----
+const switched = callAPI({ action: "setMode", scope: "global", mode: "white" }) as { mode: string };
+check("setMode 返回落库后的模式", switched.mode === "white", JSON.stringify(switched));
+check("setMode 立即影响判定", (callAPI({ action: "list", scope: "global" }) as any).mode === "white");
+
+callAPI({
+	action: "add", scope: "global", kind: "white", targetType: "user",
+	target: { platform: "test", id: "dave" }, reason: "",
+});
+const dave = ctxUser.byKey.get("test\u0000dave")!;
+const erin = ctxUser.byKey.get("test\u0000erin") ?? ctxUser.get("test", "erin");
+check("端点切到 white 后名单按白名单判定", allow(message(dave, ctxSession.get("test", "group", "g9"))) && !allow(message(erin, ctxSession.get("test", "group", "g9"))));
+
+const backToBlack = callAPI({ action: "setMode", scope: "global", mode: "black" }) as { mode: string };
+check("切回 black 后白名单条目回到不参与判定", backToBlack.mode === "black" && allow(message(erin, ctxSession.get("test", "group", "g9"))));
+
+callAPI({ action: "setMode", scope: "global", mode: "all" });
+const allMode = callAPI({ action: "list", scope: "global" }) as any;
+check("all 模式下端点照常可读写", allMode.mode === "all" && allMode.entries.length === 1);
+
+for (const entry of exported.list("global", "")) exported.remove(entry.id);
+callAPI({ action: "setMode", scope: "global", mode: "black" });
+
 check(
 	"未知 action → 400",
 	expectError(() => callAPI({ action: "nope" })).code === 400,
+);
+check(
+	"非法 mode → 400",
+	expectError(() => callAPI({ action: "setMode", scope: "global", mode: "grey" })).code === 400,
+);
+check(
+	"setMode 的 scope=bot 缺 botId → 400",
+	expectError(() => callAPI({ action: "setMode", scope: "bot", mode: "all" })).code === 400,
+);
+check(
+	"setMode 的 botId 不存在 → 404",
+	expectError(() => callAPI({ action: "setMode", scope: "bot", botId: "nobody", mode: "all" })).code === 404,
 );
 check(
 	"非法 scope → 400",
@@ -403,7 +490,15 @@ exported.removeByBot("bot-a");
 
 console.log("-- 持久化 / 卸载 --");
 
+// 全局: 黑名单 carol; bot-b: white 模式 + 白名单 bob —— 重启后两层都该自己回来
 exported.add("global", "", "black", "user", carol, "重启后还在");
+exported.setMode("bot", "bot-b", "white");
+exported.add("bot", "bot-b", "white", "user", bob, "");
+check(
+	"重启前: 全局黑名单与 bot-b 的白名单模式都在生效",
+	!allow(message(carol, group)) && allow(message(bob, group), "bot-b") && !allow(message(alice, group), "bot-b"),
+);
+
 filterModule.unload(null as any);
 
 check("unload 关闭名单库(端点不再可用)", (() => {
@@ -417,8 +512,15 @@ check("unload 关闭名单库(端点不再可用)", (() => {
 
 const reopenCtx = { ...ctx, core: { ...ctx.core, webui: createWebUIStub() } } as any;
 filterModule.init(reopenCtx);
-const afterReopen = (reopenCtx.exports as typeof exported).list("global", "");
-check("重新 init 后名单仍在(库已落盘)", afterReopen.some(e => e.target === carol), JSON.stringify(afterReopen.map(e => e.target)));
+const reopened = reopenCtx.exports as typeof exported;
+const afterReopen = reopened.list("global", "");
+check("重新 init 后全局名单仍在(库已落盘)", afterReopen.some(e => e.target === carol), JSON.stringify(afterReopen.map(e => e.target)));
+check(
+	"重新 init 后 Bot 私有层自行装载(不用等被触碰)",
+	!allow(message(alice, group), "bot-b") && allow(message(bob, group), "bot-b"),
+);
+check("重新 init 后 Bot 私有模式也回来了", reopened.mode("bot", "bot-b") === "white", reopened.mode("bot", "bot-b"));
+check("重新 init 后全局模式是 black", reopened.mode("global", "") === "black", reopened.mode("global", ""));
 
 filterModule.unload(null as any);
 filterModule.unload(null as any);

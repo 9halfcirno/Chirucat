@@ -5,5 +5,5 @@
 	"type": "service",
 	"name": "Chirucat 消息过滤服务",
 	"author": "9halfcirno",
-	"description": "框架级黑白名单: 存储名单、在事件传播阶段判定, 并自带 WebUI 管理界面(全局页面 + Bot 详情窗口页面)与端点"
+	"description": "框架级黑白名单: 每层可选 all / black / white 判定模式, 在事件传播阶段判定, 并自带 WebUI 管理界面(全局页面 + Bot 详情窗口页面)与端点"
 }

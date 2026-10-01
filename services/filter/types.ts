@@ -11,6 +11,19 @@ export type FilterKind = "black" | "white";
 /** 名单对象: 用户(账号) 或 会话(群 / 频道) */
 export type FilterTargetType = "user" | "session";
 
+/**
+ * 判定模式 —— **每一层各有一个**(全局一层, 每个 Bot 的私有层各一个)
+ *
+ * - `all`:   该层完全不限制: 黑名单与白名单都不参与判定, 名单只作记录
+ * - `black`: 只按黑名单拦截; 白名单条目保留但不参与判定
+ * - `white`: 白名单参与判定 —— 某个维度(用户 / 会话)的白名单非空时只放行集合内,
+ *            该维度名单为空则不受限制; 黑名单仍然优先拦截
+ *
+ * 默认 `black`。白名单是"显式选择"的收紧手段: 以前"白名单非空即生效"会让随手加进去的
+ * 一条记录把所有人都拦下, 那正是它不好用的原因 —— 现在不切到 `white` 就绝不会生效。
+ */
+export type FilterMode = "all" | "black" | "white";
+
 /** 一条名单 */
 export type FilterEntry = {
 	id: number;
@@ -31,8 +44,9 @@ export type FilterSets = {
 	white: Set<string>;
 }
 
-/** 一层名单: 用户与会话各自独立 */
-export type LayerSets = {
+/** 一层名单: 判定模式 + 用户 / 会话各自的集合 */
+export type FilterLayer = {
+	mode: FilterMode;
 	users: FilterSets;
 	sessions: FilterSets;
 }

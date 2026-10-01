@@ -4,11 +4,12 @@
  * 由调用方指定范围: scope="global" 渲染全局名单; scope="bot" + botId 渲染某个
  * Bot 的私有名单。视图本身不认识任何具体 Bot —— 谁调用它, 就渲染谁的名单。
  *
- * 页面里分两块, 互不干扰:
+ * 页面里分三块:
+ * - 判定模式: 本范围(all / black / white), 决定名单怎么参与判定
  * - 用户名单: 按平台账号生效, 与所在会话无关
  * - 会话名单: 按群 / 频道生效 (私聊会话与用户一一对应, 由用户名单表达)
  *
- * 名单改动立即生效, 不需要重启 Bot。
+ * 名单与模式的改动立即生效, 不需要重启 Bot。
  *
  * 本文件是**插件自带的前端资源**: 框架把 `services/filter/public` 挂在
  * `/service/chirucat-filter/public` 下, 页面(global.js / bot.js)与它同目录,
@@ -26,6 +27,26 @@ const KINDS = [
 	{ value: "white", label: "白名单" },
 ];
 
+/**
+ * 判定模式
+ *
+ * 白名单以前是"非空即生效", 随手加一条就会把其余人全拦下, 因此现在改成显式选择:
+ * 不切到白名单模式, 白名单就只是记录。
+ */
+const MODES = [
+	{ value: "all", label: "全部放行", hint: "该范围不限制: 黑名单与白名单都不参与判定(名单只作记录)。" },
+	{ value: "black", label: "黑名单模式", hint: "只按黑名单拦截; 白名单条目会保留, 但不参与判定。" },
+	{ value: "white", label: "白名单模式", hint: "只放行白名单内的人 / 会话(该维度名单为空时不限制); 黑名单仍然优先拦截。" },
+];
+
+const MODE_NAMES = Object.fromEntries(MODES.map(mode => [mode.value, mode.label]));
+
+/** 该条名单在当前模式下是否不参与判定 */
+function isInert(kind, mode) {
+	if (mode === "all") return true;
+	return kind === "white" && mode !== "white";
+}
+
 /** 名单端点所属的服务插件 id (清单里的 id) */
 const FILTER_SERVICE = "chirucat-filter";
 /** 该服务注册的端点名 */
@@ -42,7 +63,7 @@ const SESSION_TYPES = [
 const SESSION_NAMES = { group: "群", channel: "频道" };
 
 /**
- * 渲染一份名单 (两块: 用户 / 会话)
+ * 渲染一份名单 (模式 + 两块: 用户 / 会话)
  *
  * @param {HTMLElement} div 容器, 会被加上 filters-page 类
  * @param {{ scope: "global" | "bot", botId?: string }} options
@@ -50,19 +71,69 @@ const SESSION_NAMES = { group: "群", channel: "频道" };
 export function renderFilterView(div, { scope, botId = "" }) {
 	div.classList.add("filters-page");
 
-	const userBlock = createBlock({ scope, botId, targetType: "user", onChanged: () => load() });
-	const sessionBlock = createBlock({ scope, botId, targetType: "session", onChanged: () => load() });
-	div.append(userBlock.section, sessionBlock.section);
+	const blocks = [
+		createBlock({ scope, botId, targetType: "user", onChanged: () => load() }),
+		createBlock({ scope, botId, targetType: "session", onChanged: () => load() }),
+	];
+
+	// ---- 判定模式 ----
+	const modeCard = document.createElement("section");
+	modeCard.className = "card glass filters-card";
+
+	const modeTitle = document.createElement("h3");
+	modeTitle.textContent = "判定模式";
+
+	const modeHint = document.createElement("p");
+	modeHint.className = "filters-hint muted";
+
+	// 载入回来之前按默认模式(与后端默认值一致)渲染, 避免先闪一下别的语义
+	let mode = "black";
+
+	const modeSelect = createSelect({
+		items: MODES,
+		value: mode,
+		onChange: (value) => { void saveMode(value); },
+	});
+
+	const modeRow = document.createElement("div");
+	modeRow.className = "filters-form";
+	modeRow.append(createField("本范围的模式", modeSelect.el));
+
+	modeCard.append(modeTitle, modeRow, modeHint);
+	div.append(modeCard, ...blocks.map(block => block.section));
+
+	paintMode(mode);
+
+	/** 把模式刷到选择器、提示与两块名单上 */
+	function paintMode(value) {
+		mode = value;
+		modeSelect.setValue(value);
+		modeHint.textContent = MODES.find(item => item.value === value)?.hint ?? "";
+		for (const block of blocks) block.setMode(value);
+	}
+
+	async function saveMode(value) {
+		try {
+			const data = await callServiceAPI(FILTER_SERVICE, FILTER_ENDPOINT, { action: "setMode", scope, botId, mode: value });
+			paintMode(data.mode ?? value);
+			toast(`已切换为${MODE_NAMES[mode] ?? mode}`, { type: "info" });
+		} catch (e) {
+			toast(`切换失败: ${e.message}`, { type: "error" });
+			paintMode(mode); // 回滚到切换前的值
+		}
+	}
 
 	async function load() {
 		try {
 			const data = await callServiceAPI(FILTER_SERVICE, FILTER_ENDPOINT, { action: "list", scope, botId });
+			paintMode(MODES.some(item => item.value === data.mode) ? data.mode : "black");
+
 			const entries = data.entries ?? [];
-			userBlock.setEntries(entries.filter(entry => entry.targetType !== "session"));
-			sessionBlock.setEntries(entries.filter(entry => entry.targetType === "session"));
+			blocks[0].setEntries(entries.filter(entry => entry.targetType !== "session"));
+			blocks[1].setEntries(entries.filter(entry => entry.targetType === "session"));
 		} catch (e) {
-			userBlock.setError(e.message);
-			sessionBlock.setError(e.message);
+			blocks[0].setError(e.message);
+			blocks[1].setError(e.message);
 		}
 	}
 
@@ -81,6 +152,10 @@ export function renderFilterView(div, { scope, botId = "" }) {
  */
 function createBlock({ scope, botId, targetType, onChanged }) {
 	const isSession = targetType === "session";
+
+	/** 当前模式与最后一次拉到的条目: 模式变化时要按新模式重绘"未生效"标记 */
+	let currentMode = "black";
+	let currentEntries = [];
 
 	const section = document.createElement("section");
 	section.className = "card glass filters-card";
@@ -213,9 +288,21 @@ function createBlock({ scope, botId, targetType, onChanged }) {
 
 	/** 用一组条目刷新列表 */
 	function setEntries(entries) {
+		currentEntries = entries;
+		renderRows(entries);
+	}
+
+	/** 切换模式: 只是把"这条名单当前是否参与判定"重绘出来 */
+	function setMode(value) {
+		currentMode = value;
+		renderRows(currentEntries);
+	}
+
+	/** 按 currentMode 把条目画进表里 */
+	function renderRows(entries) {
 		tbody.textContent = "";
 		summary.textContent = entries.length === 0
-			? "名单为空, 当前没有这类拦截规则"
+			? "名单为空, 当前没有这类规则"
 			: `共 ${entries.length} 项`;
 
 		for (const entry of entries) {
@@ -226,6 +313,15 @@ function createBlock({ scope, botId, targetType, onChanged }) {
 			badge.className = `filters-badge ${entry.kind}`;
 			badge.textContent = KIND_NAMES[entry.kind] ?? entry.kind;
 			kind.appendChild(badge);
+
+			// 当前模式下不参与判定的条目要说清楚, 否则"加了没反应"会被当成坏了
+			if (isInert(entry.kind, currentMode)) {
+				const inert = document.createElement("span");
+				inert.className = "filters-badge inert";
+				inert.textContent = "未生效";
+				inert.title = `当前是「${MODE_NAMES[currentMode] ?? currentMode}」, 这条名单不参与判定`;
+				kind.appendChild(inert);
+			}
 
 			// 第二列: 会话显示对象类型, 用户显示昵称
 			const second = document.createElement("td");
@@ -277,7 +373,7 @@ function createBlock({ scope, botId, targetType, onChanged }) {
 		tbody.appendChild(tr);
 	}
 
-	return { section, setEntries, setError };
+	return { section, setEntries, setMode, setError };
 }
 
 /** 带标签的字段 */

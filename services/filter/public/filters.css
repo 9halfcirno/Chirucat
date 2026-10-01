@@ -114,6 +114,14 @@
 	color: inherit;
 }
 
+/* 当前模式下不参与判定的条目 (如黑名单模式下的白名单) */
+.filters-badge.inert {
+	margin-left: var(--sp-1);
+	background: transparent;
+	border: 1px dashed var(--glass-border);
+	color: var(--fg-muted);
+}
+
 /* ---- 提示 ---- */
 .filters-hint {
 	margin: 0;

@@ -1,12 +1,12 @@
 import type { MessageCreateEvent } from "../../src/protocols/event/message";
 import { FilterJudge } from "./filter-judge";
 import { FilterStore } from "./filter-store";
-import type { FilterEntry, FilterKind, FilterScope, FilterTargetType } from "./types";
+import type { FilterEntry, FilterKind, FilterMode, FilterScope, FilterTargetType } from "./types";
 
 /**
  * 名单的门面: 存储 + 判定
  *
- * 存在的意义只有一条 —— 名单**改动**要同时落到两处: 库(持久)与内存集合(判定用)。
+ * 存在的意义只有一条 —— 名单/模式的**改动**要同时落到两处: 库(持久)与内存判定层。
  * 把这对操作收在一个类里, 端点、事件过滤器与对外导出就不会各写一遍同步逻辑。
  */
 export class FilterManager {
@@ -18,20 +18,41 @@ export class FilterManager {
 		this.judge = new FilterJudge();
 	}
 
-	/** 打开库并装载全局层; 幂等 */
+	/**
+	 * 打开库并装载全部判定层; 幂等
+	 *
+	 * 不能只装全局层: 两层判定都要放行才有意义, 少装一层等于那层的名单静默失效。
+	 * 某个 Bot 也可能只有模式(白名单模式)而没有任何条目, 因此按 `botScopes()` 补齐。
+	 */
 	init(): void {
 		this.store.init();
-		this.judge.set("global", "", this.store.layerSets("global", ""));
+		this.#reload("global", "");
+
+		for (const botId of this.store.botScopes()) {
+			this.#reload("bot", botId);
+		}
 	}
 
-	/** 打开库并装载某一层的判定集合 */
+	/** 按库里的现状重装某一层的判定数据 */
 	#reload(scope: FilterScope, botId = ""): void {
-		this.judge.set(scope, botId, this.store.layerSets(scope, botId));
+		this.judge.set(scope, botId, this.store.layer(scope, botId));
 	}
 
 	/** 列出某个范围的名单 */
 	list(scope: FilterScope, botId = "", targetType?: FilterTargetType): FilterEntry[] {
 		return this.store.list(scope, botId, targetType);
+	}
+
+	/** 某个范围的判定模式 */
+	mode(scope: FilterScope, botId = ""): FilterMode {
+		return this.store.mode(scope, botId);
+	}
+
+	/** 设置判定模式, 并让新语义立即生效 */
+	setMode(scope: FilterScope, botId: string, mode: FilterMode): FilterMode {
+		const saved = this.store.setMode(scope, botId, mode);
+		this.#reload(scope, botId);
+		return saved;
 	}
 
 	/** 加入名单 (已存在时只更新原因), 并让新规则立即生效 */
@@ -55,7 +76,7 @@ export class FilterManager {
 		return removed;
 	}
 
-	/** 删除某个 Bot 的全部私有名单, 并丢弃它那一层判定 */
+	/** 删除某个 Bot 的全部私有名单与它的模式, 并丢弃它那一层判定 */
 	removeByBot(botId: string): number {
 		const removed = this.store.removeByBot(botId);
 		this.judge.dropBot(botId);

@@ -23,6 +23,8 @@ let manager: FilterManager | null = null;
  * 判定发生在**事件传播阶段**(`ctx.event.filter`): 被拦下的事件不进入 Bot 的处理链,
  * 因此不会触发指令、插件回调, 也不会进统计 —— 日志是本插件自己记的, 那是唯一的
  * 可观测出口(见 logBlocked)。
+ *
+ * 每一层(全局 / 每个 Bot 私有)都有自己的判定模式(all / black / white), 见 FilterMode。
  */
 export default {
 	init(ctx: ServiceContext) {
@@ -84,6 +86,8 @@ export default {
 		// 对其他插件开放的名单能力; 框架也经这里清理被删除 Bot 的私有名单
 		ctx.exports = {
 			list: (scope, botId = "", targetType?) => m.list(scope, botId, targetType),
+			mode: (scope, botId = "") => m.mode(scope, botId),
+			setMode: (scope, botId, mode) => m.setMode(scope, botId, mode),
 			add: (scope, botId, kind, targetType, target, reason = "") =>
 				m.add(scope, botId, kind, targetType, target, reason),
 			remove: (id: number) => m.remove(id),

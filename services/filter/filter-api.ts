@@ -1,16 +1,15 @@
 import type { SessionType } from "../../src/protocols/session";
 import type { FilterManager } from "./filter-manager";
-import type { FilterEntry, FilterKind, FilterScope, FilterTargetType } from "./types";
+import type { FilterEntry, FilterKind, FilterMode, FilterScope, FilterTargetType } from "./types";
 
 /**
  * WebUI 管理端点: `/service/chirucat-filter/api/filter_list`
  *
- * 请求体/响应形状与迁移前**完全一致**(前端页面不用改), 差别只在实现位置:
- * 名单存储、判定与这个端点现在都归本插件, 由插件通过 `ctx.core.webui.register`
- * 自行注册 —— 框架侧不再有名单端点。
+ * 名称沿用迁移前的核心端点, 形状也基本一致, 差别只在实现位置(名单存储、判定与端点
+ * 都归本插件)以及新增的**判定模式**:
  *
  * 请求体
- * - action: "list" | "add" | "remove"
+ * - action: "list" | "add" | "remove" | "setMode"
  * - scope: "global"(全局) | "bot"(某个 Bot 私有)
  * - botId: scope=bot 时必填
  * - add 时另需:
@@ -19,10 +18,12 @@ import type { FilterEntry, FilterKind, FilterScope, FilterTargetType } from "./t
  *   - target: { platform, id, type? }  type 仅会话需要, 且只能是 group / channel
  *   - reason?
  * - remove 时另需: id
+ * - setMode 时另需: mode: "all" | "black" | "white"
  * 返回
- * - list: { entries: [{ id, targetType, kind, target, platform, platformId, sessionType, name, reason, createdAt }] }
+ * - list: { entries: [...], mode } —— mode 是该**范围**当前的判定模式
  * - add: { entry }
  * - remove: { removed: true }
+ * - setMode: { mode }
  *
  * 用户名单以账号 UUID 为目标, 会话名单以会话 UUID 为目标。私聊会话与用户一一对应,
  * 因此不支持会话名单 —— 私聊规则请用用户名单表达。
@@ -30,7 +31,7 @@ import type { FilterEntry, FilterKind, FilterScope, FilterTargetType } from "./t
  * 添加时用 (平台, 平台用户ID) 换取账号/会话 ID —— 此前没出现过也会建档, 因此
  * "提前拉黑还没发过言的人/还没出现过的群"成立。
  *
- * 改动**立即生效**: 名单落在本插件的库与内存集合里, 不需要通知任何 Bot 重新装载。
+ * 改动**立即生效**: 名单/模式落在本插件的库与内存判定层里, 不需要通知任何 Bot 重新装载。
  */
 
 /** 端点用到的框架设施视图(由 `ctx.core` 提供, 每次请求重新取) */
@@ -77,14 +78,22 @@ export function createFilterHandler(deps: FilterRouteDeps) {
 			const request = (body ?? {}) as {
 				action?: unknown; scope?: unknown; botId?: unknown;
 				kind?: unknown; targetType?: unknown; target?: unknown;
-				reason?: unknown; id?: unknown;
+				reason?: unknown; id?: unknown; mode?: unknown;
 			};
 
 			const scope = parseScope(request.scope);
 			const botId = parseBotId(core, scope, request.botId);
 
 			if (request.action === "list") {
-				return { entries: decorate(core, deps.manager.list(scope, botId)) };
+				return {
+					entries: decorate(core, deps.manager.list(scope, botId)),
+					mode: deps.manager.mode(scope, botId),
+				};
+			}
+
+			if (request.action === "setMode") {
+				const mode = parseMode(request.mode);
+				return { mode: deps.manager.setMode(scope, botId, mode) };
 			}
 
 			if (request.action === "add") {
@@ -180,6 +189,11 @@ function parseBotId(core: FilterCoreViews, scope: FilterScope, value: unknown): 
 function parseKind(value: unknown): FilterKind {
 	if (value === "black" || value === "white") return value;
 	throw { code: 400, err: 'kind 必须是 "black" 或 "white"' };
+}
+
+function parseMode(value: unknown): FilterMode {
+	if (value === "all" || value === "black" || value === "white") return value;
+	throw { code: 400, err: 'mode 必须是 "all" / "black" / "white"' };
 }
 
 function parseTargetType(value: unknown): FilterTargetType {

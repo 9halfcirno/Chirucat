@@ -4,9 +4,10 @@ import sqlite from "better-sqlite3";
 import type {
 	FilterEntry,
 	FilterKind,
+	FilterLayer,
+	FilterMode,
 	FilterScope,
 	FilterTargetType,
-	LayerSets,
 } from "./types";
 
 /**
@@ -22,6 +23,8 @@ import type {
  *            私聊会话与用户一一对应, 因此不单独支持, 由用户名单覆盖
  *
  * 范围分两级 (global / bot), 两级在判定时都要放行 —— 见 FilterJudge。
+ * 每一层还有自己的**判定模式**(`filter_mode` 表, 见 FilterMode), 名单与模式分开存:
+ * 只设置模式而没有任何条目的范围是合法的。
  */
 export class FilterStore {
 	db: sqlite.Database | null = null;
@@ -46,6 +49,7 @@ export class FilterStore {
 
 		this.db.exec(CREATE_TABLE);
 		this.db.exec(CREATE_INDEX);
+		this.db.exec(CREATE_MODE_TABLE);
 		this.#migrate();
 	}
 
@@ -100,9 +104,49 @@ export class FilterStore {
 		return (rows as RawEntry[]).map(toEntry);
 	}
 
-	/** 某个范围的一层名单(用户 / 会话各自的集合) */
-	layerSets(scope: FilterScope, botId = ""): LayerSets {
-		return toLayerSets(this.list(scope, botId));
+	/** 某个范围的一层判定数据(模式 + 用户 / 会话各自的集合) */
+	layer(scope: FilterScope, botId = ""): FilterLayer {
+		return toLayer(this.list(scope, botId), this.mode(scope, botId));
+	}
+
+	/**
+	 * 某个范围的判定模式
+	 * @returns 从未设置过时返回默认模式(`black`)
+	 */
+	mode(scope: FilterScope, botId = ""): FilterMode {
+		const row = this.conn.prepare(`SELECT mode FROM filter_mode WHERE scope = ? AND bot_id = ?`)
+			.get(scope, scope === "bot" ? botId : "") as { mode: string } | undefined;
+		return toMode(row?.mode) ?? DEFAULT_MODE;
+	}
+
+	/**
+	 * 设置某个范围的判定模式
+	 * @returns 落库后的模式(非法值收敛为默认模式)
+	 */
+	setMode(scope: FilterScope, botId: string, mode: FilterMode): FilterMode {
+		const saved = toMode(mode) ?? DEFAULT_MODE;
+		this.conn.prepare(`
+			INSERT INTO filter_mode (scope, bot_id, mode) VALUES (?, ?, ?)
+			ON CONFLICT(scope, bot_id) DO UPDATE SET mode = excluded.mode
+		`).run(scope, scope === "bot" ? botId : "", saved);
+		return saved;
+	}
+
+	/**
+	 * 有私有名单或私有模式的 Bot id
+	 *
+	 * 装载判定层时要按它补齐 —— 否则重启后 Bot 私有层要等到有人碰过这个 Bot 的名单
+	 * 才生效(全局层是每层都要放行的两层判定, 少一层等于名单静默失效)。
+	 * 只有模式没有条目的 Bot 也在这里: 那种层是合法的(例如"只放行白名单")。
+	 */
+	botScopes(): string[] {
+		const rows = this.conn.prepare(`
+			SELECT bot_id FROM filter_list WHERE scope = 'bot'
+			UNION
+			SELECT bot_id FROM filter_mode WHERE scope = 'bot'
+		`).all() as { bot_id: string }[];
+
+		return rows.map(row => row.bot_id).filter(botId => botId !== "");
 	}
 
 	/**
@@ -146,9 +190,13 @@ export class FilterStore {
 		})();
 	}
 
-	/** 删除某个 Bot 的全部私有名单 (Bot 被删除时调用), 返回删除条数 */
+	/** 删除某个 Bot 的全部私有名单与它的模式 (Bot 被删除时调用), 返回删除的名单条数 */
 	removeByBot(botId: string): number {
-		return this.conn.prepare(`DELETE FROM filter_list WHERE scope = 'bot' AND bot_id = ?`).run(botId).changes;
+		return this.conn.transaction(() => {
+			const changes = this.conn.prepare(`DELETE FROM filter_list WHERE scope = 'bot' AND bot_id = ?`).run(botId).changes;
+			this.conn.prepare(`DELETE FROM filter_mode WHERE scope = 'bot' AND bot_id = ?`).run(botId);
+			return changes;
+		})();
 	}
 
 	/** 关闭库连接; 幂等 */
@@ -175,6 +223,31 @@ const CREATE_TABLE = `
 
 const CREATE_INDEX = `CREATE INDEX IF NOT EXISTS idx_filter_list_scope ON filter_list(scope, bot_id, kind);`;
 
+/**
+ * 判定模式表
+ *
+ * 与名单分开存: 一个范围可以只设置模式(例如"这个 Bot 只放行白名单")而没有任何条目,
+ * 那种情况没有行可挂, 只有 filter_list 的话装不进判定层。
+ */
+const CREATE_MODE_TABLE = `
+	CREATE TABLE IF NOT EXISTS filter_mode (
+		scope  TEXT NOT NULL,                 -- global | bot
+		bot_id TEXT NOT NULL DEFAULT '',      -- scope=bot 时所属的 Bot id
+		mode   TEXT NOT NULL DEFAULT 'black', -- all | black | white
+		PRIMARY KEY (scope, bot_id)
+	);
+`;
+
+/** 全部模式; 用于收敛库里的值 */
+const MODES: readonly FilterMode[] = ["all", "black", "white"];
+/** 默认模式: 名单开箱即按黑名单工作, 白名单要显式切到 `white` 才生效 */
+const DEFAULT_MODE: FilterMode = "black";
+
+/** 把库里的值收敛成合法模式; 不认识的值按"没有设置过"处理 */
+function toMode(value: unknown): FilterMode | null {
+	return MODES.includes(value as FilterMode) ? value as FilterMode : null;
+}
+
 type RawEntry = {
 	id: number;
 	scope: FilterScope;
@@ -199,18 +272,19 @@ function toEntry(row: RawEntry): FilterEntry {
 	};
 }
 
-/** 把条目按对象类型分到用户/会话两组集合 */
-function toLayerSets(entries: FilterEntry[]): LayerSets {
-	const sets: LayerSets = {
+/** 把条目按对象类型分到用户/会话两组集合, 并带上该层的模式 */
+function toLayer(entries: FilterEntry[], mode: FilterMode): FilterLayer {
+	const layer: FilterLayer = {
+		mode,
 		users: { black: new Set(), white: new Set() },
 		sessions: { black: new Set(), white: new Set() },
 	};
 
 	for (const entry of entries) {
-		const target = entry.targetType === "session" ? sets.sessions : sets.users;
+		const target = entry.targetType === "session" ? layer.sessions : layer.users;
 		if (entry.kind === "black") target.black.add(entry.target);
 		else target.white.add(entry.target);
 	}
 
-	return sets;
+	return layer;
 }

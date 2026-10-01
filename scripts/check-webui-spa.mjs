@@ -715,6 +715,11 @@ await settle(6);
 ok(filterHost.textContent.includes("对所有 Bot 生效的全局名单"), "渲染出全局名单页的提示文案");
 eq(filterHost.querySelectorAll(".filters-table").length, 2, "用户名单 / 会话名单两张表都建了出来");
 eq(filterHost.querySelectorAll(".filters-error").length, 2, "接口不可用时把原因显示在表里(而不是崩掉)");
+ok(filterHost.textContent.includes("判定模式"), "判定模式卡片与两块名单一起渲染");
+ok(
+	filterHost.textContent.includes("不参与判定"),
+	"载入失败前按默认模式(black)给出说明文案",
+);
 
 const filterBot = (await import("../services/filter/public/bot.js")).default;
 const filterBotHost = document.createElement("div");
