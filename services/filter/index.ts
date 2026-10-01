@@ -4,6 +4,7 @@ import type { ServiceModule } from "../../src/plugin/services/service";
 import type { MessageCreateEvent } from "../../src/protocols/event/message";
 import { createFilterHandler } from "./filter-api";
 import { FilterManager } from "./filter-manager";
+import type { FilterKind, FilterMode, FilterScope, FilterTargetType } from "./types";
 
 /**
  * 模块级状态
@@ -85,10 +86,10 @@ export default {
 
 		// 对其他插件开放的名单能力; 框架也经这里清理被删除 Bot 的私有名单
 		ctx.exports = {
-			list: (scope, botId = "", targetType?) => m.list(scope, botId, targetType),
-			mode: (scope, botId = "") => m.mode(scope, botId),
-			setMode: (scope, botId, mode) => m.setMode(scope, botId, mode),
-			add: (scope, botId, kind, targetType, target, reason = "") =>
+			list: (scope: FilterScope, botId = "", targetType?: FilterTargetType) => m.list(scope, botId, targetType),
+			mode: (scope: FilterScope, botId = "") => m.mode(scope, botId),
+			setMode: (scope: FilterScope, botId: string, mode: FilterMode) => m.setMode(scope, botId, mode),
+			add: (scope: FilterScope, botId: string, kind: FilterKind, targetType: FilterTargetType, target: string, reason = "") =>
 				m.add(scope, botId, kind, targetType, target, reason),
 			remove: (id: number) => m.remove(id),
 			removeByBot: (botId: string) => m.removeByBot(botId),
