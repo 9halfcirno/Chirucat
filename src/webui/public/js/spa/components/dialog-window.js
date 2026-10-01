@@ -6,11 +6,27 @@ import { createIconButton } from "./icon-button.js";
  * @param {string} title 
  * @param {string | HTMLElement} inner 
  * @param {{ name: string, onclick: (event: PointerEvent) => void, danger?: boolean }[]} btns 
- * @param {{ cancelable?: boolean, maximize?: boolean }} [option] 设置窗口属性
+ * @param {{ cancelable?: boolean, maximize?: boolean, onClose?: () => void }} [option] 设置窗口属性
  */
 export function createDialogWindow(title, inner, btns, option = {}) {
 	const base = document.createElement("div");
 	base.classList.add("dialog-window-base");
+
+	/**
+	 * 关闭回调: 让内容自己收尾 (退订订阅、停定时器等)
+	 *
+	 * 只有"可关闭"的窗口才会有它 —— 关不掉的窗口谈不上收尾。
+	 */
+	let closed = false;
+	const notifyClose = () => {
+		if (closed) return;
+		closed = true;
+		try {
+			option.onClose?.();
+		} catch (err) {
+			console.error("[SPA] 对话框关闭回调出错:", err);
+		}
+	};
 
 	const win = document.createElement("div");
 	win.classList.add("dialog-window");
@@ -49,6 +65,7 @@ export function createDialogWindow(title, inner, btns, option = {}) {
 		const close = () => {
 			document.removeEventListener("keydown", onKeydown);
 			base.remove();
+			notifyClose();
 		};
 
 		// Esc 关闭 (仅 cancelable 对话框; 生命周期随对话框, 不会串到下一个对话框)

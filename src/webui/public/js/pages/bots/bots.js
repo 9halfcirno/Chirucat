@@ -185,13 +185,16 @@ function createBotCard(bot) {
 
 	card.onclick = (e) => {
 		if (e.target === dotSwh) return;
+		const content = createBotContent(bot);
 		let dialog = createDialogWindow(
 			"Bot信息", 
-			createBotContent(bot),
+			content,
 			[],
 			{
 				cancelable: true,
-				maximize: true
+				maximize: true,
+				// 窗口关掉后, 内容要退订"服务插件页面清单"的订阅
+				onClose: () => content.disposeBotContent?.(),
 			});
 		document.body.append(dialog);
 	}

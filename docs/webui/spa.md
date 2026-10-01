@@ -4,9 +4,10 @@ WebUI 前端是一个不依赖第三方库的极简单页应用, 源码在 `src/
 
 | 文件 | 职责 |
 | --- | --- |
-| `app.js` | 入口: 鉴权 → 注册启动时的页面 → `start()` |
+| `app.js` | 入口: 鉴权 → 注册启动时的页面 → `start()` → 启动服务插件页面对账 |
 | `js/spa/framework.js` | SPA 引擎: 页面注册表、hash 路由、遮罩、一级导航 |
 | `js/spa/sidebar.js` | 二级菜单: 菜单表 (声明式 + 运行动态增删) 与侧栏渲染 |
+| `js/spa/service-pages.js` | 服务插件注册的页面: 拉清单、幂等对账、变更订阅 |
 | `js/spa/*.js` | 遮罩、鉴权、toast、API 封装与通用组件 |
 
 ## 一级导航 = 页面
@@ -90,6 +91,53 @@ getApp()?.sidebar.add({ title: "面板", render(el) { /* ... */ } }, { page: "my
 
 应用还没创建 (`createApp` 之前) 时 `getApp()` 返回 `null`, 用 `?.` 跳过即可。
 
+## 服务插件注册的页面
+
+服务插件不写核心前端代码, 而是**注册**: `ctx.core.webui.pages.register(...)` 进活动栏,
+`ctx.core.webui.bot.pages.register(...)` 进 Bot 详情窗口的二级导航(API 与页面模块的写法见
+[服务插件上下文](../plugin/contexts/service.md#corewebui对象))。
+
+前端这边(`js/spa/service-pages.js`)只做一件事: **拿权威清单来对账**。
+
+```
+GET /api/get_webui_pages → { version, pages: [{ key, scope, service, title, icon, module, styles, order, menu }] }
+```
+
+- 全部对账都是幂等的: 清单有本地没有 → `app.register`; 本地有清单没有 → `app.unregister`;
+  定义变了 → `app.update`。因此**触发方式可以随便叠加**, 任何一条路生效都不会不一致;
+- 触发点: 启动一次; 服务启停 / `refresh_services` 之后主动一次(那是导航变化的直接原因);
+  窗口重新聚焦 / 标签页恢复可见; 兜底轮询(60s)。版本号没变就直接返回, 所以这些加起来
+  也只花一次很小请求;
+- **停用即注销**: 服务停用 → 服务上下文把页面从清单里摘掉 → 下一次对账注销它。框架会调
+  `destroy()`、移除页面样式, 若用户正停在它上面就落到别的页面并提示一句; 打开着的 Bot
+  详情窗口会通过 `subscribe()` 收到通知, 当场把那一项从菜单里去掉。
+
+### 模块 URL 与缓存
+
+清单里的 `module` / `icon` / `styles` 都由服务端拼成 `/service/<插件id>/public/...?v=<清单版本>`:
+
+- **必须带版本参数**: ES 模块按 URL 在文档生命周期内永久缓存, 停用再启用必须换地址才能拿到新代码;
+- 模块**自己 import 的子模块**仍是原 URL, 所以改了插件的多个前端文件后要刷新一次浏览器页面
+  (与核心前端静态资源同性质)。
+
+### 为什么是"静态 ESM + `?v=`", 不是"后端 esbuild 打包成 IIFE"
+
+打包这条路我们评估过, 结论是不用 IIFE:
+
+- **IIFE 会把核心模块变成 `require`**: `format: "iife"` + `external: ["/js/*"]` 时 esbuild 生成
+  `__require("/js/spa/api.js")`, 浏览器里直接抛 "Dynamic require ... is not supported"。
+  绕开只有两条路, 都不可接受: 加一套全局门面/垫片, 或把核心模块打进每个插件包 —— 后者会让
+  插件拿到**一份自己的 SPA 副本**, `getApp()` 与 `app.*` 就不再是核心那一个实例, 单例组件
+  (toast/tooltip) 也会各来一份;
+- `?v=` 的需求**不会因为打包而消失**: bundle 也是被 HTTP 缓存的一个 URL, 重新注册后仍要换地址。
+  IIFE 真正换来的只是"子模块被内联"这一件事, 代价是 require 垫片、全局变量交接(`new Function`
+  还要 CSP 开 `unsafe-eval`)与更差的调试体验;
+- **要打包也该输出 ESM**: `bundle: true, format: "esm", external: ["/js/*"]` 时核心模块保持原生
+  `import`(与核心前端同一模块实例), 本地多文件被内联进同一个文件 —— 前端契约仍是 `import(url)`。
+
+因此协议把 `module` 定义成"**服务器解析出来的一个 URL**": 现在是静态文件, 将来若插件前端需要
+npm 依赖或想写 TS, 只需在服务器侧改成输出打包产物(ESM), 协议与前端都不用动 —— 这个决策是可逆的。
+
 ## 自检
 
 ```
@@ -98,7 +146,12 @@ npm run check:webui-spa   # 无浏览器的冒烟测试: 极简 DOM 桩 + 导航
 
 `scripts/check-webui-spa.mjs` 覆盖: 启动前后注册、`update` 改标题与排序、`unregister` 当前页的
 兜底与清理、深链补齐、二级菜单的增删改查/set/reset/预埋/抑制、空菜单的侧栏隐藏与恢复、
-窄屏折叠菜单在列表变化时的高度重算, 以及 **TestLab 页面本身的按钮逐个点一遍**。
+窄屏折叠菜单在列表变化时的高度重算, **TestLab 页面本身的按钮逐个点一遍**, 以及
+**服务插件页面的清单对账**(用 `data:` URL 当插件模块, 连"import 模块 → 渲染"都真跑一遍:
+注册/更新/停用注销/排序/版本短路/Bot 窗口挂载与实时消失)。
+
+后端侧另有 `npm run check:service-webui`(真起服务器打 HTTP): 端点与页面的命名空间、
+鉴权、注销后 503 / 清单消失、非法定义的拒绝、版本号递增。
 
 ## 手动验证 (TestLab)
 

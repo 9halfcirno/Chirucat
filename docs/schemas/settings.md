@@ -121,7 +121,8 @@ WebUI 的全局设置列表里。值文件是 `<Bot目录>/config.json` —— �
 
 侧栏项是在 `render()` 里动态写 `this.sidebar` 得到的 —— framework 的导航顺序是
 先 `await page.render(view)`, 之后才 `await renderSideBar(page, view)`, 所以异步拉到的
-域列表来得及变成菜单。
+域列表来得及变成菜单。除此之外框架还提供运行期增删菜单的 `app.sidebar.*` 接口
+(见 [WebUI 前端 SPA](../webui/spa.md))。
 
 **不要在页面里硬编码设置项, 也不要在前端维护域名单** —— 后端加一个域, 侧栏就多一项。
 提交整份 `getValues()` 而不是自己算差集: 后端按 patch 语义合并, 未提交的字段保留原值。

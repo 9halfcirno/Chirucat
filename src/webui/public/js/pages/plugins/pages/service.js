@@ -1,5 +1,6 @@
 import { createError, createPluginSection, createSpinner, openConfigDialog, postJSON } from "../../../spa/components/plugin-card.js"
 import { createIconButton } from "../../../spa/components/icon-button.js"
+import { syncServicePages } from "../../../spa/service-pages.js"
 import toast from "../../../spa/toast.js"
 
 /** 服务插件子页面: 列表 + 启停 + 配置 */
@@ -36,6 +37,10 @@ export function renderServices(div) {
 			const data = await postJSON("/api/refresh_services", {})
 			paint(data)
 			if (fromClick) toast("服务插件列表已刷新")
+
+			// 扫描/收敛会改变"有哪些服务活着", 而服务插件页面随服务一起生灭:
+			// 顺手对一次账, 导航不必等兜底轮询
+			void syncServicePages()
 
 			// 扫描后会按期望态收敛; 起不来的排在 failed 里, 列表照常展示
 			const failed = Array.isArray(data.failed) ? data.failed : []
@@ -93,6 +98,8 @@ export function renderServices(div) {
 		}
 
 		paint(data)
+		// 启停会连带启用/停用一批服务, 它们注册的 WebUI 页面要跟着出现/消失
+		void syncServicePages()
 		return state
 	}
 
