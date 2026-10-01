@@ -29,6 +29,7 @@
  * 现在把注册动作延后到鉴权通过之后, 且配置读取失败也不阻塞进入。
  */
 import { createApp } from "./js/spa/framework.js";
+import { startServicePages } from "./js/spa/service-pages.js";
 import * as auth from "./js/spa/auth.js";
 import toast from "./js/spa/toast.js";
 
@@ -75,12 +76,8 @@ function registerPages(config) {
 		load: () => import("./js/pages/users/users.js"),
 	});
 
-	app.register({
-		id: "filters",
-		title: "黑白名单",
-		icon: "/img/icons/shield.svg",
-		load: () => import("./js/pages/filters/filters.js"),
-	});
+	// 黑白名单页不在这里注册: 它是 `services/filter` 服务插件自带的前端页面,
+	// 由 startServicePages() 按清单挂上来 —— 服务停用它就消失(见 js/spa/service-pages.js)
 
 	app.register({
 		id: "plugins",
@@ -173,6 +170,11 @@ async function enterMain() {
 	registerPages(config);
 	showMain();
 	app.start();
+
+	// 服务插件注册的页面 (一级导航 + Bot 详情窗口的二级导航) 走清单对账:
+	// 启动时拉一次, 之后服务启停/刷新时主动拉, 另有焦点触发与兜底轮询。
+	// insertBefore 决定它们在活动栏里插在哪一段 —— 排在"插件"页之前。
+	startServicePages(app, { insertBefore: "plugins" });
 }
 
 loginForm.addEventListener("submit", async (e) => {
