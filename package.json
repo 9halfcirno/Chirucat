@@ -16,9 +16,12 @@
     "check:state": "tsx scripts/check-bot-state.ts",
     "check:services": "tsx scripts/check-services.ts",
     "check:service-state": "tsx scripts/check-service-state.ts",
+    "check:service-webui": "tsx scripts/check-service-webui.ts",
+    "check:filter": "tsx scripts/check-filter-service.ts",
     "check:core": "tsx scripts/check-core-boot.ts",
     "check:core-api": "tsx scripts/check-core-api.ts",
     "check:settings": "tsx scripts/check-settings.ts && tsx scripts/check-settings-api.ts",
+    "check:webui-spa": "node scripts/check-webui-spa.mjs",
     "check:types": "tsc -p tsconfig.check.json --noEmit"
   },
   "devDependencies": {
