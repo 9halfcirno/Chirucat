@@ -31,7 +31,7 @@ function check(name: string, ok: boolean, detail = ""): void {
 }
 
 const core = new Core({ webui: false, statistics: false });
-const api = new CoreAPI(core);
+const api = new CoreAPI(core, "check");
 
 /* ---------- 1. 设施未就绪: 明确失败, 而不是给 null ---------- */
 

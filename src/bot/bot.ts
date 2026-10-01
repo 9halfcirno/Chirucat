@@ -86,9 +86,6 @@ export class Bot extends EventEmitter {
 		// 设置域与状态域同批就绪: 名称在插件初始化之前就该是对的
 		await this.settings.load();
 
-		// 装载消息过滤名单 (全局 + 本 Bot 私有)
-		this.message.loadFilterList();
-
 		this.unwatchState = this.state.watch(() => {
 			// 监听回调不等待收敛, 失败只记录: 外部改动引发的收敛不该打断任何主流程
 			void this.applyDesired().catch((e) => {

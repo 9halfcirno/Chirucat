@@ -32,8 +32,6 @@ export type StatRecord = {
 	imageCount: number;
 	/** 提及块数量 */
 	mentionCount: number;
-	/** 是否被消息过滤器拦截 */
-	filtered: boolean;
 	/** 是否命中指令 */
 	isCommand: boolean;
 	/**
@@ -45,8 +43,6 @@ export type StatRecord = {
 
 /** 记录一条消息时的附加标记 */
 export type StatFlags = {
-	/** 是否被消息过滤器拦截 */
-	filtered: boolean;
 	/** 命中的指令名; 缺省或空串表示未命中指令 */
 	command?: string;
 };
@@ -93,8 +89,6 @@ export type StatSummary = {
 	users: number;
 	/** 活跃会话数(去重, 仅明细期) */
 	sessions: number;
-	/** 被过滤的消息数(仅明细期) */
-	filtered: number;
 	/** 命中指令的消息数(含已模糊化的历史数据) */
 	commands: number;
 	/** 图片消息块总数(仅明细期) */
@@ -132,8 +126,6 @@ export type UserActivity = {
 	count: number;
 	/** 命中指令的消息数 */
 	commands: number;
-	/** 被过滤的消息数 */
-	filtered: number;
 	/** 最近一条消息的时间(ms) */
 	lastTime: number;
 }

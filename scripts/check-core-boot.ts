@@ -9,7 +9,9 @@
  * 用法:
  *   npx tsx scripts/check-core-boot.ts
  *
- * 只读取仓库数据, 不启动任何 Bot; 退出码 0 表示全部通过。
+ * 数据方面只读仓库现有数据, 但服务插件会按自己的需要落盘(例如 chirucat-filter 会
+ * 在 data/services/chirucat-filter/ 下建库): 那是插件自己的数据目录, 与这里检的
+ * 接线无关。不启动任何 Bot; 退出码 0 表示全部通过。
  */
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -64,6 +66,18 @@ check("services/ 可收敛, 加载失败后不卡在切换中", stuck.length ===
 	`failed=${JSON.stringify(failedIds)} stuck=${stuck.map(s => `${s.id}:${s.status}`).join(",")}`);
 if (failedIds.length) {
 	console.log(`        未加载: ${failedIds.join(", ")} (Core 未 init, 依赖其设施的服务插件起不来)`);
+}
+
+// 过滤服务是名单判定的基础设施: 它的 init 不该碰 Core 的设施(名单判定发生在事件传播
+// 阶段, 与 Bot 启停、用户/会话设施无关), 因此在 Core 未 init 时也应该起得来。
+// 目录可能被用户删掉, 因此只在它存在时断言。
+const filterService = core.services.registry.get("chirucat-filter");
+if (filterService) {
+	check(
+		"chirucat-filter 不依赖 Core 设施即可加载",
+		filterService.status === "enabled",
+		`status=${filterService.status}`,
+	);
 }
 
 // 光允许失败不行: 那样服务层的加载/收敛彻底壤掉也是绿的。这里另起一个临时目录:

@@ -4,14 +4,14 @@
 持有
   - `Logger`: 记录日志
   - `BotManager`: 管理Bot实例
+  - `ServiceHost`: 管理 `services/` 下的框架级服务插件(全局单例, 先于 Bot 加载)
   - `UserManager`: 管理用户, 统一用户身份
   - `SessionManager`: 统一会话id, 使session id无关平台
 
 ### Bot
 持有
   - `Logger`: 记录日志
-  - `MessageHandler`: 负责处理适配器接收到的消息
-  - `MessageFilter`: 负责过滤消息, 实现白名单/黑名单, 速率限制等
+  - `MessageHandler`: 负责处理适配器接收到的消息(名单判定在服务插件的事件过滤器里, 不在这里)
   - `CommandManager`: 负责处理指令消息
   - `PluginManager`: 负责管理插件, 同时参与MessageHandler的消息处理
 
@@ -53,7 +53,7 @@
 
 3. 使用ctx.bot.dispatch触发事件处理
 
-3. 进入MessageFilter进行过滤
+3. 服务插件的事件过滤器先行判定(黑白名单由 `services/filter` 承担), 被拦下的事件到此为止
 
 4. 进入CommandManager匹配指令
 

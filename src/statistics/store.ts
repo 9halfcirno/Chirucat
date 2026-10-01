@@ -65,7 +65,6 @@ export class StatisticsStore {
 				text_len      INTEGER NOT NULL DEFAULT 0,
 				image_count   INTEGER NOT NULL DEFAULT 0,
 				mention_count INTEGER NOT NULL DEFAULT 0,
-				filtered      INTEGER NOT NULL DEFAULT 0,
 				is_command    INTEGER NOT NULL DEFAULT 0,
 				command       TEXT    NOT NULL DEFAULT ''
 			);
@@ -119,17 +118,19 @@ export class StatisticsStore {
 	/** 批量写入明细 */
 	insertMany(rows: StatRecord[]) {
 		if (rows.length === 0) return;
+		// 旧库可能还留着 filtered 列(消息过滤已抽离为服务插件, 不再统计), 建表不再建它;
+		// INSERT 不列该列, 旧库靠 DEFAULT 0 兜住, 新库根本没有这一列
 		const stmt = this.db.prepare(`
 			INSERT INTO message_stat
 				(time, direction, bot_id, platform, session_id, session_type, user_id, union_id,
-				 text_len, image_count, mention_count, filtered, is_command, command)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				 text_len, image_count, mention_count, is_command, command)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`);
 		const insertAll = this.db.transaction((list: StatRecord[]) => {
 			for (const r of list) {
 				stmt.run(
 					r.time, r.direction, r.botId, r.platform, r.sessionId, r.sessionType, r.userId, r.unionId,
-					r.textLen, r.imageCount, r.mentionCount, r.filtered ? 1 : 0, r.isCommand ? 1 : 0, r.command,
+					r.textLen, r.imageCount, r.mentionCount, r.isCommand ? 1 : 0, r.command,
 				);
 			}
 		});
@@ -203,13 +204,12 @@ export class StatisticsStore {
 			       SUM(CASE WHEN direction = 'out' THEN 1 ELSE 0 END) AS sent,
 			       COUNT(DISTINCT CASE WHEN direction = 'in' THEN user_id    END) AS users,
 			       COUNT(DISTINCT CASE WHEN direction = 'in' THEN session_id END) AS sessions,
-			       SUM(CASE WHEN direction = 'in' THEN filtered      ELSE 0 END) AS filtered,
 			       SUM(CASE WHEN direction = 'in' THEN is_command    ELSE 0 END) AS commands,
 			       SUM(CASE WHEN direction = 'in' THEN image_count   ELSE 0 END) AS images
 			FROM message_stat WHERE ${detail.sql}
 		`).get(...detail.params) as {
 			total: number | null; sent: number | null; users: number | null; sessions: number | null;
-			filtered: number | null; commands: number | null; images: number | null;
+			commands: number | null; images: number | null;
 		} | undefined;
 
 		const rollup = this.#where(range, "bucket", null);
@@ -228,7 +228,6 @@ export class StatisticsStore {
 			sent: (row?.sent ?? 0) + (archived?.sent ?? 0),
 			users: row?.users ?? 0,
 			sessions: row?.sessions ?? 0,
-			filtered: row?.filtered ?? 0,
 			// 指令数由指令名推出, 聚合表保留了该维度, 因此不受明细保留期影响
 			commands: (row?.commands ?? 0) + (archived?.commands ?? 0),
 			images: row?.images ?? 0,
@@ -317,19 +316,18 @@ export class StatisticsStore {
 
 		const rows = this.db.prepare(`
 			SELECT user_id AS id, COUNT(*) AS count,
-			       SUM(is_command) AS commands, SUM(filtered) AS filtered, MAX(time) AS lastTime
+			       SUM(is_command) AS commands, MAX(time) AS lastTime
 			FROM message_stat
 			WHERE ${where.sql} AND user_id IN (${placeholders})
 			GROUP BY user_id
 		`).all(...where.params, ...userIds) as {
-			id: string; count: number; commands: number; filtered: number; lastTime: number;
+			id: string; count: number; commands: number; lastTime: number;
 		}[];
 
 		for (const row of rows) {
 			result.set(row.id, {
 				count: row.count,
 				commands: row.commands ?? 0,
-				filtered: row.filtered ?? 0,
 				lastTime: row.lastTime,
 			});
 		}

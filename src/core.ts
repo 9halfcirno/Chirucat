@@ -11,7 +11,6 @@ import type { StatisticsManager } from "./statistics/manager";
 import type { WebUIServer } from "./webui/server/server";
 import sqlite from "better-sqlite3";
 import { UserProfileManager } from "./internal/user-profile";
-import { FilterListManager } from "./internal/filter-list";
 import { ServiceHost } from "./plugin/services/host";
 import { SettingsManager } from "./config/settings/manager";
 import {
@@ -58,10 +57,9 @@ export class Core {
 	/** 用户档案 (昵称等展示信息) */
 	profile: UserProfileManager | null = null;
 	/**
-	 * 消息过滤名单 (全局 + 各 Bot 私有)
-	 * @deprecated 将随过滤能力抽离为服务插件一起移除, 见 internal/filter-list.ts
+	 * 消息过滤名单 (黑白名单) 已抽离为服务插件 `services/filter`:
+	 * 存储、判定与 WebUI 端点都在那里, 框架不再持有名单入口。
 	 */
-	filterList: FilterListManager | null = null;
 
 
 	session: SessionManager | null = null;
@@ -94,7 +92,6 @@ export class Core {
 		this.user = new UserManager(this.internalDB);
 		this.session = new SessionManager(this.internalDB);
 		this.profile = new UserProfileManager(this.internalDB);
-		this.filterList = new FilterListManager(this.internalDB);
 
 		// 顺序要求: 这些设施必须先于服务插件就绪 —— 服务插件的 ctx.core.user / session 等
 		// 直接依赖它们(见下面对 services 的加载), 这里往前挪一步就会让依赖设施的插件起不来。
@@ -102,7 +99,6 @@ export class Core {
 		this.user.init()
 		this.session.init()
 		this.profile.init()
-		this.filterList.init()
 
 		if (this.config.webui) {
 			await import("./webui/server/server").then(module => {
@@ -284,7 +280,6 @@ export class Core {
 		this.session = null;
 		this.user = null;
 		this.profile = null;
-		this.filterList = null;
 	}
 
 	/**

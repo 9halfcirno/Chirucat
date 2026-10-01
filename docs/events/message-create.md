@@ -4,7 +4,7 @@
 
 该事件表示用户向会话发送了一条新消息, 对应事件类型`message.create`, 是当前唯一已支持的事件
 
-平台收到新消息后, 适配器将其转换为该事件并派发给Bot; Bot会依据该事件创建[`Message`对象](../objects/message.md), 并进入消息处理流程(消息过滤 -> 指令匹配 -> [插件消息回调](../plugin/contexts/normal.md)), 插件在消息回调中收到的`Message`对象即为该事件产生的实体
+平台收到新消息后, 适配器将其转换为该事件并派发给Bot; 事件先经过[服务插件的事件过滤器](../plugin/contexts/service.md#event对象)(框架自带的黑白名单就在这一步判定, 被拦下的事件不会进入任何处理链), 通过过滤后 Bot 依据该事件创建[`Message`对象](../objects/message.md), 并进入消息处理流程(指令匹配 -> [插件消息回调](../plugin/contexts/normal.md)), 插件在消息回调中收到的`Message`对象即为该事件产生的实体
 
 ## 结构
 

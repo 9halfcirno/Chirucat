@@ -55,7 +55,6 @@ export function collect(message: Message, botId: string, flags: StatFlags): Stat
 		textLen: message.blocks.length === 0 ? message.text.length : textLen,
 		imageCount,
 		mentionCount,
-		filtered: flags.filtered,
 		command: flags.command ?? "",
 		isCommand: Boolean(flags.command),
 	};
@@ -83,7 +82,6 @@ export function collectSend(action: MessageSend, meta: StatSendMeta): StatRecord
 		textLen: typeof action.message === "string" ? action.message.length : textLen,
 		imageCount,
 		mentionCount,
-		filtered: false,
 		isCommand: false,
 		command: "",
 	};

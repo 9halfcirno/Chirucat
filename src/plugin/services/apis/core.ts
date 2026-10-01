@@ -73,8 +73,8 @@ export type StatisticsAPI = Pick<StatisticsManager, (typeof STATISTICS_KEYS)[num
  * - `user` / `session` / `profile` / `statistics`: 全局数据设施的视图,
  *   白名单同时约束类型与运行时。
  *
- * `filterList` 曾在这里, 现已移出: 过滤能力将抽离为独立服务插件, 名单视图不再由
- * `ctx.core` 提供(见 `internal/filter-list.ts` 的废弃说明)。
+ * `filterList` 曾在这里, 已随黑白名单能力一起抽离为独立服务插件(`services/filter`):
+ * 名单的存储、判定与 WebUI 端点都归它, `ctx.core` 不再提供名单入口。
  *
  * 持有 `Core` 的字段是 `#core`(ECMAScript 私有): 类型上的收窄之外, 运行时也拿不到
  * 这个实例 —— 否则一段 `as any` 就能绕回 `Core.init()`。
@@ -88,19 +88,30 @@ export class CoreAPI {
 	readonly service: ServiceAPI;
 
 	readonly #core: Core;
+	/** 归属的服务插件 id (WebUI 端点注册与错误信息要用) */
+	readonly #serviceId: string;
+	/** 记录 WebUI 路由注销函数: 上下文释放时统一注销, 插件不必自己记住 */
+	readonly #trackWebUIRoute: ((dispose: () => void) => void) | undefined;
 
-	constructor(core: Core) {
+	constructor(core: Core, serviceId: string, trackWebUIRoute?: (dispose: () => void) => void) {
 		this.#core = core;
+		this.#serviceId = serviceId;
+		this.#trackWebUIRoute = trackWebUIRoute;
 
 		this.bot = new BotAPI(core.bot);
 		this.service = new ServiceAPI(core.services);
 	}
 
-	/** WebUI 视图; 未启用 WebUI 时为 null */
+	/**
+	 * WebUI 视图; 未启用 WebUI 时为 null
+	 *
+	 * 只开放注册自己的端点(见 `WebUIAPI.register`); 注册出的路由由上下文统一注销,
+	 * 因此插件自己在 `unload` 里不用管它。
+	 */
 	get webui(): WebUIAPI | null {
 		const server = this.#core.webui;
 		// 视图每次新建, 不缓存: 换监听/关闭后插件读到的必须是最新事实
-		return server ? new WebUIAPI(server) : null;
+		return server ? new WebUIAPI(server, this.#serviceId, this.#trackWebUIRoute) : null;
 	}
 
 	/** 用户标识视图 */

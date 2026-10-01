@@ -73,7 +73,6 @@ function renderCards(box, s) {
 		{ label: "活跃会话", value: s.sessions },
 		{ label: "图片", value: s.images },
 		{ label: "指令", value: s.commands },
-		{ label: "已过滤", value: s.filtered },
 	];
 
 	box.textContent = "";

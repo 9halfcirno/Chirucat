@@ -19,9 +19,17 @@ const api: WebUIAPI = {
 
 		try {
 			await core.botHelper.delete(id);
-			// Bot 已删除, 它的私有名单不再有意义
-			// @deprecated 过滤能力抽离为服务插件后, 这步要跟着迁移
-			core.filterList?.removeByBot(id);
+			// Bot 已删除, 它名下的私有名单不再有意义: 名单服务(chirucat-filter)在运行时顺手清掉。
+			// 服务未启用/未导出时不动它, 也不阻断删除 —— 残留的行是惰性的(该 botId 已不存在,
+			// 判定不会命中), 只有重建同名 Bot 才谈得上影响。
+			try {
+				const filter = core.services.exports.getExports("chirucat-filter") as
+					| { removeByBot?: (botId: string) => number }
+					| undefined;
+				filter?.removeByBot?.(id);
+			} catch (e) {
+				core.services.logger.warn(`清理 Bot ${id} 的私有名单失败: ${e instanceof Error ? e.message : e}`);
+			}
 			return { success: true };
 		} catch (e) {
 			throw { code: 500, err: `创建Bot失败: ${(e as Error).message}` };
