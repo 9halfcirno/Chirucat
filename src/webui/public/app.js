@@ -5,6 +5,18 @@
  * 新增页面时, 在下面的 registerPages() 里调用 app.register() 即可,
  * 活动栏按钮会自动生成。
  *
+ * 这里只是**启动时**的那一批页面; 运行期的增删 (一级导航与二级菜单) 由框架
+ * 提供的 API 负责, 例如插件前端资源可以:
+ *
+ * ```js
+ * import { getApp } from "/js/spa/framework.js";
+ * const app = getApp();
+ * app.register({ id: "filter", title: "过滤", render(el) { ... } }); // 一级导航
+ * app.sidebar.add({ title: "规则", render(el) { ... } });            // 当前页的二级菜单
+ * ```
+ *
+ * 详见 js/spa/framework.js 与 js/spa/sidebar.js 的模块注释。
+ *
  * 鉴权流程:
  * - 进入页面先请求 /api/auth/verify 查询登录状态
  * - 已登录 (或无密码): 取前端配置 -> 注册页面 -> 显示主界面并启动 SPA

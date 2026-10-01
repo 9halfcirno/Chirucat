@@ -1,0 +1,92 @@
+/* 测试实验室 (TestLab): 手动验证面板 */
+
+.test-page {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-4);
+	color: var(--fg);
+}
+
+.test-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-3);
+	padding: var(--sp-4);
+}
+
+.test-card h3 {
+	margin: 0;
+	font-size: var(--fs-sm);
+	font-weight: 600;
+}
+
+.test-card p {
+	margin: 0;
+	font-size: var(--fs-sm);
+}
+
+/* 一排操作按钮 */
+.test-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sp-2);
+}
+
+/* 现状: 二级菜单快照 + 一级导航表 */
+.test-snapshot {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-1);
+
+	margin: 0;
+	padding-left: 1.4em;
+	font-size: var(--fs-sm);
+}
+
+.test-snapshot .is-label {
+	color: var(--fg-subtle);
+}
+
+.test-meta {
+	margin: 0;
+	font-size: var(--fs-xs);
+	line-height: 1.6;
+}
+
+/* 调用日志: 新的在最上面 */
+.test-log {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+
+	max-height: 15em;
+	overflow: auto;
+	padding: var(--sp-2);
+
+	background: var(--bg-input);
+	border: 1px solid var(--border);
+	border-radius: var(--r-sm);
+}
+
+.test-log-empty {
+	font-size: var(--fs-xs);
+}
+
+.test-log-line {
+	display: flex;
+	gap: var(--sp-2);
+
+	font-size: var(--fs-xs);
+	line-height: 1.5;
+}
+
+.test-log-time {
+	flex: 0 0 auto;
+	color: var(--fg-subtle);
+	font-variant-numeric: tabular-nums;
+}
+
+.test-log-body {
+	min-width: 0;
+	word-break: break-word;
+}
