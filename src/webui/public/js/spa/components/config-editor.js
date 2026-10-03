@@ -830,11 +830,22 @@ function evalVisible(expr, ctx, depth) {
 			return readRef(expr.ref, ctx) <= expr.target;
 		case "in": {
 			const target = expr.target;
-			return Array.isArray(target) && target.includes(readRef(expr.ref, ctx));
+			if (!Array.isArray(target)) return false;
+			const value = readRef(expr.ref, ctx);
+			if (Array.isArray(value)) {
+				// 多选 (checkbox): 当前值数组与 target 有交集即命中
+				return value.some((v) => target.includes(v));
+			}
+			return target.includes(value);
 		}
 		case "notIn": {
 			const target = expr.target;
-			return !(Array.isArray(target) && target.includes(readRef(expr.ref, ctx)));
+			if (!Array.isArray(target)) return true;
+			const value = readRef(expr.ref, ctx);
+			if (Array.isArray(value)) {
+				return !value.some((v) => target.includes(v));
+			}
+			return !target.includes(value);
 		}
 		default:
 			console.warn(`[config] 未知的 visible 运算符: ${expr.op}, 按可见处理`);
