@@ -26,13 +26,44 @@
 				{
 					"label": "撤回消息",
 					"value": "delete"
+				},
+				{
+					"label": "富媒体测试",
+					"value": "media"
 				}
 			],
 			"default": [
 				"reply",
-				"delete"
+				"delete",
+				"media"
 			],
-			"desc": "控制消息在框架侧回复延迟",
+			"desc": "控制test指令的启用功能"
+		},
+		{
+			"type": "group",
+			"label": "富媒体文件链接",
+			"id": "mediaUrl",
+			"controls": [{
+				"type": "input",
+				"id": "image",
+				"label": "图片链接",
+				"placeholder": "https://example.com/image.png"
+			},{
+				"type": "input",
+				"id": "video",
+				"label": "视频链接",
+				"placeholder": "https://example.com/video.mp4"
+			},{
+				"type": "input",
+				"id": "audio",
+				"label": "音频链接",
+				"placeholder": "https://example.com/audio.mp3"
+			}],
+			"visible": {
+				"op": "in",
+				"ref": "features",
+				"target": ["media"]
+			}
 		}
 	]
 }

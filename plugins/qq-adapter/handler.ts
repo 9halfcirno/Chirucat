@@ -52,8 +52,16 @@ export class Handler {
 		// 图片附件追加为图片消息段
 		for (const attachment of data.attachments ?? []) {
 			const contentType: string = attachment?.content_type ?? "";
-			if (!attachment?.url || !contentType.startsWith("image/")) continue;
-			richContent.push({ type: "image", url: attachment.url });
+
+			if (contentType.startsWith("image") && attachment?.url) {
+				richContent.push({ type: "image", url: attachment.url });
+
+			} else if (contentType.startsWith("video") && attachment?.url) {
+				richContent.push({ type: "video", url: attachment.url });
+
+			} else if (contentType.startsWith("audio") && attachment?.url) {
+				richContent.push({ type: "audio", url: attachment.url });
+			}
 		}
 
 		// 空消息(如纯图片且无文本)时兜底一个空文本段

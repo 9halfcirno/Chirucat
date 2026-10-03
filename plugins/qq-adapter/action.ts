@@ -12,6 +12,14 @@ type SendTarget = {
 	id: string;
 };
 
+/** QQ 富媒体文件类型: 1=图片 2=视频 3=语音 4=文件 */
+const enum QQFileType {
+	Image = 1,
+	Video = 2,
+	Voice = 3,
+	File = 4
+}
+
 export class ActionSender {
 	/** extra 对象 -> 消息序列号, 用于消息去重 (QQ msg_seq) */
 	private msgSeqs = new WeakMap<Record<string, any>, number>();
@@ -88,12 +96,21 @@ export class ActionSender {
 			return (await this.sendText(target, sendAction.message, extra, msgRef)) as ActionResponses[T["type"]];
 		}
 
-		// 富文本解析与发送
+		// 富文本解析: 按块类型收集
 		const texts: Array<Extract<MessageBlock, { type: "text" | "mention" }>> = [];
 		const images: string[] = [];
+		const videos: string[] = [];
+		const audios: string[] = [];
 		for (const block of sendAction.message) {
-			if (block.type === "text" || block.type === "mention") texts.push(block);
-			else if (block.type === "image" && block.url) images.push(block.url);
+			if (block.type === "text" || block.type === "mention") {
+				texts.push(block);
+			} else if (block.type === "image" && block.url) {
+				images.push(block.url);
+			} else if (block.type === "video" && block.url) {
+				videos.push(block.url);
+			} else if (block.type === "audio" && block.url) {
+				audios.push(block.url);
+			}
 		}
 
 		const content = stringifyContent(
@@ -114,19 +131,27 @@ export class ActionSender {
 			primaryMsgId = textRes.id;
 		}
 
-		// 逐张上传并发送图片
-		for (const url of images) {
-			const fileInfo = await this.uploadImage(target, url);
-			if (!fileInfo) {
-				return {
-					success: false,
-					error: `Failed to upload image: ${url}`
-				} as ActionResponses[T["type"]];
-			}
+		// 依次发送: 图片 -> 视频 -> 语音
+		const mediaGroups: Array<{ urls: string[]; fileType: QQFileType; label: string }> = [
+			{ urls: images, fileType: QQFileType.Image, label: "image" },
+			{ urls: videos, fileType: QQFileType.Video, label: "video" },
+			{ urls: audios, fileType: QQFileType.Voice, label: "audio" }
+		];
 
-			const mediaRes = await this.sendMedia(target, fileInfo, extra, msgRef);
-			if (!mediaRes.success) return mediaRes as ActionResponses[T["type"]];
-			if (!primaryMsgId) primaryMsgId = mediaRes.id;
+		for (const { urls, fileType, label } of mediaGroups) {
+			for (const url of urls) {
+				const fileInfo = await this.uploadMedia(target, url, fileType);
+				if (!fileInfo) {
+					return {
+						success: false,
+						error: `Failed to upload ${label}: ${url}`
+					} as ActionResponses[T["type"]];
+				}
+
+				const mediaRes = await this.sendMedia(target, fileInfo, extra, msgRef);
+				if (!mediaRes.success) return mediaRes as ActionResponses[T["type"]];
+				if (!primaryMsgId) primaryMsgId = mediaRes.id;
+			}
 		}
 
 		if (primaryMsgId) {
@@ -223,12 +248,14 @@ export class ActionSender {
 	}
 
 	/**
-	 * 上传图片到目标会话, 返回 file_info
+	 * 上传富媒体文件到目标会话, 返回 file_info
+	 *
+	 * @param fileType QQFileType: 1=图片 2=视频 3=语音 4=文件
 	 */
-	private async uploadImage(target: SendTarget, url: string): Promise<string | null> {
+	private async uploadMedia(target: SendTarget, url: string, fileType: QQFileType): Promise<string | null> {
 		const token = await this.access.get();
 		if (!token) {
-			this.ctx.logger.error("上传图片失败: 无可用 AccessToken");
+			this.ctx.logger.error(`上传媒体失败(file_type=${fileType}): 无可用 AccessToken`);
 			return null;
 		}
 
@@ -241,24 +268,24 @@ export class ActionSender {
 					"Content-Type": "application/json",
 				},
 				body: JSON.stringify({
-					file_type: 1,
+					file_type: fileType,
 					url,
 					srv_send_msg: false
 				})
 			});
 
 			if (!resp.ok) {
-				this.ctx.logger.error(`上传图片失败: ${resp.status} ${await resp.text()}`);
+				this.ctx.logger.error(`上传媒体失败(file_type=${fileType}): ${resp.status} ${await resp.text()}`);
 				return null;
 			}
 			const data = await resp.json();
 			if (!data?.file_info) {
-				this.ctx.logger.error(`上传图片失败: 响应缺少 file_info ${JSON.stringify(data)}`);
+				this.ctx.logger.error(`上传媒体失败(file_type=${fileType}): 响应缺少 file_info ${JSON.stringify(data)}`);
 				return null;
 			}
 			return data.file_info;
 		} catch (e: any) {
-			this.ctx.logger.error(`上传图片异常: ${e?.message || e}`);
+			this.ctx.logger.error(`上传媒体异常(file_type=${fileType}): ${e?.message || e}`);
 			return null;
 		}
 	}

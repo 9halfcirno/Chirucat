@@ -48,6 +48,17 @@ export default {
 						session: msg.session.id,
 						id
 					})
+				} else if (["image", "video", "audio"].includes(String(args[0]))) {
+					if (!features.includes("media")) return;
+
+					let url = ctx.config.get("mediaUrl." + args[0]) as string;
+					if (!url) return msg.reply(`无法发送文件, 因为没有配置URL`)
+					
+					let res = await msg.reply([{ type: args[0] as any, url: url }])
+
+					if (!res.success) {
+						msg.reply(`发送失败: ${res.code || "NULL_CODE"}: ${res.error}`)
+					}
 				}
 			}
 		}

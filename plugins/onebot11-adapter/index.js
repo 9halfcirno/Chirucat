@@ -437,6 +437,16 @@ function toOneBotMessage(message) {
 				break;
 			}
 
+			case "video": {
+				if (block.url) segments.push({ type: "video", data: { file: String(block.url) } });
+				break;
+			}
+
+			case "audio": {
+				if (block.url) segments.push({ type: "record", data: { file: String(block.url) } });
+				break;
+			}
+
 			default:
 				break;
 		}
@@ -516,6 +526,12 @@ function segmentToBlocks(seg) {
 
 		case "image":
 			return [{ type: "image", url: String(data.url ?? data.file ?? "") }];
+
+		case "record":
+			return [{ type: "audio", url: String(data.url ?? data.file ?? "") }];
+		
+		case "video":
+			return [{ type: "video", url: String(data.url ?? data.file ?? "") }];
 
 		case "at": {
 			const qq = data.qq;
