@@ -87,7 +87,7 @@
 {
 	type: "image";
 	url: string; // 图片URL
-	file?: string; // 占位, 目前无实际用途
+	file?: string; // 占位, 未来可能表示本地路径或文件Buffer
 }
 ```
 
@@ -97,5 +97,23 @@
 	type: "mention";
 	id: string; // 提及用户的账号uuid
 	name?: string; // 提及用户的昵称
+}
+```
+
+**video**
+```ts
+{
+	type: "video";
+	url: string; // 视频URL
+	file?: string; // 占位, 未来可能表示本地路径或文件Buffer
+}
+```
+
+**audio**
+```ts
+{
+	type: "audio";
+	url: string; // 音频URL
+	file?: string; // 占位, 未来可能表示本地路径或文件Buffer
 }
 ```

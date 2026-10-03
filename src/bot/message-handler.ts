@@ -65,7 +65,13 @@ export class MessageHandler {
 					text += `@${block.name || block.id}`;
 					break;
 				case "image":
-					text += `[图片: ${block.file || block.url}]`;
+					text += `[图片: ${block.url}]`;
+					break;
+				case "video":
+					text += `[视频: ${block.url}]`	
+					break;
+				case "audio":
+					text += `[音频: ${block.url}]`
 					break;
 			}
 		}
