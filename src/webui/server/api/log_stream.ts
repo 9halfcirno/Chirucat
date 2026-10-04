@@ -1,5 +1,7 @@
 import type { WebUIAPI } from "../types";
-import { defaultLogStream, type LogEntry } from "../../../utils/logger";
+import Logger, { defaultLogStream, type LogEntry } from "../../../utils/logger";
+
+const logger = new Logger("LogStream");
 
 /** 心跳间隔: 定期发送注释行, 防止代理/负载均衡器空闲断连 */
 const HEARTBEAT_MS = 15_000;
@@ -45,21 +47,36 @@ const api: WebUIAPI = {
 		}
 
 		let closed = false;
-		const unsubscribe = defaultLogStream.subscribe((entry) => {
-			if (closed) return;
-			res.write(toSSE(entry));
-		});
-		const heartbeat = setInterval(() => {
-			if (closed) return;
-			res.write(`: heartbeat\n\n`);
-		}, HEARTBEAT_MS);
+		const unsubscribe = defaultLogStream.subscribe((entry) => write(toSSE(entry)));
+		const heartbeat = setInterval(() => write(`: heartbeat\n\n`), HEARTBEAT_MS);
 
-		// 客户端断开 (或响应完成) 时退订并清理定时器
-		res.on("close", () => {
+		function cleanup(): void {
+			if (closed) return;
 			closed = true;
 			unsubscribe();
 			clearInterval(heartbeat);
+		}
+
+		// 客户端已经断开时, 对端 socket 已销毁, 再 write 会冒 error 事件;
+		// 没有监听器时 Node 会把它抛成 uncaughtException, 拖崩整个进程 ——
+		// 这里包住每次 write, 失败时安静收尾而不是带倒整个服务
+		function write(chunk: string): void {
+			if (closed) return;
+			try {
+				res.write(chunk);
+			} catch (e) {
+				logger.warn(`写入日志流失败, 连接可能已断开: ${e instanceof Error ? e.message : e}`);
+				cleanup();
+			}
+		}
+
+		res.on("error", (e) => {
+			logger.warn(`日志流连接出错: ${e instanceof Error ? e.message : e}`);
+			cleanup();
 		});
+
+		// 客户端断开 (或响应完成) 时退订并清理定时器
+		res.on("close", cleanup);
 	},
 };
 

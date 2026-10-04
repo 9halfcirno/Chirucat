@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { fail, requireCore } from "./_shared";
 import { buildServicePayload } from "../service-view";
 
 /**
@@ -19,16 +20,16 @@ export default {
 	auth: true,
 
 	async handler(_req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
+		const c = requireCore(core);
 
 		let failed: string[] = [];
 		try {
-			await core.services.scan();
-			failed = await core.services.syncState();
+			await c.services.scan();
+			failed = await c.services.syncState();
 		} catch (e) {
-			throw { code: 500, err: `刷新服务插件失败: ${(e as Error).message}` };
+			fail(500, `刷新服务插件失败: ${(e as Error).message}`);
 		}
 
-		return { success: true, failed, ...buildServicePayload(core.services) };
+		return { success: true, failed, ...buildServicePayload(c.services) };
 	},
 } as WebUIAPI;

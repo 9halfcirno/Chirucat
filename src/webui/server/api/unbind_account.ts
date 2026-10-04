@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { fail, parseTarget, requireCore, requireUser } from "./_shared";
 
 /**
  * 解绑: 将账号从当前跨平台ID中移出, 独立成新的跨平台ID
@@ -18,42 +19,29 @@ const api: WebUIAPI = {
 	auth: true,
 
 	handler(req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
-		if (!core.user) throw { err: "核心用户模块未就绪", code: 503 };
+		const user = requireUser(requireCore(core));
 
 		const { platform, id } = parseTarget(req.body);
 
-		const accountId = core.user.find(platform, id);
-		if (!accountId) throw { code: 404, err: `账号不存在: ${platform} ${id}` };
+		const accountId = user.find(platform, id);
+		if (!accountId) fail(404, `账号不存在: ${platform} ${id}`);
 
-		const unionId = core.user.getUnion(accountId);
-		if (!unionId) throw { code: 404, err: "该账号未归属任何跨平台ID" };
+		const unionId = user.getUnion(accountId);
+		if (!unionId) fail(404, "该账号未归属任何跨平台ID");
 
-		if (!core.user.unbind(unionId, accountId)) {
-			throw { code: 409, err: "解绑失败: 该账号不在指定的跨平台ID下" };
+		if (!user.unbind(unionId, accountId)) {
+			fail(409, "解绑失败: 该账号不在指定的跨平台ID下");
 		}
 
-		const newUnionId = core.user.getUnion(accountId);
-		if (!newUnionId) throw { code: 500, err: "解绑后读取跨平台ID失败" };
+		const newUnionId = user.getUnion(accountId);
+		if (!newUnionId) fail(500, "解绑后读取跨平台ID失败");
 
 		return {
 			accountId,
 			unionId: newUnionId,
-			lastUnionId: core.user.getLast(accountId),
+			lastUnionId: user.getLast(accountId),
 		};
 	},
 };
-
-/** 校验并取出 platform / id, 两者都必须是非空字符串 */
-function parseTarget(body: unknown): { platform: string; id: string } {
-	const { platform, id } = (body ?? {}) as { platform?: unknown; id?: unknown };
-	if (typeof platform !== "string" || !platform.trim()) {
-		throw { code: 400, err: "platform 必须是非空字符串" };
-	}
-	if (typeof id !== "string" || !id.trim()) {
-		throw { code: 400, err: "id 必须是非空字符串" };
-	}
-	return { platform: platform.trim(), id: id.trim() };
-}
 
 export default api;

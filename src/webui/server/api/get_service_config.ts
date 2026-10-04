@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { fail, requireCore } from "./_shared";
 
 /**
  * 获取服务插件配置
@@ -16,17 +17,17 @@ export default {
 	auth: true,
 
 	async handler(req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
+		const c = requireCore(core);
 
 		const id = `${req.body?.id}`;
-		const service = core.services.resolve(id);
-		if (!service) throw { code: 404, err: `服务插件 ${id} 不存在` };
+		const service = c.services.resolve(id);
+		if (!service) fail(404, `服务插件 ${id} 不存在`);
 
 		if (!service.config) {
 			// 服务卸载时会连带清掉配置, 这里重新装配一次(与插件版同理)
-			await core.services.setupConfig(service);
+			await c.services.setupConfig(service);
 			if (!service.config)
-				throw { code: 404, err: `服务插件 ${id} 没有可用的配置` };
+				fail(404, `服务插件 ${id} 没有可用的配置`);
 		}
 
 		return {

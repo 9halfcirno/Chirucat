@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { clampInt, requireCore, requireUser } from "./_shared";
 
 /**
  * 用户概览: 账号与跨平台ID 的规模统计
@@ -20,29 +21,23 @@ const api: WebUIAPI = {
 	auth: true,
 
 	handler(req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
-		if (!core.user) throw { err: "核心用户模块未就绪", code: 503 };
+		const c = requireCore(core);
+		const user = requireUser(c);
 
 		const body = (req.body ?? {}) as { days?: unknown };
 		const days = clampInt(body.days, 7, 1, 30);
 
 		const to = Date.now();
-		const summary = core.statistics?.summary({ from: to - days * DAY_MS, to }) ?? null;
+		const summary = c.statistics?.summary({ from: to - days * DAY_MS, to }) ?? null;
 
 		return {
-			...core.user.overview(),
+			...user.overview(),
 			days,
 			activeAccounts: summary ? summary.users : 0,
-			statisticsEnabled: core.statistics !== null,
+			statisticsEnabled: c.statistics !== null,
 			partial: summary ? summary.partial : false,
 		};
 	},
 };
-
-/** 取整数并夹在 [min, max] 内; 非数字时用默认值 */
-function clampInt(value: unknown, fallback: number, min: number, max: number): number {
-	if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-	return Math.min(Math.max(Math.trunc(value), min), max);
-}
 
 export default api;

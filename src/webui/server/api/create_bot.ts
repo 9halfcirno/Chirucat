@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { fail, requireCore } from "./_shared";
 import { isValidBotId } from "../../../helpers/bot-helper";
 
 /**
@@ -17,20 +18,20 @@ const api: WebUIAPI = {
 	auth: true,
 
 	async handler(req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
+		const c = requireCore(core);
 
 		const body = (req.body ?? {}) as { id?: unknown; name?: unknown };
 		const { id, name } = body;
 
 		// id 规则与 BotHelper 共用同一校验, 服务端为准
 		if (!isValidBotId(id)) {
-			throw {
-				code: 400,
-				err: "id不合法: 需为1~64位字符, 且不能含空白、点目录或 < > : \" / \\ | ? * 等字符",
-			};
+			fail(
+				400,
+				"id不合法: 需为1~64位字符, 且不能含空白、点目录或 < > : \" / \\ | ? * 等字符",
+			);
 		}
-		if (core.bot.bots.has(id)) {
-			throw { code: 409, err: `Bot ${id} 已存在` };
+		if (c.bot.bots.has(id)) {
+			fail(409, `Bot ${id} 已存在`);
 		}
 
 		// name 可选; 空串/纯空白按未填写处理
@@ -38,11 +39,11 @@ const api: WebUIAPI = {
 		const botConfig = trimmedName ? { id, name: trimmedName } : { id };
 
 		try {
-			const dir = await core.botHelper.add(botConfig);
+			const dir = await c.botHelper.add(botConfig);
 			return { success: true, id, path: dir };
 		} catch (e) {
 			// 创建中途失败(如磁盘写入出错), BotHelper 已尽量不产生半成品残留
-			throw { code: 500, err: `创建Bot失败: ${(e as Error).message}` };
+			fail(500, `创建Bot失败: ${(e as Error).message}`);
 		}
 	},
 };

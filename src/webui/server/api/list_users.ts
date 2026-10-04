@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { clampInt, requireCore, requireUser } from "./_shared";
 import type { UserListQuery } from "../../../internal/user-manager";
 import type { UserProfile } from "../../../internal/user-profile";
 import type { UserActivity } from "../../../statistics/types";
@@ -31,8 +32,8 @@ const api: WebUIAPI = {
 	auth: true,
 
 	handler(req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
-		if (!core.user) throw { err: "核心用户模块未就绪", code: 503 };
+		const c = requireCore(core);
+		const user = requireUser(c);
 
 		const body = (req.body ?? {}) as {
 			platform?: unknown; keyword?: unknown; bound?: unknown;
@@ -48,12 +49,12 @@ const api: WebUIAPI = {
 		if (typeof body.keyword === "string" && body.keyword.trim()) query.keyword = body.keyword.trim();
 		if (body.bound === "bound" || body.bound === "single") query.bound = body.bound;
 
-		const { items, total } = core.user.list(query);
+		const { items, total } = user.list(query);
 		const ids = items.map(item => item.accountId);
 
-		const profiles: Map<string, UserProfile> = core.profile?.getMany(ids) ?? new Map();
-		const activity: Map<string, UserActivity> = core.statistics
-			? core.statistics.userActivity(ids, { from: Date.now() - days * DAY_MS, to: Date.now() })
+		const profiles: Map<string, UserProfile> = c.profile?.getMany(ids) ?? new Map();
+		const activity: Map<string, UserActivity> = c.statistics
+			? c.statistics.userActivity(ids, { from: Date.now() - days * DAY_MS, to: Date.now() })
 			: new Map();
 
 		return {
@@ -61,7 +62,7 @@ const api: WebUIAPI = {
 			limit,
 			offset,
 			days,
-			statisticsEnabled: core.statistics !== null,
+			statisticsEnabled: c.statistics !== null,
 			items: items.map(item => {
 				const profile = profiles.get(item.accountId);
 				return {
@@ -74,11 +75,5 @@ const api: WebUIAPI = {
 		};
 	},
 };
-
-/** 取整数并夹在 [min, max] 内; 非数字时用默认值 */
-function clampInt(value: unknown, fallback: number, min: number, max: number): number {
-	if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-	return Math.min(Math.max(Math.trunc(value), min), max);
-}
 
 export default api;

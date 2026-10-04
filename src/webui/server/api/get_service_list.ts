@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { requireCore } from "./_shared";
 import { buildServicePayload } from "../service-view";
 
 /**
@@ -14,8 +15,8 @@ export default {
 	auth: true,
 
 	handler(_req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
+		const c = requireCore(core);
 
-		return buildServicePayload(core.services);
+		return buildServicePayload(c.services);
 	},
 } as WebUIAPI;

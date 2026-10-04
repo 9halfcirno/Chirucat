@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { requireCore } from "./_shared";
 
 const api: WebUIAPI = {
 	path: "get_webui_front_config",
@@ -6,9 +7,9 @@ const api: WebUIAPI = {
 	auth: true,
 
 	async handler(_, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 }
-		
-		return core.webui!.front || {};
+		const c = requireCore(core);
+
+		return c.webui?.front ?? {};
 	}
 }
 

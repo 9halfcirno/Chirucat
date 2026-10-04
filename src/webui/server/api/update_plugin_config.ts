@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { fail, requireBot, requireCore, savePluginConfig } from "./_shared";
 
 /**
  * 更新插件配置
@@ -18,43 +19,22 @@ export default {
 	auth: true,
 
 	async handler(req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
-
-		const bot = core.bot.bots.get(req.body?.bot);
-		if (!bot) throw { code: 404, err: "目标Bot不存在" };
+		const bot = requireBot(requireCore(core), `${req.body?.bot ?? ""}`);
 
 		const id = `${req.body?.id}`;
 		const plugin = bot.plugin.resolve(id);
 		if (!plugin) {
 			// 未启动过的 Bot 从未扫描插件, 报"插件不存在"会误导
 			const scanned = bot.plugin.globalPlugins.size + bot.plugin.botPlugins.size;
-			throw {
-				code: 404,
-				err: scanned === 0
+			fail(
+				404,
+				scanned === 0
 					? `Bot ${bot.id} 尚未扫描插件(需先启动一次), 无法更新插件配置`
 					: `插件 ${id} 不存在`,
-			};
+			);
 		}
-		if (!plugin.config) throw { code: 404, err: `插件 ${id} 没有可用的配置` };
+		if (!plugin.config) fail(404, `插件 ${id} 没有可用的配置`);
 
-		const config = plugin.config;
-
-		// 校验不通过不落盘; details 带上字段级错误, 供前端定位到具体控件
-		const errors = config.vaildate(req.body?.config);
-		if (errors.length) {
-			const detail = errors
-				.map(e => `${e.path || "配置"}: ${e.message}`)
-				.join("; ");
-			throw { code: 400, err: `配置校验未通过: ${detail}`, details: errors };
-		}
-
-		try {
-			await config.update(req.body?.config);
-		} catch (e) {
-			throw { code: 500, err: `保存插件配置失败: ${(e as Error).message}` };
-		}
-
-		// 回传规范化后的值: 隐藏项、缺失键已被补齐, 便于前端与后端对齐
-		return { success: true, config: config.data };
+		return savePluginConfig(plugin.config, req.body?.config, `插件 ${id}`);
 	},
 } as WebUIAPI;

@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { fail, requireBot, requireCore } from "./_shared";
 
 /**
  * 读取某个 Bot 的设置
@@ -16,10 +17,7 @@ const api: WebUIAPI = {
 	auth: true,
 
 	handler(req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
-
-		const bot = core.bot.bots.get(`${req.body?.id ?? ""}`);
-		if (!bot) throw { err: "目标Bot不存在", code: 404 };
+		const bot = requireBot(requireCore(core), `${req.body?.id ?? ""}`);
 
 		return { success: true, id: bot.id, ...bot.settings.read() };
 	},

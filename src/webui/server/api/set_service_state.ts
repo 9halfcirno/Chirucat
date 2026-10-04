@@ -1,5 +1,6 @@
 import { StateError } from "../../../errors/state-error";
 import type { WebUIAPI } from "../types";
+import { fail, requireCore } from "./_shared";
 import { buildServicePayload } from "../service-view";
 
 /**
@@ -24,30 +25,30 @@ export default {
 	auth: true,
 
 	async handler(req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
+		const c = requireCore(core);
 
 		const id = `${req.body?.id}`;
 		// 严格校验: "false" / 0 这类非布尔值一律拒绝, 免得把客户端的误用静默解释成"启用"
 		if (typeof req.body?.state !== "boolean") {
-			throw { code: 400, err: "state 必须是布尔值" };
+			fail(400, "state 必须是布尔值");
 		}
 		const state = req.body.state as boolean;
 
-		if (!core.services.resolve(id)) throw { code: 404, err: `目标服务插件不存在: ${id}` };
+		if (!c.services.resolve(id)) fail(404, `目标服务插件不存在: ${id}`);
 
 		try {
-			const result = await core.services.setEnabled(id, state);
+			const result = await c.services.setEnabled(id, state);
 			return {
 				success: true,
 				/** 目标服务收敛后的运行态 */
 				state: result.enabled,
 				/** 被连带启用/停用的服务 id */
 				affected: result.affected,
-				...buildServicePayload(core.services),
+				...buildServicePayload(c.services),
 			};
 		} catch (e) {
-			if (e instanceof StateError) throw { code: 409, err: (e as Error).message };
-			throw { code: 500, err: `更改服务插件状态失败: ${(e as Error).message}` };
+			if (e instanceof StateError) fail(409, (e as Error).message);
+			fail(500, `更改服务插件状态失败: ${(e as Error).message}`);
 		}
 	},
 } as WebUIAPI;

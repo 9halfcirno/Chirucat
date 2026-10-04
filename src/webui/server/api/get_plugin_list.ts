@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { requireBot, requireCore } from "./_shared";
 import { buildPluginPayload } from "../plugin-view";
 
 /**
@@ -17,10 +18,7 @@ export default {
 	auth: true,
 
 	handler(req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
-
-		const bot = core.bot.bots.get(req.body?.bot);
-		if (!bot) throw { code: 404, err: "目标Bot不存在" };
+		const bot = requireBot(requireCore(core), `${req.body?.bot ?? ""}`);
 
 		return buildPluginPayload(bot);
 	},

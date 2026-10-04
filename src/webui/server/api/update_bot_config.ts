@@ -1,6 +1,5 @@
-import { SettingsApplyError } from "../../../config/settings/manager";
-import { SettingsError } from "../../../config/settings/types";
 import type { WebUIAPI } from "../types";
+import { requireBot, requireCore, rethrowSettingsError } from "./_shared";
 
 /**
  * 更新某个 Bot 的设置
@@ -22,28 +21,13 @@ const api: WebUIAPI = {
 	auth: true,
 
 	async handler(req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
-
-		const bot = core.bot.bots.get(`${req.body?.id ?? ""}`);
-		if (!bot) throw { err: "目标Bot不存在", code: 404 };
+		const bot = requireBot(requireCore(core), `${req.body?.id ?? ""}`);
 
 		try {
 			const result = await bot.settings.patch(req.body?.patch);
 			return { success: true, ...result };
 		} catch (e) {
-			// 字段级校验错误: 让前端能把错误落到具体控件上
-			if (e instanceof SettingsError) {
-				throw { err: e.message, code: 400, details: e.details };
-			}
-			// 值已落盘、只是热应用没成功: 报"存住了但没生效"
-			if (e instanceof SettingsApplyError) {
-				throw {
-					err: e.message,
-					code: 500,
-					details: { values: e.outcome.values, changed: e.outcome.changed },
-				};
-			}
-			throw { err: `保存Bot设置失败: ${e instanceof Error ? e.message : String(e)}`, code: 500 };
+			rethrowSettingsError(e, "保存Bot设置");
 		}
 	},
 };

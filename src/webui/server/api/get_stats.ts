@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { fail, requireCore } from "./_shared";
 
 /** 与 statistics/types.ts 中的 StatRange 结构一致。此处刻意不 import, 以便 statistics 目录被删除时本文件仍可加载 */
 type Range = { from: number; to: number; botId?: string };
@@ -23,11 +24,11 @@ export default {
 	method: "POST",
 
 	handler(req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 }
+		const c = requireCore(core);
 
 		// 统计是可选功能, 未启用时 core.statistics 为 null
-		const stats = core.statistics;
-		if (!stats) throw { err: "统计功能未启用", code: 503 }
+		const stats = c.statistics;
+		if (!stats) fail(503, "统计功能未启用");
 
 		const body = req.body as Body;
 
@@ -57,7 +58,7 @@ export default {
 			return { commands: stats.commands(range, limit) };
 		}
 
-		throw { err: "未知的统计查询类型", code: 400 }
+		fail(400, "未知的统计查询类型");
 	},
 } as WebUIAPI
 

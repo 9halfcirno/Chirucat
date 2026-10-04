@@ -1,6 +1,5 @@
-import { SettingsApplyError } from "../../../config/settings/manager";
-import { SettingsError } from "../../../config/settings/types";
 import type { WebUIAPI } from "../types";
+import { fail, requireCore, rethrowSettingsError } from "./_shared";
 
 /**
  * 写入一个设置域
@@ -20,29 +19,17 @@ const api: WebUIAPI = {
 	auth: true,
 
 	async handler(req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
+		const c = requireCore(core);
 
 		const id = `${req.body?.domain ?? ""}`;
-		const domain = core.settings.domain(id);
-		if (!domain) throw { err: `设置域 ${id} 不存在`, code: 404 };
+		const domain = c.settings.domain(id);
+		if (!domain) fail(404, `设置域 ${id} 不存在`);
 
 		try {
 			const result = await domain.patch(req.body?.patch);
 			return { success: true, ...result };
 		} catch (e) {
-			// 字段级校验错误: 让前端能把错误落到具体控件上
-			if (e instanceof SettingsError) {
-				throw { err: e.message, code: 400, details: e.details };
-			}
-			// 值已落盘、只是热应用没成功: 报"存住了但没生效", 不要笼统地说保存失败
-			if (e instanceof SettingsApplyError) {
-				throw {
-					err: e.message,
-					code: 500,
-					details: { values: e.outcome.values, changed: e.outcome.changed },
-				};
-			}
-			throw { err: `保存设置失败: ${e instanceof Error ? e.message : String(e)}`, code: 500 };
+			rethrowSettingsError(e, "保存设置");
 		}
 	},
 };

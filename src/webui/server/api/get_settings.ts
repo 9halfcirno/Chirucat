@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { requireCore } from "./_shared";
 
 /**
  * 读取全部设置域
@@ -16,11 +17,11 @@ const api: WebUIAPI = {
 	auth: true,
 
 	handler(_req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
+		const c = requireCore(core);
 
 		return {
 			success: true,
-			domains: core.settings.list().map((domain) => ({
+			domains: c.settings.list().map((domain) => ({
 				id: domain.id,
 				...domain.read(),
 			})),

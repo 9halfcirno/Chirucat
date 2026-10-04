@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { fail, parseTarget, requireCore, requireUser } from "./_shared";
 
 /**
  * 指定绑定: 把源账号并入目标账号所在的跨平台ID
@@ -23,36 +24,35 @@ const api: WebUIAPI = {
 	auth: true,
 
 	handler(req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
-		if (!core.user) throw { err: "核心用户模块未就绪", code: 503 };
+		const user = requireUser(requireCore(core));
 
 		const body = (req.body ?? {}) as { source?: unknown; target?: unknown; dryRun?: unknown };
 		const source = parseTarget(body.source, "source");
 		const target = parseTarget(body.target, "target");
 		const dryRun = body.dryRun === true;
 
-		const sourceAccountId = core.user.find(source.platform, source.id);
+		const sourceAccountId = user.find(source.platform, source.id);
 		if (!sourceAccountId) {
-			throw { code: 404, err: `源账号不存在: ${source.platform} ${source.id}` };
+			fail(404, `源账号不存在: ${source.platform} ${source.id}`);
 		}
 
-		const targetAccountId = core.user.find(target.platform, target.id);
+		const targetAccountId = user.find(target.platform, target.id);
 		if (!targetAccountId) {
-			throw { code: 404, err: `目标账号不存在: ${target.platform} ${target.id}` };
+			fail(404, `目标账号不存在: ${target.platform} ${target.id}`);
 		}
 
 		if (sourceAccountId === targetAccountId) {
-			throw { code: 400, err: "不能将账号绑定到其自身" };
+			fail(400, "不能将账号绑定到其自身");
 		}
 
-		const sourceUnionId = core.user.getUnion(sourceAccountId);
-		const targetUnionId = core.user.getUnion(targetAccountId);
+		const sourceUnionId = user.getUnion(sourceAccountId);
+		const targetUnionId = user.getUnion(targetAccountId);
 		if (!sourceUnionId || !targetUnionId) {
-			throw { code: 500, err: "读取账号的跨平台ID失败" };
+			fail(500, "读取账号的跨平台ID失败");
 		}
 
-		const sourceGroupSize = core.user.listMembers(sourceUnionId).length;
-		const targetGroupSize = core.user.listMembers(targetUnionId).length;
+		const sourceGroupSize = user.listMembers(sourceUnionId).length;
+		const targetGroupSize = user.listMembers(targetUnionId).length;
 
 		// 已在同一组: 不是错误, 告知调用方无需重复操作
 		if (sourceUnionId === targetUnionId) {
@@ -84,7 +84,7 @@ const api: WebUIAPI = {
 			};
 		}
 
-		core.user.bind(targetUnionId, sourceAccountId);
+		user.bind(targetUnionId, sourceAccountId);
 
 		return {
 			success: true,
@@ -99,17 +99,5 @@ const api: WebUIAPI = {
 		};
 	},
 };
-
-/** 校验并取出一个 { platform, id } 目标 */
-function parseTarget(value: unknown, field: string): { platform: string; id: string } {
-	const { platform, id } = (value ?? {}) as { platform?: unknown; id?: unknown };
-	if (typeof platform !== "string" || !platform.trim()) {
-		throw { code: 400, err: `${field}.platform 必须是非空字符串` };
-	}
-	if (typeof id !== "string" || !id.trim()) {
-		throw { code: 400, err: `${field}.id 必须是非空字符串` };
-	}
-	return { platform: platform.trim(), id: id.trim() };
-}
 
 export default api;

@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { fail, requireBot, requireCore } from "./_shared";
 
 /**
  * 设置Bot状态
@@ -12,23 +13,18 @@ export default {
 	method: "POST",
 	auth: true,
 	path: "set_bot_state",
-	
+
 	async handler(req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 }
-		let id = `${req.body.id}`;
-		if (!core.bot.bots.has(id)) throw { code: 404, err: "目标Bot不存在" };
-		let state = !!req.body.state; // 转布尔
-		let bot = core.bot.bots.get(id)!;
+		const bot = requireBot(requireCore(core), `${req.body.id}`);
+		const state = !!req.body.state; // 转布尔
+
 		try {
 			// setEnable 先收敛运行态, 成功后才把偏好写入 state.json
 			await bot.setEnable(state);
 		} catch (e) {
-
-			throw { code: 500, err: `更改Bot状态失败: ${(e as Error).message}` }
+			fail(500, `更改Bot状态失败: ${(e as Error).message}`);
 		}
 
 		return { success: true, state: bot.running }
-
-
 	},
-} as WebUIAPI
+} as WebUIAPI;

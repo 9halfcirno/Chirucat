@@ -1,4 +1,5 @@
 import type { WebUIAPI } from "../types";
+import { fail, parseTarget, requireCore, requireUser } from "./_shared";
 
 /**
  * 恢复到上一个跨平台ID: 把账号重新并回它变更前所在的组
@@ -20,39 +21,26 @@ const api: WebUIAPI = {
 	auth: true,
 
 	handler(req, core) {
-		if (!core) throw { err: "WebUI未连接到核心", code: 503 };
-		if (!core.user) throw { err: "核心用户模块未就绪", code: 503 };
+		const user = requireUser(requireCore(core));
 
 		const { platform, id } = parseTarget(req.body);
 
-		const accountId = core.user.find(platform, id);
-		if (!accountId) throw { code: 404, err: `账号不存在: ${platform} ${id}` };
+		const accountId = user.find(platform, id);
+		if (!accountId) fail(404, `账号不存在: ${platform} ${id}`);
 
-		if (!core.user.getLast(accountId)) {
-			throw { code: 400, err: "该账号没有可恢复的上一个跨平台ID" };
+		if (!user.getLast(accountId)) {
+			fail(400, "该账号没有可恢复的上一个跨平台ID");
 		}
 
-		const unionId = core.user.restore(accountId);
-		if (!unionId) throw { code: 409, err: "恢复失败: 该账号当前已在该跨平台ID下" };
+		const unionId = user.restore(accountId);
+		if (!unionId) fail(409, "恢复失败: 该账号当前已在该跨平台ID下");
 
 		return {
 			accountId,
 			unionId,
-			lastUnionId: core.user.getLast(accountId),
+			lastUnionId: user.getLast(accountId),
 		};
 	},
 };
-
-/** 校验并取出 platform / id, 两者都必须是非空字符串 */
-function parseTarget(body: unknown): { platform: string; id: string } {
-	const { platform, id } = (body ?? {}) as { platform?: unknown; id?: unknown };
-	if (typeof platform !== "string" || !platform.trim()) {
-		throw { code: 400, err: "platform 必须是非空字符串" };
-	}
-	if (typeof id !== "string" || !id.trim()) {
-		throw { code: 400, err: "id 必须是非空字符串" };
-	}
-	return { platform: platform.trim(), id: id.trim() };
-}
 
 export default api;
