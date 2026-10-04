@@ -213,6 +213,13 @@ export class PluginManager {
 
 			// 启用插件
 			const context = PluginContextFactory.create(plugin, this.pluginExports, this.bot.core.services.exports);
+
+			// Hook 埋点: 插件启用之前, 可被服务插件取消
+			if (this.bot.core.hooks.dispatch("before.plugin.enable", plugin)) {
+				context.dispose();
+				throw new StateError(`插件 ${plugin.id} 启用被 Hook 取消`);
+			}
+
 			try {
 				await plugin.enable(context);
 			} catch (e) {

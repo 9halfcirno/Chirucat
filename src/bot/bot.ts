@@ -27,7 +27,11 @@ export class Bot extends EventEmitter {
 	name: string | null = null;
 	path: string;
 	message = new MessageHandler(this);
-	command = new CommandManager({});
+	/**
+	 * 指令管理器: 构造时注入 Core 的 Hook 总线, 用于在指令执行前分发埋点。
+	 * 不能用字段初始化器: 字段初始化早于构造函数体, 那时 `this.core` 尚未赋值。
+	 */
+	command: CommandManager;
 	plugin = new PluginManager(this);
 
 	/** 持久化启停状态(期望态) */
@@ -60,6 +64,7 @@ export class Bot extends EventEmitter {
 		this.path = config.path;
 		this.id = config.id;
 		this.name = config.name || null;
+		this.command = new CommandManager({ hookBus: this.core.hooks });
 		this.state = new BotStateManager(path.join(this.path, "state.json"));
 		this.settings = new SettingsDomain<BotSettings>(`bot:${this.id}`, {
 			definition: botSettings,
@@ -105,6 +110,12 @@ export class Bot extends EventEmitter {
 	 */
 	async start() {
 		if (this.running) return; // 幂等
+
+		// Hook 埋点: Bot 启动之前, 可被服务插件取消
+		if (this.core.hooks.dispatch("before.bot.enable", this)) {
+			this.logger.log(`Bot ${this.id} 启动被 Hook 取消`);
+			return;
+		}
 
 		await this.plugin.scan({ global: "plugins", bot: path.join(this.path, "plugins") });
 		await this.dropUnstartable(await this.plugin.syncState());

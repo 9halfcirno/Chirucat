@@ -1,12 +1,18 @@
 import { Message } from "../entity/message";
 import CommandParser from "./parser";
 import Logger from "../utils/logger";
+import type { HookBus } from "../hooks/bus";
 
 const logger = new Logger("CommandManager");
 import type { Command, CommandManagerOption } from "./types";
 
 export class CommandManager {
 	prefix: string = "/";
+
+	/**
+	 * Hook 总线; 未接入时为 undefined, 跳过 `before.command.handle` 分发。
+	 */
+	private readonly hookBus?: HookBus;
 
 	/**
 	 * 存储指令名 -> 所有指令对象
@@ -16,6 +22,9 @@ export class CommandManager {
 	constructor(option: CommandManagerOption) {
 		if (option.prefix) {
 			this.prefix = option.prefix;
+		}
+		if (option.hookBus) {
+			this.hookBus = option.hookBus;
 		}
 	}
 
@@ -60,9 +69,14 @@ export class CommandManager {
 			let params = args || CommandParser.parse(text, {
 				argStart: command.length
 			})
+			const msgArg = message instanceof Message ? message : null;
 			for (let com of coms) {
+				// Hook 埋点: 指令执行之前, 可被服务插件取消(跳过该指令处理函数)
+				if (this.hookBus?.dispatch("before.command.handle", { message: msgArg, command: com, args: params })) {
+					continue;
+				}
 				try {
-					com.handler(message instanceof Message ? message : null, params);
+					com.handler(msgArg, params);
 				} catch (e) {
 					logger.error(`Command execute error:`, e);
 				}

@@ -12,6 +12,7 @@ import type { PluginExports } from "../exports";
 import { PluginConfig } from "../contexts/apis/config";
 import { EventAPI } from "../contexts/apis/event";
 import { FileSystemAPI } from "../contexts/apis/fs";
+import { HooksAPI } from "./apis/hooks";
 import { KVStore } from "../contexts/apis/kv";
 import { MessageAPI } from "../contexts/apis/message";
 import type {
@@ -22,6 +23,7 @@ import type {
 	PluginEventFilter,
 	PluginEventObserver,
 	PluginFileSystemAPI,
+	PluginHookAPI,
 	PluginKVAPI,
 	PluginMessageAPI,
 	ReadonlyFsAPI,
@@ -58,6 +60,8 @@ export class ServiceContext {
 	message: PluginMessageAPI;
 	/** 事件过滤器与观察回调: 作用于事件传播本身, 而非消息处理 */
 	event: PluginEventAPI;
+	/** Hook 注册入口: 作用于框架内部流程节点(消息/指令/启停), 可取消动作 */
+	hook: PluginHookAPI;
 	fs: PluginFileSystemAPI;
 	/** 插件代码根目录的只读文件访问 */
 	plugin: ReadonlyFsAPI;
@@ -82,6 +86,9 @@ export class ServiceContext {
 	/** 事件过滤器与观察回调 (dispose 时清空) */
 	private _filters: PluginEventFilter[] = [];
 	private _observers: PluginEventObserver[] = [];
+
+	/** 本上下文注册的 Hook 注销函数 (dispose 时统一调用) */
+	private _hookDisposers: Array<() => void> = [];
 
 	private _commands = new Set<Command>();
 
@@ -114,6 +121,9 @@ export class ServiceContext {
 			(filter) => { this._filters.push(filter); },
 			(observer) => { this._observers.push(observer); },
 		);
+		this.hook = new HooksAPI(service.core.hooks, (dispose) => {
+			this._hookDisposers.push(dispose);
+		});
 
 		const storageRoot = path.resolve(root, "data", "services", this._manifest.id);
 		this.fs = new FileSystemAPI(storageRoot);
@@ -293,6 +303,15 @@ export class ServiceContext {
 		this._onMessageCallback = []; // 置空;
 		this._filters = [];
 		this._observers = [];
+		// 注销本上下文注册的 Hook: 不注销会让已卸载的服务继续干涉框架流程
+		for (const disposer of this._hookDisposers) {
+			try {
+				disposer();
+			} catch (e) {
+				this.logger.error("Service context dispose: 注销 Hook 失败:", e);
+			}
+		}
+		this._hookDisposers = [];
 		// 清理全局指令
 		for (const com of this._commands.values()) {
 			this._commandManager.unregister(com)

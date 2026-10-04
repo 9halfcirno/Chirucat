@@ -12,6 +12,8 @@
 - [消息处理](#消息处理)
   - [message对象](#message对象)
   - [command对象](#command对象)
+- [Hook](#hook)
+  - [hook对象](#hook对象)
 - [事件处理](#事件处理)
   - [event对象](#event对象)
 - [自带静态资源](#自带静态资源)
@@ -292,6 +294,52 @@ services/filter/public/page.js  -> 访问: /service/chirucat-filter/public/page.
 方法参照[普通上下文的 `command` 对象](./normal.md#command对象)。
 
 `exec(message)` 用全局指令表匹配消息; 传入纯文本时会以 `null` 作为回调的第一个参数(同普通上下文)。
+
+## Hook
+
+### hook对象
+
+**仅服务插件可用**。`ctx.event` 干预的是**事件传播本身**(实体构造之前), 而 `ctx.hook` 干预的是框架内部更细的流程节点 —— 消息处理、指令执行与各模块的启停, 并且可以**取消**后续动作。
+
+- `register(name: HookName, handler: (data) => void | { cancel: true }): () => void`: 注册某 hook 的处理器, 返回注销函数
+
+```js
+export default {
+	init(ctx) {
+		// 例: 一个简易的"冷却" —— 同一会话 10 秒内的消息一律不处理
+		const last = new Map();
+		ctx.hook.register("before.message.handle", (msg) => {
+			const now = Date.now();
+			const prev = last.get(msg.session.id) ?? 0;
+			if (now - prev < 10_000) return { cancel: true };
+			last.set(msg.session.id, now);
+		});
+
+		// 例: 拦截某个指令的执行
+		ctx.hook.register("before.command.handle", ({ message, command, args }) => {
+			if (command.name === "dangerous") return { cancel: true };
+		});
+	}
+};
+```
+
+可用的 hook 点:
+
+| Hook 名 | 触发时机 | 载体参数 | 取消后的后果 |
+| --- | --- | --- | --- |
+| `before.bot.enable` | `Bot` 启动之前 | `Bot` 实例 | 跳过该 Bot 的启动 |
+| `before.plugin.enable` | 插件启用之前 | `Plugin` 实例 | 跳过该插件的启用 |
+| `before.message.handle` | 消息处理之前 | `Message` 对象 | 整条消息不再处理: 不匹配指令、不触发任何插件的消息回调 |
+| `before.command.handle` | 指令处理之前 | `{ message, command, args }` | 不执行该指令的处理函数 |
+
+约定:
+
+- **取消是显式意图**: 只有明确返回 `{ cancel: true }` 才取消; 返回 `undefined` 或其他值一律放行;
+- **顺序执行**: 同一 hook 的处理器按注册顺序调用; 前一个取消后, 后面的处理器**不会再被调用**;
+- **错误隔离**: 处理器抛错时按放行处理并记录日志 —— 不能让一个出错的埋点使主流程无声中断;
+- 处理器随上下文释放自动注销(卸载、初始化失败都会触发), 不必自己在 `unload` 里注销;
+
+> `before.core.init` 未出现在列表: 只在核心初始化时会被分发, 而服务插件的生命周期短于核心, 所以永远不会被触发
 
 ## 事件处理
 

@@ -13,6 +13,8 @@ import sqlite from "better-sqlite3";
 import { UserProfileManager } from "./internal/user-profile";
 import { ServiceHost } from "./plugin/services/host";
 import { SettingsManager } from "./config/settings/manager";
+import { HookBus } from "./hooks/bus";
+import { StateError } from "./errors/state-error";
 import {
 	WEBUI_DOMAIN_ID,
 	WEBUI_SETTINGS_FILE,
@@ -51,6 +53,8 @@ export class Core {
 	services = new ServiceHost(this);
 	/** 设置域注册表: 框架各模块的可变配置挂在这里, 由 WebUI 设置页统一读写 */
 	settings = new SettingsManager();
+	/** Hook 总线: 框架埋点, 服务插件通过 ctx.hook 注册 handler 干涉流程 */
+	readonly hooks = new HookBus();
 
 	private internalDB: sqlite.Database | null = null;
 	user: UserManager | null = null;
@@ -75,6 +79,10 @@ export class Core {
 	}
 
 	async init() {
+		// Hook 埋点: 核心初始化之前, 可被服务插件(仅在热重启时)取消
+		if (this.hooks.dispatch("before.core.init", this)) {
+			throw new StateError("Core 初始化被 Hook 取消");
+		}
 
 		// 验证目录
 		await dirCheck(path.join(root, "data"));

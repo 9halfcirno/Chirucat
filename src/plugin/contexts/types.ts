@@ -1,6 +1,7 @@
 import type { MakeDirectoryOptions, RmOptions, Stats } from "node:fs";
 import type { Bot } from "../../bot/bot";
 import type { Command } from "../../command/types";
+import type { Hooks } from "../../hooks/types";
 import type { Message } from "../../entity/message";
 import type { ActionResponses, BotActions } from "../../protocols/actions";
 import type { BotEvents } from "../../protocols/events";
@@ -319,6 +320,25 @@ export type PluginEventFilter = (event: BotEvents, bot: Bot) => boolean;
 
 /** 事件观察回调: 事件通过全部过滤器后调用, 返回值不被等待 */
 export type PluginEventObserver = (event: BotEvents, bot: Bot) => unknown;
+
+/**
+ * Hook API (仅服务插件可用)
+ *
+ * 与 `PluginEventAPI` 的分工: `event` 作用于事件传播本身(实体构造之前),
+ * `hook` 作用于框架内部更细的流程节点 —— 消息处理、指令执行与各模块启停,
+ * 并可返回 `{ cancel: true }` 取消后续动作。见 `Hooks` 的 hook 名清单。
+ *
+ * 只开放 `register`: 分发由框架在埋点处自行调用, 不外放。
+ */
+export interface PluginHookAPI {
+	/**
+	 * 注册某 hook 的 handler
+	 * @param name hook 名
+	 * @param handler 处理器, 返回 `{ cancel: true }` 取消该动作
+	 * @returns 注销函数(随上下文释放自动注销)
+	 */
+	register<N extends keyof Hooks>(name: N, handler: Hooks[N]): () => void;
+}
 
 /**
  * 事件 API (仅服务插件可用)
