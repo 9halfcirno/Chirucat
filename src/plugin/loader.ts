@@ -8,12 +8,36 @@ const PLUGIN_MODULE_VAR = "__chirucat_plugin_module__";
 /**
  * 受限插件禁止导入的内置模块
  *
- * 按完整模块名列举: 曾经只列 "fs"/"node:fs", 于是 "fs/promises" 作为
- * 另一个内置模块被放行, 受限插件照样能拿到文件系统 —— 这里补齐子路径。
+ * 按完整模块名列举(含 `node:` 前缀的两种写法), 按风险分组。插件应有对应的
+ * 受控替代品, 而不是直接拿到宿主的原生能力:
+ *
+ * - 文件系统: 改用 `ctx.fs`(有根目录约束与越界保护)
+ * - 进程/系统: 能执行任意命令或读取宿主信息, 直接突破沙箱
+ * - 原始网络: 需要联网时用全局 `fetch` / `WebSocket`(Node 18+ 内置,
+ *   它们不是模块导入, 不经过这里)
+ * - 沙箱逃逸: worker / cluster 能另起执行环境, 绕过本列表
+ *
+ * 曾经只列 "fs"/"node:fs", 于是 "fs/promises" 作为另一个内置模块被放行,
+ * 受限插件照样能拿到文件系统; 同样的缺口存在于 child_process / os / net 等 ——
+ * `import { exec } from "child_process"` 之前是畅通的。
  */
 const REFUSE_MODULE = new Set([
+	// 文件系统
 	"fs", "node:fs",
 	"fs/promises", "node:fs/promises",
+	// 进程与系统信息
+	"child_process", "node:child_process",
+	"child_process/promises", "node:child_process/promises",
+	// 待评估 "os", "node:os",
+	// 原始网络
+	// 待评估 "net", "node:net",
+	"dgram", "node:dgram",
+	// 待评估 "http", "node:http",
+	// 待评估 "https", "node:https",
+	// 待评估 "tls", "node:tls",
+	// 沙箱逃逸
+	"worker_threads", "node:worker_threads",
+	"cluster", "node:cluster",
 ]);
 
 export type PluginLoaderOption = {
