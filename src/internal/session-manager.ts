@@ -1,7 +1,9 @@
 import sqlite from "better-sqlite3"
-import { uuid } from "../utils/uuid";
+import { v5 as uuidv5 } from "uuid";
 import type { SessionType } from "../protocols/session";
 import { StateError } from "../errors/state-error";
+
+const CHIRUCAT_SESSION_NS = "f9bf60af-5f65-47fc-9de1-ab24a22292a1";
 
 export type SessionPlatformInfo = {
 	/** 会话平台id */
@@ -40,26 +42,27 @@ export class SessionManager {
 	 */
 	get(platform: string, type: SessionType, id: string): string {
 		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
-		const getOrCreate = this.db.transaction((platformName: string, platformType: SessionType, platformId: string) => {
+		const getOrCreate = this.db.transaction((platformName: string, sessionType: SessionType, platformId: string) => {
 			// 1. 先尝试直接查询
 			const row = this.db.prepare(
 				'SELECT uuid FROM session_map WHERE platform_name = ? AND platform_type = ? AND platform_id = ?'
-			).get(platformName, platformType, platformId) as { uuid: string } | undefined;
+			).get(platformName, sessionType, platformId) as { uuid: string } | undefined;
 
 			if (row) {
 				return row.uuid;
 			}
 
 			// 2. 查询不到，生成新的 uuid 并插入
-			const newUuid = uuid();
+			let key = [platformName.length, platformName, sessionType, platformId.length, platformId].join(":CHIRUCAT:");
+			const newUuid = uuidv5(key, CHIRUCAT_SESSION_NS);
 			this.db.prepare(
 				'INSERT OR IGNORE INTO session_map (uuid, platform_name, platform_type, platform_id) VALUES (?, ?, ?, ?)'
-			).run(newUuid, platformName, platformType, platformId);
+			).run(newUuid, platformName, sessionType, platformId);
 
 			// 3. 再次查询返回（防止并发冲突时 INSERT 被 IGNORE 导致没拿对 uuid）
 			const result = this.db.prepare(
 				'SELECT uuid FROM session_map WHERE platform_name = ? AND platform_type = ? AND platform_id = ?'
-			).get(platformName, platformType, platformId) as { uuid: string };
+			).get(platformName, sessionType, platformId) as { uuid: string };
 
 			return result.uuid;
 		});

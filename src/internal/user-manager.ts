@@ -1,6 +1,10 @@
 import sqlite from "better-sqlite3";
-import { uuid } from "../utils/uuid";
+import { v5 as uuidv5 } from "uuid";
 import { StateError } from "../errors/state-error";
+
+// 魔法, 作为uuidv5的种子, 后续不应再动
+const CHIRUCAT_ACCOUNT_NS = "158971f7-750a-42fa-8f02-6776b3d4d377";
+const CHIRUCAT_UNION_NS = "7dbcc57a-7c27-44f1-8d33-e531ce50be86";
 
 export type UserPlatformInfo = {
 	/** 用户平台id */
@@ -109,7 +113,8 @@ export class UserManager {
 
 			if (!mapRow) {
 				// 不存在则创建账号 UUID，多进程环境下使用 OR IGNORE 容错
-				const newUuid = uuid();
+				let key = [platformName.length, platformName, platformId.length, platformId].join(":CHIRUCAT:");
+				const newUuid = uuidv5(key, CHIRUCAT_ACCOUNT_NS);
 				this.db.prepare(
 					'INSERT OR IGNORE INTO account_map (uuid, platform_name, platform_id) VALUES (?, ?, ?)'
 				).run(newUuid, platformName, platformId);
@@ -125,7 +130,7 @@ export class UserManager {
 			).get(mapRow.uuid) as { internal_id: string } | undefined;
 
 			if (!linkRow) {
-				const newInternalId = uuid();
+				const newInternalId = uuidv5(mapRow.uuid, CHIRUCAT_UNION_NS);
 				this.db.prepare(
 					'INSERT OR IGNORE INTO internal_map (uuid, internal_id) VALUES (?, ?)'
 				).run(mapRow.uuid, newInternalId);
@@ -143,7 +148,7 @@ export class UserManager {
 		let has = this.db.transaction((p: string, id: string) => {
 			let res = this.db.prepare(`
 				SELECT EXISTS (SELECT 1 FROM account_map WHERE platform_name = ? AND platform_id = ?) AS is_exist
-			`).get(platform, id) as { is_exist: boolean } | undefined;
+			`).get(p, id) as { is_exist: boolean } | undefined;
 
 			if (!res?.is_exist) return false;
 			return true;
@@ -212,7 +217,7 @@ export class UserManager {
 			}
 
 			// 分配一个新的内部组 ID，实现解绑; 原组 ID 记入 last_internal_id 以便回退
-			const newInternalId = uuid();
+			const newInternalId = uuidv5(accountUuid, CHIRUCAT_UNION_NS);
 			const result = this.db.prepare(
 				'UPDATE internal_map SET internal_id = ?, last_internal_id = ? WHERE uuid = ?'
 			).run(newInternalId, current.internal_id, accountUuid);
@@ -285,7 +290,7 @@ export class UserManager {
 		if (row) return row.internal_id;
 
 		// 账号尚无内部组 ID，分配一个新的内部组 ID 作为默认值
-		const defaultInternalId = uuid();
+		const defaultInternalId = uuidv5(accountId, CHIRUCAT_UNION_NS);
 		this.db.prepare(
 			'INSERT OR IGNORE INTO internal_map (uuid, internal_id) VALUES (?, ?)'
 		).run(accountId, defaultInternalId);

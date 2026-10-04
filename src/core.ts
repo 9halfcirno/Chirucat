@@ -19,18 +19,21 @@ import {
 	WEBUI_DOMAIN_ID,
 	WEBUI_SETTINGS_FILE,
 	webuiSettings,
+	initialWebUISettings,
 	type WebUISettings,
 } from "./config/settings/domains/webui";
 import {
 	CORE_DOMAIN_ID,
 	CORE_SETTINGS_FILE,
 	coreSettings,
+	initialCoreSettings,
 	type CoreSettings,
 } from "./config/settings/domains/core";
 import {
 	STATISTICS_DOMAIN_ID,
 	STATISTICS_SETTINGS_FILE,
 	statisticsSettings,
+	initialStatisticsSettings,
 	type StatisticsSettings,
 } from "./config/settings/domains/statistics";
 import {
@@ -96,6 +99,7 @@ export class Core {
 		this.internalDB = new sqlite(dbPath);
 		this.internalDB.pragma('journal_mode = WAL'); // 设为WAL, 因为需要抗高并发
 		this.internalDB.pragma('synchronous = NORMAL');
+		this.internalDB.pragma('foreign_keys = ON'); // 启用外键约束
 
 		this.user = new UserManager(this.internalDB);
 		this.session = new SessionManager(this.internalDB);
@@ -142,8 +146,9 @@ export class Core {
 	 * 装配框架自身的设置域并载入
 	 *
 	 * 值文件与 app.ts 启动时读的是同一份: 域负责**运行期**的读写、校验与变更通知,
-	 * 启动参数仍由 app.ts 组装 —— 它会先给缺失的 webui.json 生成随机密码,
-	 * 域随后读回那份密码, 所以不会退化成"无密码开放"。
+	 * 启动参数仍由 app.ts 组装。两边的"首次生成什么"共用各域导出的 initial*
+	 * 工厂(见下面的 onCreate), 因此无论谁先建文件内容都一致 —— 尤其保证
+	 * webui.json 永远不会以"空密码"的形态被创建出来。
 	 *
 	 * 单独成方法是为了能在不起 Bot 的情况下被检查脚本直接调用。
 	 */
@@ -152,6 +157,7 @@ export class Core {
 		this.settings.register<CoreSettings>(CORE_DOMAIN_ID, {
 			definition: coreSettings,
 			file: CORE_SETTINGS_FILE,
+			onCreate: initialCoreSettings,
 			apply: (values, changed) => this.applyCoreSettings(values, changed),
 			onLoad: (values) => this.applyCoreSettings(values, []),
 		});
@@ -160,6 +166,9 @@ export class Core {
 			this.settings.register<WebUISettings>(WEBUI_DOMAIN_ID, {
 				definition: webuiSettings,
 				file: WEBUI_SETTINGS_FILE,
+				// 定义里 password 的默认值是空串(运行期语义 = 不鉴权),
+				// 直接由它生成文件会得到裸奔的管理后台 —— 首次内容必须走随机密码
+				onCreate: initialWebUISettings,
 				apply: (values, changed) => this.applyWebUISettings(values, changed),
 				// 载入时什么都无需热应用: 服务器就是用这份配置构造出来的
 				onLoad: (values) => this.applyWebUISettings(values, []),
@@ -170,6 +179,7 @@ export class Core {
 		this.settings.register<StatisticsSettings>(STATISTICS_DOMAIN_ID, {
 			definition: statisticsSettings,
 			file: STATISTICS_SETTINGS_FILE,
+			onCreate: initialStatisticsSettings,
 			apply: (values) => { this.statistics?.updateOptions(values); },
 			onLoad: (values) => { this.statistics?.updateOptions(values); },
 		});
@@ -277,17 +287,26 @@ export class Core {
 	async close() {
 		if (this._disposed) return;
 		this._disposed = true;
-		this.internalDB?.close(); // 关闭数据库连接
-		await this.bot.dispose(); // 停止所有Bot, 并释放状态文件监听
-		await this.services.dispose(); // 卸载服务插件(基础设施最后倒, 与启动顺序相反)
-		await this.webui?.close() // 停止webui
-		this.webui = null; // 释放后不再把已停止的服务器给出去
-		this.settings.close(); // 释放设置域(含值文件监听)
-		this.statistics?.close(); // 冲刷统计缓冲并关闭数据库
-		this.statistics = null; // 置空后 ctx.core.statistics 才如实返回 null, 而不是已关闭的实例
-		this.session = null;
-		this.user = null;
-		this.profile = null;
+
+		// 与启动顺序相反地释放。某一步抛错不能让后面的步骤跟着被跳过
+		// (services 没卸载会留下运行中的定时器, webui 没关会占着端口),
+		// 也不能让外部拿到"半释放"的实例, 因此释放与清空分置 try/finally 两侧
+		try {
+			this.internalDB?.close(); // 关闭数据库连接
+			await this.bot.dispose(); // 停止所有Bot, 并释放状态文件监听
+			await this.services.dispose(); // 卸载服务插件(基础设施最后倒, 与启动顺序相反)
+			await this.webui?.close() // 停止webui
+			this.settings.close(); // 释放设置域(含值文件监听)
+			this.statistics?.close(); // 冲刷统计缓冲并关闭数据库
+		} catch (e) {
+			logger.error("关闭 Core 时出错:", e);
+		} finally {
+			this.webui = null; // 释放后不再把已停止的服务器给出去
+			this.statistics = null; // 置空后 ctx.core.statistics 才如实返回 null, 而不是已关闭的实例
+			this.session = null;
+			this.user = null;
+			this.profile = null;
+		}
 	}
 
 	/**
