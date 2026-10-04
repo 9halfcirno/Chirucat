@@ -1,6 +1,6 @@
 {
   "name": "chirucat",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "采用Core + Adapter架构的聊天机器人框架",
   "keywords": [
     "bot",
