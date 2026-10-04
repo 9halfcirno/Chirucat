@@ -7,7 +7,7 @@
 ## 事件流向
 
 ```
-平台 --推送--> 适配器 --dispatch--> Bot --创建实体--> 插件
+平台 --推送--> 适配器 --dispatch--> Bot --过滤--> Service插件 --创建实体--> 插件
 ```
 
 1. 平台向适配器推送动态(如收到新消息)
@@ -21,3 +21,4 @@
 
 - [`BotEvent`](event.md): 所有事件的通用结构
 - [`MessageCreateEvent`](message-create.md): 用户向会话发送了一条新消息, 对应事件类型`message.create`
+- [`MessageDeleteEvent`](message-delete.md): 用户撤回了一条消息, 对应事件类型`message.delete`

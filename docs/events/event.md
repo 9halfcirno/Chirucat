@@ -38,6 +38,7 @@ interface BotEvent {
 ```ts
 type BotEventMeta = {
 	adapter: string; // 适配器插件的id
+	bot: string; // 接收事件的bot的id
 }
 ```
 
