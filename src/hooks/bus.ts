@@ -1,5 +1,5 @@
 import Logger from "../utils/logger";
-import type { HookCallback, Hooks } from "./types";
+import type { HookBeforeResult, HookCallback, Hooks } from "./types";
 
 /**
  * Hook 总线
@@ -30,13 +30,29 @@ export class HookBus {
 		if (!handlers || handlers.length === 0) return false;
 
 		for (const handler of handlers) {
+			// handler 按约定是同步的 (见 HookCallback), 但插件完全可能写出 async 函数:
+			// 它 reject 时不会进到下面的 catch, 会冒成 unhandledRejection, 最终在
+			// app.ts 的兜底里把整个进程拖崩。这里把同步/异步两种返回分开处理:
+			let result: unknown;
 			try {
-				const result = handler(data);
-				if (result && typeof result === "object" && result.cancel === true) {
-					return true;
-				}
+				result = handler(data);
 			} catch (e) {
 				this.logger.error(`Hook ${String(name)} handler error:`, e);
+				continue;
+			}
+
+			// 异步 handler: 挂一个兜底把拒绝记成日志, 绝不让它拖崩进程;
+			// 异步返回的 cancel 在同步流程里无法兑现, 一并告警, 免得作者以为取消生效了
+			if (result && typeof (result as PromiseLike<unknown>).then === "function") {
+				(result as Promise<unknown>).catch((e) => {
+					this.logger.error(`Hook ${String(name)} async handler error:`, e);
+				});
+				this.logger.warn(`Hook ${String(name)} 的 handler 返回了 Promise: 异步取消不被支持, 已按放行处理`);
+				continue;
+			}
+
+			if (result && typeof result === "object" && (result as HookBeforeResult).cancel === true) {
+				return true;
 			}
 		}
 		return false;
