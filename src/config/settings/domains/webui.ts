@@ -1,5 +1,7 @@
 import path from "node:path";
 import { root } from "../../../utils/root";
+import { uuid } from "../../../utils/uuid";
+import { defaultsOf } from "../compile";
 import { defineSettings } from "../define";
 import type { SettingsDefinition } from "../types";
 
@@ -85,3 +87,22 @@ export const webuiSettings: SettingsDefinition = defineSettings({
 		},
 	},
 });
+
+/**
+ * 生成 WebUI 值文件的初始内容 (文件首次创建时用)
+ *
+ * 密码必须每次安装都不同(随机串), 因此不能写进定义的 `default` —— 定义里
+ * `password.default: ""` 表达的是**运行期**语义(空串 = 不鉴权, 见
+ * `WebUIServer.updateSecurity`), 与"首次该生成什么"是两回事。本函数是
+ * "首次生成"的唯一真相源: `app.ts` 启动建文件与设置域载入到缺失文件时
+ * 都调它, 谁先跑都只会落盘一份带随机密码的配置 —— 不会出现
+ * "空密码 + 全网卡监听"的裸奔管理后台。
+ *
+ * 其余字段直接取定义的默认值, 字段增减时只需改定义。
+ */
+export function initialWebUISettings(): WebUISettings {
+	return {
+		...defaultsOf(webuiSettings),
+		password: uuid().replaceAll("-", "").slice(0, 10),
+	} as WebUISettings;
+}

@@ -1,5 +1,6 @@
 import path from "node:path";
 import { root } from "../../../utils/root";
+import { defaultsOf } from "../compile";
 import { defineSettings } from "../define";
 import type { SettingsDefinition } from "../types";
 
@@ -68,3 +69,12 @@ export const statisticsSettings: SettingsDefinition = defineSettings({
 		},
 	},
 });
+
+/**
+ * 生成统计值文件的初始内容 (文件首次创建时用)
+ *
+ * 字段全部取定义的默认值, 与 `app.ts` 合用同一个真相源 —— 缺省值只在定义里维护一次。
+ */
+export function initialStatisticsSettings(): StatisticsSettings {
+	return { ...defaultsOf(statisticsSettings) } as StatisticsSettings;
+}

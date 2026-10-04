@@ -29,6 +29,14 @@ export interface SettingsDomainOptions<T extends Record<string, unknown> = Recor
 	apply?: (values: T, changed: string[]) => void | Promise<void>;
 	/** 载入完成后调用 (把值同步给运行中的对象) */
 	onLoad?: (values: T) => void | Promise<void>;
+	/**
+	 * 值文件缺失时生成初始内容的工厂; 缺省取定义的默认值
+	 *
+	 * 定义里的 `default` 表达的是"字段缺省值", 但有的文件首次生成需要一次性的
+	 * 随机内容(如 WebUI 的初始密码), 这种值写不进定义 —— 交给本钩子, 让
+	 * "首次生成什么"也只有定义这一个真相源。
+	 */
+	onCreate?: () => Record<string, unknown>;
 	/** 是否监听值文件的外部改动并自动重读, 默认 false */
 	watchFile?: boolean;
 	/** 注入存储 (测试用); 缺省新建一个绑定 file 的 JsonFileStore */
@@ -63,7 +71,7 @@ export class SettingsDomain<T extends Record<string, unknown> = Record<string, u
 			.map(([path]) => path);
 
 		this.store = options.store ?? new JsonFileStore<Record<string, unknown>>(options.file, {
-			defaults: () => defaultsOf(definition),
+			defaults: () => (options.onCreate ? options.onCreate() : defaultsOf(definition)),
 			normalize: (raw) => normalizeValues(definition, raw),
 		});
 	}

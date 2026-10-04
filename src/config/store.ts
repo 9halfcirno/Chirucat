@@ -68,7 +68,7 @@ export async function writeJsonFile(file: string, value: unknown): Promise<void>
 /* ---------- 选项 ---------- */
 
 export interface JsonFileStoreOptions<T> {
-	/** 文件缺失时用来生成初始内容的工厂 (返回值会被深拷贝后落盘) */
+	/** 文件缺失时用来生成初始内容的工厂 (返回值会被深拷贝后落盘, 除非 `createIfMissing` 为 false) */
 	defaults: () => T;
 	/** 把读到的原始 JSON 规范化成 T (丢弃未知键、补齐缺失键等); 缺省原样采用 */
 	normalize?: (raw: unknown) => T;
@@ -79,6 +79,13 @@ export interface JsonFileStoreOptions<T> {
 	 * - `fallback`: 记录警告并回落到默认值, 后续写入覆盖损坏内容 —— 可重建的状态文件适用
 	 */
 	onError?: "throw" | "fallback";
+	/**
+	 * 文件缺失时是否顺手创建它 (默认创建)
+	 *
+	 * 设置类文件(configs/*.json)首次启动就该生成; 状态文件(state.json)按需创建 ——
+	 * 缺失只表示"从未写过", 不该反过来给用户目录里添一份文件。
+	 */
+	createIfMissing?: boolean;
 	/** 外部改动的读盘合并窗口(ms), 默认 100 */
 	debounceMs?: number;
 }
@@ -93,10 +100,10 @@ type ReadResult =
  * 一份 JSON 值文件的存储层: 原子写 + 串行化 + 可选外部改动监听。
  *
  * 它只认识"文件"和"值", 不认识控件定义与设置项语义 —— 因此
- * `ConfigManager`(schema 驱动) 与 `SettingsManager`(定义驱动) 可以共用同一套底座,
- * 而不是各自再写一份读写与落盘。
+ * `ConfigManager`(schema 驱动) / `SettingsManager`(定义驱动) / 两个状态管理器
+ * (Bot 与服务插件的期望态) 都共用同一套底座, 而不是各自再写一份读写与落盘。
  *
- * 三条契约(与 BotStateManager / ServiceStateManager 对齐):
+ * 三条契约:
  * 1. 写入一律经过本类: 原子写 + 串行化, 一次改动只落一次盘, 并发写不会交错
  * 2. `commit` 的期约在**落盘完成后**才 resolve (失败则 reject), 内存态不回滚
  * 3. `startWatching()` 后, 外部(手工编辑)改动会被重读并通知监听者;
@@ -151,6 +158,16 @@ export class JsonFileStore<T> {
 			if (this.revision !== expected) return cloneValue(this.value);
 
 			if (result.kind === "missing") {
+				// 状态文件按需创建: 缺失时只回落到默认值, 不主动落盘
+				if (this.options.createIfMissing === false) {
+					const fresh = cloneValue(this.options.defaults());
+					// 内容无变化时不推进版本, 与下面读到现成文件时的判定一致
+					if (deepEqual(this.value, fresh)) return cloneValue(this.value);
+					this.value = fresh;
+					this.revision++;
+					return cloneValue(this.value);
+				}
+
 				const fresh = cloneValue(this.options.defaults());
 				await writeJsonFile(file, fresh);
 
@@ -172,9 +189,17 @@ export class JsonFileStore<T> {
 				return cloneValue(this.value);
 			}
 
-			const fresh = this.options.normalize
-				? this.options.normalize(result.raw)
-				: (result.raw as T);
+			// 规范化也可能抛错(结构完全对不上定义): 与解析失败同等处理
+			let fresh: T;
+			try {
+				fresh = this.options.normalize
+					? this.options.normalize(result.raw)
+					: (result.raw as T);
+			} catch (e) {
+				if (this.options.onError !== "fallback") throw e;
+				logger.warn(`值文件规范化失败, 回落默认值: ${file}`);
+				fresh = cloneValue(this.options.defaults());
+			}
 
 			// 内容无变化时不推进版本、不替换内存态, 便于外部监听的变更判定
 			if (deepEqual(this.value, fresh)) return cloneValue(this.value);

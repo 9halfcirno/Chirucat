@@ -4,16 +4,24 @@ import Logger from "./utils/logger";
 import { root } from "./utils/root";
 import { readJSONOrCreate } from "./utils/readJSON";
 import type { CoreOption } from "./types";
-import { uuid } from "./utils/uuid";
 import type { WebUIServerOptions } from "./webui/server/server";
+import { CORE_SETTINGS_FILE, initialCoreSettings } from "./config/settings/domains/core";
+import { WEBUI_SETTINGS_FILE, initialWebUISettings } from "./config/settings/domains/webui";
+import {
+	STATISTICS_SETTINGS_FILE,
+	initialStatisticsSettings,
+} from "./config/settings/domains/statistics";
 
 const logger = new Logger("App");
 
-/** 全局配置文件目录 */
-const CONFIGS_DIR = path.join(root, "configs");
-
 /** 关闭核心的超时时间(ms):超过后视为关闭失败,强制退出 */
 const CLOSE_TIMEOUT = 10_000;
+
+/** 绝对路径转成相对仓库根的显示路径, 日志里给人看的 */
+function displayPath(file: string): string {
+	const rel = path.relative(root, file);
+	return process.platform === "win32" ? rel.replaceAll("\\", "/") : rel;
+}
 
 let core: Core | null = null;
 let exiting = false;
@@ -31,24 +39,21 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
 
 /**
  * 加载并组装核心配置选项
+ *
+ * 各值文件"首次生成什么"都取自对应设置域导出的 initial* 工厂 —— 定义与首次
+ * 默认值只有一处真相源, 不会出现 app.ts 与设置域各写一份、漂移后"谁先跑
+ * 文件就长成谁的样子"(webui.json 的密码就曾因此一边随机、一边为空)。
  */
 export async function loadOptions(): Promise<CoreOption> {
-	const coreRes = await readJSONOrCreate<CoreOption>(path.join(CONFIGS_DIR, "core.json"), { webui: true });
-	if (coreRes.created) logger.log("配置文件缺失, 已生成默认配置: configs/core.json");
+	const coreRes = await readJSONOrCreate<CoreOption>(CORE_SETTINGS_FILE, initialCoreSettings());
+	if (coreRes.created) logger.log(`配置文件缺失, 已生成默认配置: ${displayPath(CORE_SETTINGS_FILE)}`);
 	const coreOption = coreRes.config;
 
 	if (coreOption.webui !== false) {
 		// webui 未显式关闭时, 把 webui.json 作为 WebUI 子配置一并传入
-		const webuiRes = await readJSONOrCreate<WebUIServerOptions>(path.join(CONFIGS_DIR, "webui.json"), {
-			password: uuid().replaceAll("-", "").slice(0, 10), // 默认生成随机字符串
-			port: 7636,
-			host: "127.0.0.1",
-			frontConfig: {
-				enableTestLab: false // 默认关闭test页面
-			}
-		});
+		const webuiRes = await readJSONOrCreate<WebUIServerOptions>(WEBUI_SETTINGS_FILE, initialWebUISettings());
 		if (webuiRes.created) {
-			logger.log("WebUI配置文件缺失, 已生成默认配置: configs/webui.json");
+			logger.log(`WebUI配置文件缺失, 已生成默认配置: ${displayPath(WEBUI_SETTINGS_FILE)}`);
 			logger.log(`=======================`);
 			logger.log(`已生成初始密码: ${webuiRes.config.password}`);
 			logger.log(`=======================`);
@@ -58,17 +63,12 @@ export async function loadOptions(): Promise<CoreOption> {
 
 	if (coreOption.statistics !== false) {
 		// statistics 未显式关闭时, 把 statistics.json 作为子配置一并传入
-		const statsRes = await readJSONOrCreate(path.join(CONFIGS_DIR, "statistics.json"), {
-			flushIntervalMs: 5000,
-			bufferSize: 500,
-			detailRetentionDays: 7,
-			hourlyRetentionDays: 30,
-		});
-		if (statsRes.created) logger.log("配置文件缺失, 已生成默认配置: configs/statistics.json");
+		const statsRes = await readJSONOrCreate(STATISTICS_SETTINGS_FILE, initialStatisticsSettings());
+		if (statsRes.created) logger.log(`配置文件缺失, 已生成默认配置: ${displayPath(STATISTICS_SETTINGS_FILE)}`);
 		coreOption.statisticsOption = statsRes.config;
 	}
 
-	logger.log(`已加载配置: configs/core.json${coreOption.webuiOption ? ", configs/webui.json" : ""}`);
+	logger.log(`已加载配置: ${displayPath(CORE_SETTINGS_FILE)}${coreOption.webuiOption ? `, ${displayPath(WEBUI_SETTINGS_FILE)}` : ""}`);
 	return coreOption;
 }
 

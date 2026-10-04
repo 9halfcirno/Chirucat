@@ -1,5 +1,6 @@
 import path from "node:path";
 import { root } from "../../../utils/root";
+import { defaultsOf } from "../compile";
 import { defineSettings } from "../define";
 import type { SettingsDefinition } from "../types";
 
@@ -44,3 +45,13 @@ export const coreSettings: SettingsDefinition = defineSettings({
 		},
 	},
 });
+
+/**
+ * 生成 Core 值文件的初始内容 (文件首次创建时用)
+ *
+ * 字段全部取定义的默认值 —— 内容只有这一个真相源, `app.ts` 与设置域
+ * 载入到缺失文件时都调它, 两边建出来的文件不会不一样。
+ */
+export function initialCoreSettings(): CoreSettings {
+	return { ...defaultsOf(coreSettings) } as CoreSettings;
+}

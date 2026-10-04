@@ -1,7 +1,8 @@
-import { readFile, writeFile } from "fs/promises";
+import { readFile } from "fs/promises";
 import path from "path";
 import json5 from "json5";
 import { dirCheck } from "./dir-check";
+import { atomicWriteJson } from "./writeFile";
 
 export async function readJSON(file: string) {
 	return json5.parse(await readFile(file, "utf-8"))
@@ -18,8 +19,10 @@ export async function readJSONOrCreate<T>(file: string, defaults: T): Promise<{ 
 	} catch (err) {
 		if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
 
+		// 走与 JsonFileStore 同一套原子写: 首次生成也不会留下半截文件;
+		// 缩进(2 空格)也与设置域落盘的一致, 免得同一文件两种排版
 		await dirCheck(path.dirname(file));
-		await writeFile(file, JSON.stringify(defaults, null, "\t") + "\n", "utf-8");
+		await atomicWriteJson(file, defaults);
 		return { config: defaults, created: true };
 	}
 }
