@@ -24,7 +24,8 @@
     "check:hooks-e2e": "tsx scripts/check-hooks-e2e.ts",
     "check:settings": "tsx scripts/check-settings.ts && tsx scripts/check-settings-api.ts",
     "check:webui-spa": "node scripts/check-webui-spa.mjs",
-    "check:types": "tsc -p tsconfig.check.json --noEmit"
+    "check:types": "tsc -p tsconfig.check.json --noEmit",
+    "check:plugins": "tsc -p tsconfig.plugins.json --noEmit"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",

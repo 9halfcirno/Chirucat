@@ -22,7 +22,7 @@ import type {
 type RetryPolicy = { delay: number; timeout: number };
 
 /** 分片与它在原文件中的切片 */
-export type UploadChunk = { part: QQUploadPart; data: Buffer };
+type UploadChunk = { part: QQUploadPart; data: Buffer };
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -35,16 +35,14 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * **缺一片就整个失败**: 若有某片信息不可用而"跳过", 后续所有分片的偏移都会错位,
  * 等于把错误的字节上传到平台上, 而合并还会成功 —— 那是最难查的一类问题。
  *
- * 末片可能小于 block_size, 也可能被平台按默认分块大小上报, 因此末尾统一截断到文件长度。
- *
- * 纯函数, 不碰网络, 因此直接导出给 `scripts/check-adapters.ts` 覆盖 ——
- * 这一段是分片上传里最容易算错的地方, 不该只靠联调发现问题。
+ * 末片可能小于 block_size, 也可能被平台按默认分块大小上报, 因此末尾统一截断到文件长度;
+ * 文件已切完后出现的尾随分片一律忽略, 不让无关的残缺分片搞挂一次本来完整的上传。
  *
  * @param parts 服务端下发的分片表
  * @param bytes 待上传的完整文件
  * @throws {QQApiError} 分片表缺少可用信息, 或分片总长不足文件长度时
  */
-export function sliceChunks(parts: QQUploadPart[] | undefined, bytes: Buffer): UploadChunk[] {
+function sliceChunks(parts: QQUploadPart[] | undefined, bytes: Buffer): UploadChunk[] {
 	if (!Array.isArray(parts) || parts.length === 0) return [];
 
 	const chunks: UploadChunk[] = [];

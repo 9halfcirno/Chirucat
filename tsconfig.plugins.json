@@ -1,0 +1,15 @@
+{
+	// 插件(含适配器)的类型检查
+	//
+	// 插件代码不在 tsconfig.check.json 的检查范围内(那里只覆盖 src/**),
+	// 于是适配器这类"重度依赖框架协议类型"的代码长期没有编译期约束 ——
+	// 协议改了(如 MessageBlock 拆成收发两侧)插件却不会报错。
+	//
+	// 用法: tsc -p tsconfig.plugins.json --noEmit  (或 npm run check:plugins)
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"types": ["node"]
+	},
+	"include": ["plugins/**/*.ts"]
+}

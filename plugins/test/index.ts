@@ -52,7 +52,12 @@ export default {
 					if (!features.includes("media")) return;
 
 					let url = ctx.config.get("mediaUrl." + args[0]) as string;
-					if (!url) return msg.reply(`无法发送文件, 因为没有配置URL`)
+					if (!url) {
+						let buffer = await ctx.plugin.read("assets/test.png") as Buffer;
+						let res = await msg.reply([{ type: "image", buffer }]);
+						if (res.success === false) return msg.reply(`本地图片(Buffer)发送失败: ${res.code || "NULL_CODE"}: ${res.error}`)
+						return msg.reply(`图片分片发送完成!\nmsg_id: ${res.id}`);
+					}
 					
 					let res = await msg.reply([{ type: args[0] as any, url: url }])
 
