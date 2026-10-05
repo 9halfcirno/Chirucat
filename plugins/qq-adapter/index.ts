@@ -1,382 +1,131 @@
 import type { AdapterContext } from "../../src/plugin/contexts/adapter-context";
 import { AccessTokenManager } from "./access";
-import { ActionSender } from "./action";
-import { BASE_URL } from "./config";
-import { Handler } from "./handler";
-
-// -------------------- 状态变量 --------------------
-let ws: WebSocket | null = null;
-let hbInterval = 30000; // 心跳间隔（毫秒）
-let hbSeq: number | null = null; // 最新序列号 s
-let sessionId: string | null = null; // 会话 ID（用于 Resume）
-
-let hbTimer: NodeJS.Timeout | null = null; // 心跳周期定时器
-let hbAckTimeoutTimer: NodeJS.Timeout | null = null; // 心跳响应超时定时器
-let reconnectTimer: NodeJS.Timeout | null = null;
-
-let reconnectAttempts = 0;
-let isManualClose = false; // 区分主动卸载与被动断连
-
-let ctx: AdapterContext | null = null;
-let handler: Handler | null = null;
-let accessManager: AccessTokenManager | null = null;
-let sender: ActionSender | null = null;
-
-// -------------------- 工具函数 --------------------
-function clearAllTimers() {
-	if (hbTimer) {
-		clearInterval(hbTimer);
-		hbTimer = null;
-	}
-	if (hbAckTimeoutTimer) {
-		clearTimeout(hbAckTimeoutTimer);
-		hbAckTimeoutTimer = null;
-	}
-	if (reconnectTimer) {
-		clearTimeout(reconnectTimer);
-		reconnectTimer = null;
-	}
-}
+import { ActionRouter, registerQQActions, SeqAllocator, type QQActionDeps } from "./actions";
+import { QQApi } from "./api";
+import { INTENTS, PLATFORM } from "./config";
+import { QQConnection } from "./connection";
+import { buildQQEvent } from "./events";
+import type { QQWebSocketPayload } from "./types";
+import { MediaUploader } from "./uploader";
 
 /**
- * 安全关闭 WebSocket 连接并解绑事件
+ * QQ 适配器
+ *
+ * 分工:
+ * - {@link QQConnection} 管协议层(握手/心跳/重连)
+ * - {@link buildQQEvent} 管平台 -> 框架的事件转换
+ * - {@link ActionRouter} + `actions` 管框架 -> 平台的接口调用
+ *
+ * 这里只做装配与生命周期, 因此新增能力时优先改对应模块, 而不是往本文件堆逻辑。
  */
-function closeWebSocket(code = 1000, reason = "Closing") {
-	clearAllTimers();
-	if (ws) {
-		const currentWs = ws;
-		ws = null; // 立即置空，防止重入或后续逻辑误用
-		currentWs.onopen = null;
-		currentWs.onclose = null;
-		currentWs.onerror = null;
-		currentWs.onmessage = null;
+
+/** 从配置读一个字符串项 */
+function readString(ctx: AdapterContext, key: string): string {
+	const value = ctx.config.get(key);
+	return typeof value === "string" ? value.trim() : "";
+}
+
+class QQAdapter {
+	private readonly ctx: AdapterContext;
+	private readonly access: AccessTokenManager;
+	private readonly api: QQApi;
+	private readonly uploader: MediaUploader;
+	private readonly router: ActionRouter;
+	private readonly actionDeps: QQActionDeps;
+	private readonly connection: QQConnection;
+
+	constructor(ctx: AdapterContext) {
+		this.ctx = ctx;
+		const logger = ctx.logger;
+
+		this.access = new AccessTokenManager(logger, readString(ctx, "app_id"), readString(ctx, "secret"));
+		this.api = new QQApi(this.access, logger);
+		this.uploader = new MediaUploader(this.api, logger);
+		this.router = registerQQActions(new ActionRouter(logger));
+		this.actionDeps = {
+			ctx,
+			api: this.api,
+			uploader: this.uploader,
+			logger,
+			seq: new SeqAllocator()
+		};
+
+		this.connection = new QQConnection({
+			logger,
+			intents: INTENTS,
+			getToken: () => this.access.get(),
+			onEvent: (payload) => this.handleEvent(payload)
+		});
+	}
+
+	/** 注册动作处理器与配置监听, 并开始连接 */
+	start(): void {
+		// 处理器必须返回响应对象; ActionRouter 已保证任何路径都给出响应
+		this.ctx.bot.onAction((action, extra) => this.router.dispatch(action, extra, this.actionDeps));
+
+		this.ctx.config.watch((key) => {
+			void this.onConfigChange(key);
+		});
+
+		if (!readString(this.ctx, "app_id") || !readString(this.ctx, "secret")) {
+			this.ctx.logger.error("QQ适配器未配置 AppID / Secret, 配置后会自动连接");
+			return;
+		}
+
+		this.connection.start();
+	}
+
+	/** 卸载: 关闭连接并清理全部定时器 */
+	stop(): void {
+		this.connection.stop();
+	}
+
+	/** 平台事件 -> 框架事件 -> 派发 */
+	private handleEvent(payload: QQWebSocketPayload): void {
+		const event = buildQQEvent(payload, {
+			resolveUserId: (platformId) => this.ctx.user.get(PLATFORM, platformId),
+			resolveSessionId: (type, platformId) => this.ctx.session.get(PLATFORM, type, platformId)
+		});
+
+		// 未知事件类型或缺少关键字段: 不派发, 也不报错(平台会持续下发各类事件)
+		if (!event) return;
+		this.ctx.bot.dispatch(event);
+	}
+
+	/**
+	 * 凭据变更后重建连接
+	 *
+	 * 必须走 restart 而不是普通重连: 旧 session 属于旧 Bot, 继续 RESUME 会一直被拒。
+	 */
+	private async onConfigChange(key: string): Promise<void> {
+		if (key !== "app_id" && key !== "secret") return;
+
+		const appId = readString(this.ctx, "app_id");
+		const secret = readString(this.ctx, "secret");
+		if (!appId || !secret) return;
+
 		try {
-			if (currentWs.readyState === WebSocket.OPEN || currentWs.readyState === WebSocket.CONNECTING) {
-				currentWs.close(code, reason);
-			}
-		} catch (_) { }
+			await this.access.reset(appId, secret);
+			await this.connection.restart();
+		} catch (e) {
+			// 配置写错不该变成未捕获的 rejection: 记录下来, 交给重连调度再试
+			const msg = e instanceof Error ? e.message : String(e);
+			this.ctx.logger.error(`配置变更后重建连接失败: ${msg}`);
+		}
 	}
 }
 
-// 计算重连延迟（指数退避，最大 30s）
-function getReconnectDelay(): number {
-	const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-	reconnectAttempts++;
-	return delay;
-}
+/** 当前活动的适配器实例; 插件模块是单例, init/unload 成对调用 */
+let adapter: QQAdapter | null = null;
 
-// -------------------- 核心连接函数 --------------------
-async function connect() {
-	if (!ctx) {
-		console.error("Context 未初始化");
-		return;
-	}
-
-	// 清理旧连接与定时器
-	closeWebSocket();
-
-	// 获取最新 token
-	if (!accessManager) {
-		accessManager = new AccessTokenManager(ctx, ctx.config.get("app_id"), ctx.config.get("secret"));
-	}
-	let token: string | null;
-	try {
-		token = await accessManager.get();
-	} catch (e: any) {
-		// AccessTokenManager 取不到 token 时会抛(refresh 内部 throw e)。
-		// 这里绝不能让异常冒到 init: 那会让整个插件加载失败, 被框架当作"起不来"
-		// 从期望启用列表里剔除。记录后按重连调度再试即可。
-		ctx.logger.error(`获取 AccessToken 异常: ${e?.message || e}`);
-		scheduleReconnect();
-		return;
-	}
-	if (!token) {
-		ctx.logger.error("获取 AccessToken 失败，停止重连");
-		return;
-	}
-
-	// 获取 WebSocket 网关地址
-	let wsInfo: { url: string; message?: string };
-	try {
-		const resp = await fetch(`${BASE_URL}/gateway`, {
-			headers: { Authorization: `QQBot ${token}` }
-		});
-		wsInfo = await resp.json();
-		if (!wsInfo.url) {
-			throw new Error(wsInfo.message || "未能获取有效 Gateway URL");
-		}
-	} catch (e: any) {
-		ctx.logger.error(`获取网关地址失败: ${e.message}`);
-		scheduleReconnect();
-		return;
-	}
-
-	try {
-		const socket = new WebSocket(wsInfo.url);
-		ws = socket;
-
-		socket.onopen = () => {
-			ctx?.logger.log("WebSocket 已建立，等待 Op 10 Hello...");
-			reconnectAttempts = 0;
-		};
-
-		socket.onerror = (e) => {
-			ctx?.logger.error(`WebSocket 发生错误: ${e}`);
-		};
-
-		socket.onclose = (e) => {
-			ctx?.logger.warn(`WebSocket 关闭: code=${e.code}, reason=${e.reason}`);
-			closeWebSocket();
-
-			if (!isManualClose) {
-				scheduleReconnect();
-			}
-		};
-
-		socket.onmessage = (event) => {
-			try {
-				const data = JSON.parse(event.data);
-				handleWebSocketMessage(data, token);
-			} catch (e: any) {
-				ctx?.logger.error(`解析 WebSocket 消息失败: ${e.message}`);
-			}
-		};
-	} catch (e: any) {
-		ctx.logger.error(`创建 WebSocket 实例失败: ${e.message}`);
-		scheduleReconnect();
-	}
-}
-
-// -------------------- WebSocket 消息处理 --------------------
-function handleWebSocketMessage(data: any, token: string) {
-	if (!ctx || !ws) return;
-
-	const { op, d, t, s } = data;
-
-	// 更新序列号 s
-	if (s !== undefined && s !== null) {
-		hbSeq = s;
-	}
-
-	// ---- Op 10: Hello（握手 & 决定鉴权方式） ----
-	if (op === 10) {
-		hbInterval = d?.heartbeat_interval || 30000;
-		ctx.logger.log(`收到 Op 10，心跳间隔 ${hbInterval}ms`);
-
-		// 启动心跳定时循环（不要在这里立即发 sendHeartbeat）
-		startHeartbeatLoop();
-
-		// 判别是进行会话恢复 (Resume) 还是全新鉴权 (Identify)
-		if (sessionId && hbSeq !== null) {
-			ctx.logger.log(`尝试会话恢复 (Resume): session_id=${sessionId}, seq=${hbSeq}`);
-			const resumePayload = {
-				op: 6,
-				d: {
-					token: `QQBot ${token}`,
-					session_id: sessionId,
-					seq: hbSeq
-				}
-			};
-			ws.send(JSON.stringify(resumePayload));
-		} else {
-			ctx.logger.log("发起全新的鉴权 (Identify)");
-			const identifyPayload = {
-				op: 2,
-				d: {
-					token: `QQBot ${token}`,
-					intents: 1 << 25, // GROUP_AND_C2C_EVENT
-					shard: [0, 1],
-					properties: {
-						$framework: "chirucat"
-					}
-				}
-			};
-			ws.send(JSON.stringify(identifyPayload));
-		}
-		return;
-	}
-
-	// ---- Op 0: 事件推送 ----
-	if (op === 0) {
-		if (t === "READY") {
-			sessionId = d?.session_id || null;
-			ctx.logger.log(`鉴权成功 (READY)，Session ID: ${sessionId}`);
-			return;
-		}
-
-		if (t === "RESUMED") {
-			ctx.logger.log("会话恢复成功 (RESUMED)，继续接收事件");
-			return;
-		}
-
-		// 普通业务事件
-		if (handler) {
-			handler.handle(data);
-		} else {
-			ctx.logger.warn("Handler 未初始化，忽略事件");
-		}
-		return;
-	}
-
-	// ---- Op 11: 心跳 ACK ----
-	if (op === 11) {
-		ctx.logger.debug("收到心跳响应 (Op 11)");
-		// 收到响应，清除超时定时器
-		if (hbAckTimeoutTimer) {
-			clearTimeout(hbAckTimeoutTimer);
-			hbAckTimeoutTimer = null;
-		}
-		return;
-	}
-
-	// ---- Op 7: 服务端要求重连 ----
-	if (op === 7) {
-		ctx.logger.warn("收到 Op 7，服务端要求重连。立即断开并恢复会话...");
-		// 保留 sessionId 和 hbSeq 用于 Resume，立即主动断开并重新连接
-		closeWebSocket();
-		scheduleReconnect(0); // 立即重连
-		return;
-	}
-
-	// ---- Op 9: 会话无效 ----
-	if (op === 9) {
-		const canResume = d === true;
-		ctx.logger.warn(`收到 Op 9 (Invalid Session)，能否 Resume: ${canResume}`);
-		if (!canResume) {
-			// 无法 Resume，重置 session 状态以触发重新 Identify
-			sessionId = null;
-			hbSeq = null;
-		}
-		closeWebSocket();
-		scheduleReconnect(1000);
-		return;
-	}
-
-	// ---- Op 1: 服务端主动索要心跳 ----
-	if (op === 1) {
-		ctx.logger.log("收到 Op 1，服务端主动请求心跳，立即回复");
-		sendHeartbeat();
-		return;
-	}
-}
-
-// -------------------- 心跳管理 --------------------
-function startHeartbeatLoop() {
-	if (hbTimer) clearInterval(hbTimer);
-	if (hbAckTimeoutTimer) {
-		clearTimeout(hbAckTimeoutTimer);
-		hbAckTimeoutTimer = null;
-	}
-
-	// 仅按间隔定时发送，删掉之前的立即 sendHeartbeat()
-	hbTimer = setInterval(() => {
-		sendHeartbeat();
-	}, hbInterval);
-}
-
-function sendHeartbeat() {
-	if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-	const payload = JSON.stringify({
-		op: 1,
-		d: hbSeq
-	});
-	ws.send(payload);
-	ctx?.logger.debug(`发送心跳 (Op 1), seq=${hbSeq}`);
-
-	// 如果在上一个心跳周期未收到 ACK 且超时定时器还在，不重复覆盖
-	if (!hbAckTimeoutTimer) {
-		// 设置 10 秒超时判定（如果 10 秒内未收到 Op 11 则判定断线）
-		hbAckTimeoutTimer = setTimeout(() => {
-			ctx?.logger.error("心跳响应超时 (未收到 Op 11)，主动断开重连");
-			closeWebSocket();
-			scheduleReconnect(0);
-		}, 10000);
-	}
-}
-
-// -------------------- 重连调度 --------------------
-function scheduleReconnect(customDelay?: number) {
-	if (reconnectTimer || isManualClose) return;
-
-	const delay = customDelay !== undefined ? customDelay : getReconnectDelay();
-	ctx?.logger.log(`计划 ${delay}ms 后尝试连接 (第 ${reconnectAttempts} 次)`);
-
-	reconnectTimer = setTimeout(() => {
-		reconnectTimer = null;
-		connect();
-	}, delay);
-}
-
-// -------------------- 导出插件接口 --------------------
 export default {
-	async init(context: AdapterContext) {
-		ctx = context;
-		isManualClose = false;
-		handler = new Handler(context);
-		accessManager = new AccessTokenManager(context, ctx.config.get("app_id") ?? "", ctx.config.get("secret") ?? "");
-		sender = new ActionSender(context, accessManager);
-
-		// Action 处理器必须返回响应: 除了 send 内部可预期的失败, 任何异常也要转成失败响应,
-		// 否则 msg.reply() 会 reject, 调用方拿不到响应对象(也看不到框架的未处理告警)。
-		context.bot.onAction(async (action, extra) => {
-			try {
-				return await sender!.send(action, extra);
-			} catch (e) {
-				const msg = e instanceof Error ? e.message : String(e);
-				context.logger.error(`处理Action ${action.type} 时异常: ${msg}`);
-				return {
-					success: false,
-					error: msg,
-					code: "ADAPTER_ERROR"
-				};
-			}
-		});
-
-		ctx.config.watch(async (key) => {
-			if (key !== "app_id" && key !== "secret") return;
-			if (!ctx!.config.get("app_id") || !ctx!.config.get("secret")) return;
-
-			try {
-				await accessManager!.refreshConfig(
-					ctx!.config.get("app_id"),
-					ctx!.config.get("secret")
-				);
-			} catch (e: any) {
-				// 配置改错不该变成未捕获的 rejection: 记录后交给下面的 connect 去重试
-				ctx!.logger.error(`配置变更后刷新 AccessToken 失败: ${e?.message || e}`);
-			}
-
-			// 配置变更，清空会话并完全重建
-			sessionId = null;
-			hbSeq = null;
-			reconnectAttempts = 0;
-			closeWebSocket();
-			await connect();
-		});
-
-		if (!ctx.config.get("app_id") || !ctx.config.get("secret")) {
-			ctx.logger.error("QQ适配器未配置 AppID / Secret，配置后会自动连接");
-			return;
-		}
-
-		reconnectAttempts = 0;
-		await connect();
+	async init(ctx: AdapterContext) {
+		adapter = new QQAdapter(ctx);
+		adapter.start();
 	},
 
-	async unload(context: AdapterContext) {
-		isManualClose = true;
-		clearAllTimers(); // 清理所有心跳和重连定时器
-		closeWebSocket(); // 关闭 WebSocket 并解绑事件
-
-		// 重置全局引用
-		ws = null;
-		handler = null;
-		accessManager = null;
-		sender = null;
-		ctx = null;
-		hbSeq = null;
-		sessionId = null;
-		reconnectAttempts = 0;
+	async unload() {
+		adapter?.stop();
+		adapter = null;
 	}
 };

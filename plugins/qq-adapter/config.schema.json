@@ -1,5 +1,5 @@
 {
-	"$schema": "../../../../src/config/schema.json",
+	"$schema": "../../src/config/schema.json",
 	"controls": [
 		{
 			"type": "input",
