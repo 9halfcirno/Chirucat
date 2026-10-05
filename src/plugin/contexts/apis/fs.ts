@@ -20,7 +20,9 @@ export class FileSystemAPI implements PluginFileSystemAPI {
 		this._writable = options.writable ?? true;
 	}
 
-	async read(filePath: string, encoding: BufferEncoding): Promise<string> {
+	read(path: string, encoding: BufferEncoding): Promise<string>;
+	read(path: string): Promise<Buffer | NonSharedBuffer>;
+	async read(filePath: string, encoding?: BufferEncoding): Promise<string | Buffer | NonSharedBuffer> {
 		return fs.readFile(this.resolve(filePath), encoding);
 	}
 

@@ -73,6 +73,7 @@ export interface PluginFileSystemAPI {
 	 * @param encoding 解码方式
 	 */
 	read(path: string, encoding: BufferEncoding): Promise<string>;
+	read(path: string): Promise<Buffer | NonSharedBuffer>; // 这里兼容5.2的弃用类型
 	/** 
 	 * 写入文件
 	 * @param path 写入文件的路径

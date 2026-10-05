@@ -152,7 +152,7 @@ type SessionPlatformInfo = {
 
 下列方法均为异步方法, 返回`void`的方法返回类型已省略
 
-- `read(file: string, encoding?: string): Promise<string>`: 读取文件
+- `read(file: string, encoding?: string): Promise<string | Buffer>`: 读取文件. 没传encoding就返回Buffer
 
 - `write(file: string, data: string | NodeJS.ArrayBufferView)`: 向指定文件写入数据
 
