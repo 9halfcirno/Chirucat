@@ -1,5 +1,5 @@
 import type { BotEvent } from "./event/event";
-import type { MessageCreateEvent } from "./event/message";
+import type { MessageCreateEvent, MessageDeleteEvent } from "./event/message";
 
 /**
  * 事件的元数据, 如来源适配器等
@@ -13,3 +13,4 @@ export type BotEventMeta = {
 
 export type BotEvents = 
 	| MessageCreateEvent
+	| MessageDeleteEvent

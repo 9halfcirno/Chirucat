@@ -1,4 +1,4 @@
-import type { MessageBlock } from "../protocols/message-block";
+import type { MessageBlockReceive } from "../protocols/message-block";
 
 export type MessageReplyOption = {
 	/** 引用的消息token/id, 为布尔true时代表引用当前消息 */
@@ -12,7 +12,7 @@ export type MessageQuote = {
 	text: string;
 
 	/** 被引用消息的富文本块 */
-	blocks: Array<MessageBlock>;
+	blocks: Array<MessageBlockReceive>;
 
 	/** 被引用消息的发送者 */
 	sender: {

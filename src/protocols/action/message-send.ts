@@ -1,4 +1,4 @@
-import type { MessageBlock } from "../message-block";
+import type { MessageBlockSend } from "../message-block";
 import type { ActionResponse } from "./action";
 
 export interface MessageSend {
@@ -8,7 +8,7 @@ export interface MessageSend {
 	session: string;
 
 	/** 消息内容 */
-	message: string | MessageBlock[];
+	message: string | MessageBlockSend[];
 
 	/** 引用的消息 */
 	quote?: string | null;

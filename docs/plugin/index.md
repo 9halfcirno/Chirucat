@@ -27,5 +27,6 @@ Chirucat插件系统使用**esbuild**对插件代码进行打包, 因此插件�
 
 - [插件开发准则](guidelines.md)
 - [插件格式](format.md)
+- [适配器插件开发](adapter.md)
 - [服务插件](service.md)
 - [插件上下文](./contexts/index.md)

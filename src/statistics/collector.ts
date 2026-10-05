@@ -1,6 +1,6 @@
 import type { Message } from "../entity/message";
 import type { MessageSend } from "../protocols/action/message-send";
-import type { MessageBlock } from "../protocols/message-block";
+import type { MessageBlockReceive, MessageBlockSend } from "../protocols/message-block";
 import type { StatFlags, StatRecord, StatSendMeta } from "./types";
 
 type Measure = {
@@ -12,8 +12,17 @@ type Measure = {
 	mentionCount: number;
 };
 
+/**
+ * 收发两侧的消息块
+ *
+ * 收(事件)侧为 `MessageBlockReceive`, 发(Action)侧为 `MessageBlockSend`。
+ * 统计只关心块的类型与长度, 两者共同的 text/image/mention 分支足以覆盖,
+ * 因此这里取并集而不是分别写两份测量逻辑。
+ */
+type MeasurableBlock = MessageBlockReceive | MessageBlockSend;
+
 /** 统计消息块的构成。只看块的数量与长度, 不保留内容 */
-function measure(blocks: MessageBlock[]): Measure {
+function measure(blocks: MeasurableBlock[]): Measure {
 	const result: Measure = { textLen: 0, imageCount: 0, mentionCount: 0 };
 
 	for (const block of blocks) {

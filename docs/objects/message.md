@@ -13,7 +13,7 @@
 - `id`: 消息的ID
 - `token`: 消息的引用令牌
 - `text`: 消息纯文本内容
-- `blocks`: 消息块([`MessageBlock`](#messageblock对象))数组
+- `blocks`: 消息块([`MessageBlockReceive`](#messageblock对象))数组
 - `sender`: 消息发送者信息
   - `id`: 发送者账号uuid
   - `unionId`: 发送者跨平台uuid
@@ -61,6 +61,11 @@
 ## 概述
 
 该对象表示富文本消息的其中一段消息
+
+协议里按方向拆成两个联合类型, 不要混用:
+
+- `MessageBlockReceive`: **收**(事件)侧, 媒体块只有 `url`。事件的`richContent`与`quote.richContent`用它
+- `MessageBlockSend`: **发**(Action)侧, 媒体块的 `url` 与 `buffer` 互斥。Action的`message`用它
 
 ## 结构
 

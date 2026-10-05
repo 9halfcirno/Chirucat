@@ -41,47 +41,46 @@ interface MessageSend {
 
 ## 处理示例
 
-参考QQ适配器的处理方式:
+参考QQ适配器的处理方式(已省略媒体上传与错误包装):
 
 ```ts
-ctx.bot.onAction(async (action, extra) => {
-	if (action.type !== "message.send") {
-		return { success: false, error: `Unsupported action type: ${action.type}` };
-	}
+// 将框架会话uuid解析为平台会话: 平台不匹配 / 类型不支持都返回失败
+const info = ctx.session.query(action.session);
+if (!info) return { success: false, error: `Session not found: ${action.session}`, code: "SESSION_NOT_FOUND" };
+if (info.platform !== "qq") {
+	return { success: false, error: `Platform mismatch: expected qq, got ${info.platform}`, code: "PLATFORM_MISMATCH" };
+}
+if (info.type !== "group" && info.type !== "private") {
+	return { success: false, error: `Unsupported session type: ${info.type}`, code: "UNSUPPORTED_SESSION_TYPE" };
+}
 
-	// 将框架会话uuid解析为平台会话
-	const session = ctx.session.query(action.session);
-	if (!session) {
-		return { success: false, error: `Session not found: ${action.session}` };
-	}
-	const { platform, type, id } = session;
+// 引用消息: QQ 用 message_reference.message_id 承载
+const msgRef = action.quote ? { message_reference: { message_id: action.quote } } : {};
 
-	let body = {
-		msg_type: 0,
-		msg_id: extra?.msg_id,
-		content: action.message.toString()
-	};
+// 字符串内容直接发; 消息块数组要拆成"文本 + 媒体"
+// 文本: 提及段换成平台openid后拼成 content(仅群聊支持@)
+// 媒体: 每段单独上传拿 file_info, 再以 msg_type=7 逐条发送
+try {
+	const res = await fetch(`${BASE_URL}/v2/${info.type === "group" ? "groups" : "users"}/${info.id}/messages`, {
+		method: "POST",
+		headers: { Authorization: `QQBot ${token}`, "Content-Type": "application/json" },
+		body: JSON.stringify({
+			msg_type: 2,                      // 文本用 markdown 形态
+			markdown: { content },
+			msg_id: extra?.msg_id,            // 被动回复必须回传源事件的 msg_id
+			msg_seq: nextSeq(extra),          // 同一 msg_id 下多条消息的序号需互不相同
+			...msgRef
+		})
+	}).then(r => r.json());
 
-	if (action.quote) {
-		body.message_reference = {
-			message_id: action.quote
-		}
-	}
+	// 发送成功但缺 id 不能算成功: 后续撤回/引用都要用它
+	if (!res?.id) return { success: false, error: `响应缺少消息 id: ${JSON.stringify(res)}` };
 
-	// 按会话类型调用平台API, 群消息需要extra.msg_id以完成被动回复
-	try {
-		let res = await fetch(`${BASE_URL}/v2/groups/${id}/messages`, {
-			method: "POST",
-			body: JSON.stringify(body)
-		}).then(r => r.json());
-
-		if (!res || !res.id) return { success: false, error: res.message } // 错误字段据真实api而定
-
-		return { success: true, id: res.id, token: res.ext_info?.ref_idx }
-	} catch(e) {
-		return { success: false, error: (e as Error).message }
-	}
-})
+	const token = res.ext_info?.ref_idx;   // 可选字段, 缺失不代表失败
+	return token ? { success: true, id: String(res.id), token } : { success: true, id: String(res.id) };
+} catch (e) {
+	return { success: false, error: (e as Error).message };
+}
 ```
 
 需要注意:
@@ -91,4 +90,5 @@ ctx.bot.onAction(async (action, extra) => {
 - 平台不匹配时**不要静默忽略**: 同样返回失败响应, 否则问题会被伪装成 `ACTION_NOT_HANDLED`
 - 可选字段(如`ext_info`)取值要做空值保护: 发送成功后的响应解析异常会被当作发送失败上报
 - `extra`来自源事件, 适配器在[构造事件](../events/message-create.md)时放入的平台私有数据(如`msg_id`)会原样出现在这里, 被动回复所需数据从该对象获取
-- 富文本(`MessageBlock`数组)如何渲染为平台消息由适配器决定, 当前适配器通常只处理纯文本
+- 富文本(`MessageBlockSend`数组)如何渲染为平台消息由适配器决定。其中的媒体块可能用`url`, 也可能用`buffer`表达本地二进制, **两者都要实现**([协议跟进清单](../plugin/adapter.md#2-buffer-发送意图))
+- 群聊里同一个被动回复窗口内发送多条消息时, 平台通常要求序号(`msg_seq`)递增, 否则后续消息会被丢弃

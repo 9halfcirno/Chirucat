@@ -1,4 +1,4 @@
-import type { MessageBlock } from "../message-block";
+import type { MessageBlockReceive } from "../message-block";
 import type { SessionType } from "../session";
 import type { BotEvent } from "./event";
 
@@ -28,7 +28,7 @@ export interface MessageCreateEvent extends BotEvent {
 	/** 消息纯文本内容 */
 	text: string;
 	/** 消息富文本内容 */
-	richContent: Array<MessageBlock>;
+	richContent: Array<MessageBlockReceive>;
 
 	quote?: MessageQuote;
 }
@@ -61,7 +61,7 @@ export interface MessageQuote {
 	/** 消息纯文本内容 */
 	text: string;
 	/** 消息富文本内容 */
-	richContent: Array<MessageBlock>;
+	richContent: Array<MessageBlockReceive>;
 
 	/** 发送者框架id, 从UserManager获取 */
 	senderId: string;

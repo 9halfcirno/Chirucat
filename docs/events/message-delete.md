@@ -29,14 +29,14 @@
 ```ts
 ctx.bot.dispatch({
 	type: "message.delete",
-	messageId: data.message_id,
-	operatorId: ctx.user.get("qq", data.operator_id), // 平台用户id -> 账号uuid
-	operatorName: "这里应调用OneBot11 API或缓存获取昵称",
+	messageId: String(data.message_id),
+	operatorId: ctx.user.get("qq", String(data.operator_id)), // 平台用户id -> 账号uuid
+	operatorName: operatorName, // 见下方"操作者昵称"
 	sessionType: "group",
-	sessionId: ctx.session.get("qq", "group", data.group_id), // 平台会话id -> 会话uuid
+	sessionId: ctx.session.get("qq", "group", String(data.group_id)), // 平台会话id -> 会话uuid
 	time: Date.now(),
 	extra: {
-		msg_id: data.id // 被动回复时需要传回平台的消息id
+		notice_type: data.notice_type
 	},
 	platform: "qq",
 	source: data

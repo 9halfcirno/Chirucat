@@ -1,5 +1,5 @@
 import type { Message } from "../entity/message";
-import type { MessageBlock } from "../protocols/message-block";
+import type { MessageBlockReceive } from "../protocols/message-block";
 import type { Bot } from "./bot";
 
 /**
@@ -64,7 +64,7 @@ export class MessageHandler {
 	}
 
 	/** 按顺序把消息块拼接为可读文本 */
-	private _concatBlocks(blocks: MessageBlock[]): string {
+	private _concatBlocks(blocks: MessageBlockReceive[]): string {
 		let text = "";
 		for (const block of blocks) {
 			switch (block.type) {
