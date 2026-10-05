@@ -25,7 +25,7 @@
 
 ### 方法
 
-- `reply(msg: string | MessageBlock[], option?: MessageReplyOption): Promise<void>`: 以当前消息被动回复 ([`MessageReplyOption类型指路`]())
+- `reply(msg: string | MessageBlock[], option?: MessageReplyOption): Promise<void>`: 以当前消息被动回复 ([`MessageReplyOption类型指路`](#messagereplyoption对象))
 - `delete()`: 撤回/删除该消息对象对应的消息, 通常遇要Bot拥有对应权限
 
 # MessageQuote对象
@@ -64,6 +64,8 @@
 
 ## 结构
 
+在双向通信场景下, 消息块的字段可能有所不同, 具体会在下方标注
+
 通用结构如下:
 ```ts
 {
@@ -78,16 +80,7 @@
 ```ts
 {
 	type: "text";
-	text: string; // 文本内容
-}
-```
-
-**image**
-```ts
-{
-	type: "image";
-	url: string; // 图片URL
-	file?: string; // 占位, 未来可能表示本地路径或文件Buffer
+	text: string; // [收/发] 文本内容
 }
 ```
 
@@ -95,8 +88,19 @@
 ```ts
 {
 	type: "mention";
-	id: string; // 提及用户的账号uuid
-	name?: string; // 提及用户的昵称
+	id: string; // [收/发] 提及用户的账号uuid
+	name?: string; // [收] 提及用户的昵称
+}
+```
+
+富媒体消息块的发送中, `url`和`buffer`为互斥字段
+
+**image**
+```ts
+{
+	type: "image";
+	url: string; // [收/发] 图片URL
+	buffer: NodeJS.ArrayBufferView; // [发] 图片Buffer
 }
 ```
 
@@ -104,8 +108,8 @@
 ```ts
 {
 	type: "video";
-	url: string; // 视频URL
-	file?: string; // 占位, 未来可能表示本地路径或文件Buffer
+	url: string; // [收/发] 视频URL
+	buffer: NodeJS.ArrayBufferView; // [发] 视频Buffer
 }
 ```
 
@@ -113,7 +117,7 @@
 ```ts
 {
 	type: "audio";
-	url: string; // 音频URL
-	file?: string; // 占位, 未来可能表示本地路径或文件Buffer
+	url: string; // [收/发] 音频URL
+	buffer: NodeJS.ArrayBufferView; // [发] 音频Buffer
 }
 ```

@@ -2,7 +2,7 @@ import type { Bot } from "../bot/bot";
 import type { MessageSendResponse } from "../protocols/action/message-send";
 import type { MessageCreateEvent } from "../protocols/event/message";
 import type { BotEventMeta } from "../protocols/events";
-import type { MessageBlock } from "../protocols/message-block";
+import type { MessageBlockReceive, MessageBlockSend } from "../protocols/message-block";
 import type { Session } from "../protocols/session";
 import type { User } from "../protocols/user";
 import { Entity } from "./entity";
@@ -12,7 +12,7 @@ export class Message extends Entity {
 	id: string;
 
 	text: string;
-	blocks: Array<MessageBlock>
+	blocks: Array<MessageBlockReceive>
 	session: Session;
 	sender: User;
 
@@ -58,7 +58,7 @@ export class Message extends Entity {
 	 * @param option 消息发送选项
 	 * @returns 消息响应结果
 	 */
-	reply(message: MessageBlock[] | string, option?: MessageReplyOption) {
+	reply(message: MessageBlockSend[] | string, option?: MessageReplyOption) {
 		return this.action({
 			type: "message.send",
 			session: this.session.id,
