@@ -23,6 +23,8 @@ export interface QQActionDeps {
 	logger: Logger;
 	/** 被动回复的 msg_seq 分配器 */
 	seq: SeqAllocator;
+	/** 会话级发送限速门 */
+	gate: SessionSendGate;
 }
 
 /** 源事件的 extra(框架随动作回传的适配器私有数据, 如 msg_id) */
@@ -56,6 +58,34 @@ export class SeqAllocator {
 		const seq = (this.counters.get(extra) ?? 0) + 1;
 		this.counters.set(extra, seq);
 		return seq;
+	}
+}
+
+/**
+ * 会话级发送限速门
+ *
+ * 每个 session 维护一条 Promise 链, 保证并发发送按序排队;
+ * 每次实际发送前检查距上次发送的间隔, 不足则 sleep 补齐。
+ * 首条消息不等待(lastSend 初始为 0, 与当前时间差远大于任何合理 interval)。
+ */
+export class SessionSendGate {
+	private lastSend = new Map<string, number>();
+	private chains = new Map<string, Promise<void>>();
+
+	async wait(session: string, intervalMs: number): Promise<void> {
+		const prev = this.chains.get(session) ?? Promise.resolve();
+		const next = prev.then(() => this.doWait(session, intervalMs));
+		this.chains.set(session, next);
+		return next;
+	}
+
+	private async doWait(session: string, intervalMs: number): Promise<void> {
+		if (intervalMs > 0) {
+			const elapsed = Date.now() - (this.lastSend.get(session) ?? 0);
+			const remaining = intervalMs - elapsed;
+			if (remaining > 0) await new Promise<void>(r => setTimeout(r, remaining));
+		}
+		this.lastSend.set(session, Date.now());
 	}
 }
 
@@ -170,6 +200,9 @@ const handleMessageSend: QQActionHandler<"message.send"> = async (action, extra,
 		deps.logger.error(`发送消息失败: ${resolved.error}`);
 		return { success: false, error: resolved.error, code: resolved.code };
 	}
+
+	const interval = deps.ctx.config.get<number>("reply_interval", 0);
+	await deps.gate.wait(action.session, interval);
 
 	const { target } = resolved;
 	// 引用消息: QQ 用 message_reference.message_id 承载

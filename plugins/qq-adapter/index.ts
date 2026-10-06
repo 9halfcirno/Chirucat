@@ -1,6 +1,6 @@
 import type { AdapterContext } from "../../src/plugin/contexts/adapter-context";
 import { AccessTokenManager } from "./access";
-import { ActionRouter, registerQQActions, SeqAllocator, type QQActionDeps } from "./actions";
+import { ActionRouter, registerQQActions, SeqAllocator, SessionSendGate, type QQActionDeps } from "./actions";
 import { QQApi } from "./api";
 import { INTENTS, PLATFORM } from "./config";
 import { QQConnection } from "./connection";
@@ -47,7 +47,8 @@ class QQAdapter {
 			api: this.api,
 			uploader: this.uploader,
 			logger,
-			seq: new SeqAllocator()
+			seq: new SeqAllocator(),
+			gate: new SessionSendGate()
 		};
 
 		this.connection = new QQConnection({

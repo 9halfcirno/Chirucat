@@ -16,6 +16,16 @@
 			"attr": {
 				"type": "password"
 			}
+		},
+		{
+			"type": "slider",
+			"id": "reply_interval",
+			"label": "会话回复间隔 (ms)",
+			"desc": "同一会话两次发送之间的最小间隔, 0 表示不限制",
+			"min": 0,
+			"max": 5000,
+			"step": 100,
+			"default": 0
 		}
 	]
 }
