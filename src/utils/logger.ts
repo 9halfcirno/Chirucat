@@ -52,6 +52,8 @@ export interface LogEntry {
     readonly level: LogLevel;
     /** 产生日志的模块名 */
     readonly name: string;
+    /** 归属 Bot 的 id; 缺省表示全局级日志(Core / WebUI / Service 等) */
+    readonly botId?: string | undefined;
     /** 原始参数 */
     readonly args: readonly unknown[];
     /** 序列化后的文本，供文件 / WebUI 直接使用 */
@@ -165,14 +167,23 @@ export interface LoggerOptions {
      * 传入 null 可禁用流输出（仅保留控制台输出）。
      */
     stream?: LogStream | null;
+    /**
+     * 归属 Bot 的 id（分类）；缺省表示不属于任何 Bot 的全局级日志。
+     *
+     * WebUI 日志页据此按 Bot 过滤，所以只有确实服务于单个 Bot 的
+     * Logger（Bot 本体、其插件与适配器上下文）才该传它。
+     */
+    botId?: string | undefined;
 }
 
 export default class Logger {
     private name: string;
+    private readonly botId: string | undefined;
     private readonly stream: LogStream | null;
 
     constructor(name: string, options: LoggerOptions = {}) {
         this.name = name;
+        this.botId = options.botId;
         this.stream = options.stream === undefined ? defaultLogStream : options.stream;
     }
 
@@ -197,6 +208,7 @@ export default class Logger {
             time,
             level,
             name: this.name,
+            botId: this.botId,
             args,
             message: formatArgs(args),
         });

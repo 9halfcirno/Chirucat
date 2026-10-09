@@ -35,7 +35,7 @@ export class Plugin {
 		this.manifest = option.manifest;
 		this.id = option.manifest.id;
 		this.bot = option.bot;
-		this.logger = new Logger(`Plugin ${this.id}`);
+		this.logger = new Logger(`Plugin ${this.id}`, { botId: this.bot.id });
 		this.type = option.manifest.type || "normal";
 		this.scope = option.scope;
 		option.context && (this.context = option.context);

@@ -17,17 +17,78 @@
 	color: var(--fg-muted);
 }
 
-/* 状态行: 连接状态在左, 圆形清理按钮在右 */
+/* 顶行: 连接状态 + 过滤控件依次排开, 清理按钮靠最右 */
 .logs-head {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	gap: var(--sp-2);
+	flex-wrap: wrap;
+	gap: var(--sp-2) var(--sp-3);
 }
 
 .logs-head .icon-btn {
+	margin-left: auto;
 	width: calc(var(--ctl-h) + 6px);
 	height: calc(var(--ctl-h) + 6px);
+}
+
+/* 过滤控件: 下拉外观沿用全局 .config-select* (config-editor.css),
+   这里只排布"小标签 + 控件" */
+.logs-field {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	/* flex 子项默认 min-width: auto, 不归零则窄屏撑不破 160px 的控件宽度 */
+	min-width: 0;
+}
+
+.logs-field-label {
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+}
+
+/* ==================== 窄屏 ====================
+ * 与 layout.css 的移动端断点一致 (菜单折叠到页面上方)。
+ * 两列网格: 第一行状态在左、清理按钮在右, 第二行两个筛选控件并排。
+ * 控件不各自占一行 —— 那样顶栏吃掉三行高度, 日志区反而没多少空间;
+ * 也不用 flex-wrap —— 换行点由内容宽度决定, 早先窄屏会错落成
+ * "第二行只剩一个字段 + 按钮被 margin-left:auto 推出容器"。 */
+@media (max-width: 768px) {
+	.logs-head {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		align-items: center;
+		column-gap: var(--sp-2);
+		row-gap: var(--sp-2);
+	}
+
+	/* 显式定行: 不写 grid-row 的话自动-placement 会把按钮排到字段之后 */
+	.logs-status {
+		grid-column: 1;
+		grid-row: 1;
+	}
+
+	.logs-head .icon-btn {
+		grid-column: 2;
+		grid-row: 1;
+		justify-self: end;
+		margin-left: 0; /* 靠列右端对齐, 不再用 auto margin */
+	}
+
+	/* 两个字段同处第二行, 各占一列 (列位交给自动-placement 顺次分配) */
+	.logs-field {
+		grid-row: 2;
+	}
+
+	/* 控件收缩填满所在列: 全局 .config-select 写死了 160px 宽 */
+	.logs-field > .config-select-wrap {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	.logs-field .config-select {
+		width: 100%;
+		max-width: none;
+	}
 }
 
 .logs-status::before {

@@ -5,6 +5,10 @@
  * - 连接建立后服务器先回放最近历史, 再实时推送
  * - EventSource 断线自动重连, 页面只负责展示状态
  *
+ * 过滤: 等级多选 + 按 Bot, 都在前端做 (SSE 仍收全量)
+ * - 每行把过滤要用的元数据写进 dataset, 切换筛选只翻 hidden
+ * - 不重建 DOM: 既没有 2000 行重排的开销, 也保住滚动位置与历史
+ *
  * 渲染优化:
  * - 每行是单个 div + 纯文本, 不拆成多个 span
  * - rAF 批量渲染 + DocumentFragment, 避免逐条 DOM 写入
@@ -14,11 +18,26 @@
 import toast from "../../spa/toast.js";
 import { apiFetch } from "../../spa/auth.js";
 import { createIconButton } from "../../spa/components/icon-button.js";
-let source = null;   // EventSource 实例, destroy 时关闭
-let listEl = null;   // 日志列表容器
-let follow = true;   // 是否跟随最新日志
-let queue = [];      // 待渲染的日志条目
-let rafId = null;    // 批量渲染调度句柄
+import { createFilterSelect } from "../../spa/components/filter-select.js";
+let source = null;       // EventSource 实例, destroy 时关闭
+let listEl = null;       // 日志列表容器
+let levelFilter = null;  // 等级过滤下拉
+let botFilter = null;    // Bot 过滤下拉
+let follow = true;       // 是否跟随最新日志
+let queue = [];          // 待渲染的日志条目
+let rafId = null;        // 批量渲染调度句柄
+
+/** 与 utils/logger.ts 的 LOG_LEVELS 保持一致 */
+const LOG_LEVELS = ["debug", "info", "warn", "error"];
+
+/**
+ * 没有 botId 的条目 (Core / WebUI / Service 等全局级日志) 归到这个虚拟分类下。
+ * 取值不与真实 BotConfig.id 冲突即可 —— Bot id 来自目录名。
+ */
+const GLOBAL_BOT = "__global__";
+
+/** 当前筛选: levels 为选中的等级集合, bot 为空串表示不限定 Bot */
+let filters = { levels: new Set(LOG_LEVELS), bot: "" };
 
 /** 日志行数上限: 长时间运行也不会累积过多 DOM */
 const MAX_LINES = 2000;
@@ -42,7 +61,7 @@ export default {
 		status.className = "logs-status connecting";
 		status.textContent = "连接中";
 
-		// 状态行: 左侧连接状态, 右侧圆形清理按钮
+		// 顶行: 连接状态 + 过滤控件, 清理按钮贴右
 		const head = document.createElement("div");
 		head.className = "logs-head";
 
@@ -59,7 +78,33 @@ export default {
 		})
 		clearBtn.title = "清理日志";
 		clearBtn.setAttribute("aria-label", "清理日志");
-		head.append(status, clearBtn);
+
+		// 过滤控件: 等级多选 + Bot 单选, 切换即时作用于已渲染的历史行
+		levelFilter = createFilterSelect({
+			multiple: true,
+			allLabel: "全部等级",
+			items: LOG_LEVELS.map(level => ({ value: level, label: level.toUpperCase() })),
+			values: LOG_LEVELS,
+			onChange: (values) => {
+				filters.levels = new Set(values);
+				applyFilters();
+			},
+		});
+
+		botFilter = createFilterSelect({
+			items: [{ value: "", label: "全部 Bot" }],
+			values: "",
+			onChange: (value) => {
+				filters.bot = Array.isArray(value) ? (value[0] ?? "") : value;
+				applyFilters();
+			},
+		});
+
+		// 两个筛选控件与"已连接"、清理按钮同级同排, 不单独包卡片
+		head.append(status, createField("等级", levelFilter.el), createField("Bot", botFilter.el), clearBtn);
+
+		// Bot 列表异步补进下拉: SSE 不等它, 过滤只读条目自带的 botId
+		loadBotOptions();
 
 		listEl = document.createElement("div");
 		listEl.className = "log-list";
@@ -101,14 +146,87 @@ export default {
 		source?.close();
 		source = null;
 		listEl = null;
+		// 浮层挂在 body 上, 页面切走时必须收起
+		levelFilter?.close();
+		botFilter?.close();
+		levelFilter = null;
+		botFilter = null;
 		follow = true;
 		if (rafId != null) {
 			cancelAnimationFrame(rafId);
 			rafId = null;
 		}
 		queue = [];
+		// 模块级筛选状态: 不重置会让下次进入页面拿着上次的条件看到空白列表
+		filters = { levels: new Set(LOG_LEVELS), bot: "" };
 	},
 };
+
+/** 带小标签的筛选字段 */
+function createField(label, control) {
+	const wrap = document.createElement("div");
+	wrap.className = "logs-field";
+	const name = document.createElement("span");
+	name.className = "logs-field-label";
+	name.textContent = label;
+	wrap.append(name, control);
+	return wrap;
+}
+
+/** 把 Bot 列表灌进下拉; 拉不到就只留"全部 Bot / 全局", 不影响等级过滤 */
+async function loadBotOptions() {
+	try {
+		const res = await apiFetch("/api/get_bot_list");
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		const data = await res.json();
+		// 响应回来时页面可能已经切走
+		if (!botFilter) return;
+		botFilter.setItems([
+			{ value: "", label: "全部 Bot" },
+			...(data.bots ?? []).map(bot => ({ value: bot.id, label: bot.name || bot.id })),
+			{ value: GLOBAL_BOT, label: "全局" },
+		]);
+	} catch {
+		// 忽略: 等级过滤与按"全局"过滤仍然可用
+	}
+}
+
+/** 单行是否命中当前筛选 */
+function matchFilter(line) {
+	return filters.levels.has(line.dataset.level)
+		&& (filters.bot === "" || filters.bot === line.dataset.botId);
+}
+
+/** 切换筛选: 只翻可见性, 不重建 DOM */
+function applyFilters() {
+	const list = listEl;
+	if (!list) return;
+	for (const line of list.querySelectorAll(".log-line")) {
+		line.hidden = !matchFilter(line);
+	}
+	syncEmpty(list);
+	if (follow) list.scrollTop = list.scrollHeight;
+}
+
+/** 空态占位: 一行都没有说"暂无日志", 有但都被筛掉说没有匹配 */
+function syncEmpty(list) {
+	const placeholder = list.querySelector(".logs-empty");
+	if (list.querySelector(".log-line:not([hidden])")) {
+		placeholder?.remove();
+		return;
+	}
+
+	const text = list.querySelector(".log-line") ? "没有匹配当前筛选的日志" : "暂无日志";
+	if (placeholder) {
+		placeholder.textContent = text;
+		return;
+	}
+
+	const created = document.createElement("p");
+	created.className = "muted logs-empty";
+	created.textContent = text;
+	list.prepend(created);
+}
 
 /** 清空页面上的日志列表: 丢弃排队与已渲染的行, 恢复空态 */
 function clearLogList() {
@@ -152,14 +270,16 @@ function flush() {
 		const line = document.createElement("div");
 		const level = entry.level ?? "info";
 		line.className = `log-line level-${level}`;
+		// 过滤要用的元数据: 切筛选时只读 dataset, 不必回头找原始条目
+		line.dataset.level = level;
+		line.dataset.botId = entry.botId ?? GLOBAL_BOT;
 		// 单行纯文本, 避免拆成多个 span
 		line.textContent = `[${entry.time}] [${level.toUpperCase()}] [${entry.name}] ${entry.message}`;
+		// 新到的日志也要守当前筛选, 否则条件会被后续输出冲掉
+		line.hidden = !matchFilter(line);
 		frag.appendChild(line);
 	}
 	queue = [];
-
-	// 移除空态占位
-	list.querySelector(".logs-empty")?.remove();
 
 	list.appendChild(frag);
 
@@ -167,6 +287,9 @@ function flush() {
 	while (list.childElementCount > MAX_LINES) {
 		list.removeChild(list.firstElementChild);
 	}
+
+	// 空态跟随可见性: 全被筛掉时把占位补回来
+	syncEmpty(list);
 
 	if (follow) list.scrollTop = list.scrollHeight;
 }

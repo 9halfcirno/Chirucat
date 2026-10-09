@@ -17,11 +17,18 @@
 
 import { createIconButton } from "./icon-button.js";
 import { createSelect } from "./select.js";
+import { createFilterSelect } from "./filter-select.js";
 
 /** 顶层/分组内控件: 参与 visible 求值 */
 const NORMAL_OPTS = { inline: false };
 /** table 行内控件: 不渲染 label (表头已给出), 且忽略 visible */
 const INLINE_OPTS = { inline: true };
+
+/**
+ * checkbox 保持竖排内联的最大项数, 再多就收进下拉多选。
+ * 复选框组是一块带边框的竖排列表, 十来个项会把整段表单撑得看不见结构。
+ */
+const MAX_INLINE_CHECKBOX_ITEMS = 5;
 
 /* ---------- 值工具 ---------- */
 
@@ -442,12 +449,34 @@ function buildSelect(define, holder, ctx, opts) {
 }
 
 function buildCheckbox(define, holder, ctx, opts) {
+	const items = define.items ?? [];
+
+	if (items.length > MAX_INLINE_CHECKBOX_ITEMS) {
+		// 自绘多选下拉的实现在 components/filter-select.js, 这里同样只做适配
+		const { el, field } = createFieldShell(define, opts);
+
+		const picker = createFilterSelect({
+			items,
+			multiple: true,
+			values: holder[define.id],
+			onChange: (values) => {
+				holder[define.id] = values;
+				ctx.onValueChange();
+			},
+		});
+		field.append(picker.el);
+
+		return createLeafNode(define, holder, ctx, opts, el, () => {
+			picker.setValues(holder[define.id]);
+		});
+	}
+
 	const { el, field } = createFieldShell(define, opts);
 	// 多选项竖向排列: 横排时选项一多就会折成参差不齐的几行
 	field.classList.add("config-checkbox-group");
 
 	const boxes = [];
-	for (const item of define.items ?? []) {
+	for (const item of items) {
 		const itemLabel = document.createElement("label");
 		itemLabel.className = "config-checkbox-item";
 

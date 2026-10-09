@@ -59,7 +59,7 @@ export class PluginContext {
 		this._bot = plugin.bot;
 		this._manifest = plugin.manifest;
 
-		this.logger = new Logger(`Plugin ${this._manifest.id}`);
+		this.logger = new Logger(`Plugin ${this._manifest.id}`, { botId: this._bot.id });
 		this.message = new MessageAPI((entry) => {
 			this._onMessageCallback.push(entry);
 		});

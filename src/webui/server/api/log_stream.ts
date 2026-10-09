@@ -16,6 +16,8 @@ function toSSE(entry: LogEntry): string {
 		time: entry.time,
 		level: entry.level,
 		name: entry.name,
+		// 归属 Bot; undefined 会被 JSON.stringify 省略, 前端拿不到即视为全局级日志
+		botId: entry.botId,
 		message: entry.message,
 	});
 	return `event: log\ndata: ${data}\n\n`;
