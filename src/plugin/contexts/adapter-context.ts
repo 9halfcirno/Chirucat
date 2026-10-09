@@ -85,7 +85,7 @@ export class AdapterContext extends PluginContext {
 			`适配器未处理动作 ${action.type}: 插件 ${this._manifest.id} 注册了 ${this.actionHandlers.length} 个Action处理器, ` +
 			`均未返回响应`
 		);
-		return this.failure<T>("Adapter did not handled this action", "ACTION_NOT_HANDLED");
+		return this.failure<T>("Adapter did not handled this action", "ADAPTER_UNHANDLED");
 	}
 
 	/** 统一的失败响应: 本方法的契约是"总能给出响应对象", 不允许 undefined */

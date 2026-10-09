@@ -111,7 +111,7 @@ function resolveTarget(ctx: AdapterContext, session: string): TargetResult {
 		return {
 			ok: false,
 			error: `Platform mismatch: expected ${PLATFORM}, got ${info.platform}`,
-			code: "PLATFORM_MISMATCH"
+			code: "UNKNOWN_PLATFORM"
 		};
 	}
 
@@ -120,7 +120,7 @@ function resolveTarget(ctx: AdapterContext, session: string): TargetResult {
 		return {
 			ok: false,
 			error: `Unsupported session type: ${info.type}`,
-			code: "UNSUPPORTED_SESSION_TYPE"
+			code: "PARAMS_INVALID"
 		};
 	}
 
@@ -160,7 +160,7 @@ async function sendText(
 	} catch (e) {
 		const msg = errorMessage(e);
 		deps.logger.error(`发送文本消息失败: ${msg}`);
-		return { success: false, error: msg };
+		return { success: false, code: "UNKNOWN_ERROR", error: msg };
 	}
 }
 
@@ -184,7 +184,7 @@ async function sendMedia(
 	} catch (e) {
 		const msg = errorMessage(e);
 		deps.logger.error(`发送富媒体消息失败: ${msg}`);
-		return { success: false, error: msg };
+		return { success: false, code: "UNKNOWN_ERROR", error: msg };
 	}
 }
 
@@ -240,7 +240,7 @@ const handleMessageSend: QQActionHandler<"message.send"> = async (action, extra,
 		} catch (e) {
 			const msg = errorMessage(e);
 			deps.logger.error(`上传 ${item.type} 失败: ${msg}`);
-			return { success: false, error: `Failed to upload ${item.type}: ${msg}` };
+			return { success: false, code: "PLATFORM_ERROR", error: `Failed to upload ${item.type}: ${msg}` };
 		}
 
 		const result = await sendMedia(deps, target, fileInfo, extra, msgRef);
@@ -250,7 +250,7 @@ const handleMessageSend: QQActionHandler<"message.send"> = async (action, extra,
 
 	if (primaryId) return sendSuccess(primaryId);
 
-	return { success: false, error: "Empty message body" };
+	return { success: false, code: "PARAMS_INVALID", error: "Empty message body" };
 };
 
 /** message.delete */
@@ -267,7 +267,7 @@ const handleMessageDelete: QQActionHandler<"message.delete"> = async (action, _e
 	} catch (e) {
 		const msg = errorMessage(e);
 		deps.logger.error(`撤回消息失败: ${msg}`);
-		return { success: false, error: msg };
+		return { success: false, code: "UNKNOWN_ERROR", error: msg };
 	}
 };
 
@@ -307,7 +307,7 @@ export class ActionRouter {
 			return {
 				success: false,
 				error: `Unsupported action type: ${action.type}`,
-				code: "UNSUPPORTED_ACTION"
+				code: "ACTION_UNSUPPORTED"
 			} as ActionResponses[T["type"]];
 		}
 

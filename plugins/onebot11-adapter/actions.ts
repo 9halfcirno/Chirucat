@@ -83,14 +83,14 @@ function resolveTarget(ctx: AdapterContext, session: string): TargetResult {
 	const info = ctx.session.query(session);
 
 	if (!info) {
-		return { ok: false, error: `Session not found: ${session}`, code: "SESSION_NOT_FOUND" };
+		return { ok: false, error: `Session not found: ${session}`, code: "PARAMS_INVALID" };
 	}
 
 	if (info.platform !== PLATFORM) {
 		return {
 			ok: false,
 			error: `Platform mismatch: expected ${PLATFORM}, got ${info.platform}`,
-			code: "PLATFORM_MISMATCH"
+			code: "UNKNOWN_PLATFORM"
 		};
 	}
 
@@ -99,7 +99,7 @@ function resolveTarget(ctx: AdapterContext, session: string): TargetResult {
 		return {
 			ok: false,
 			error: `Unsupported session type: ${info.type}`,
-			code: "UNSUPPORTED_SESSION_TYPE"
+			code: "PARAMS_INVALID" // 通常框架的session管理器不会搞混, 只能是调用方瞎传
 		};
 	}
 
@@ -108,7 +108,7 @@ function resolveTarget(ctx: AdapterContext, session: string): TargetResult {
 		return {
 			ok: false,
 			error: `Invalid numeric session id: ${info.id}`,
-			code: "INVALID_SESSION_ID"
+			code: "PARAMS_INVALID" // 理由同上
 		};
 	}
 
@@ -127,7 +127,7 @@ function sendResult(res: any, logger: Logger): ActionResponses["message.send"] {
 	if (messageId === undefined || messageId === null) {
 		const detail = JSON.stringify(res);
 		logger.error(`发送调用成功但响应缺少 message_id: ${detail}`);
-		return { success: false, error: `OneBot API 响应缺少 message_id: ${detail}` };
+		return { success: false, code: "PLATFORM_RESPONSE_ERROR", error: `OneBot API 响应缺少 message_id: ${detail}` };
 	}
 
 	return { success: true, id: String(messageId) };
@@ -150,7 +150,7 @@ const handleMessageSend: Ob11ActionHandler<"message.send"> = async (action, _ext
 
 	// 全部消息块都无法渲染时不要白发一条空消息
 	if (Array.isArray(message) && message.length === 0) {
-		return { success: false, error: "Empty message body" };
+		return { success: false, code: "PARAMS_UNSUPPORTED", error: "Empty message body" };
 	}
 
 	// 引用消息: OneBot 用 reply 段承载, 且必须排在消息体最前面
@@ -172,7 +172,7 @@ const handleMessageSend: Ob11ActionHandler<"message.send"> = async (action, _ext
 	} catch (e) {
 		const msg = errorMessage(e);
 		deps.logger.error(`发送消息失败: ${msg}`);
-		return { success: false, error: msg };
+		return { success: false, code: "PLATFORM_ERROR", error: msg };
 	}
 };
 
@@ -192,7 +192,7 @@ const handleMessageDelete: Ob11ActionHandler<"message.delete"> = async (action, 
 	} catch (e) {
 		const msg = errorMessage(e);
 		deps.logger.error(`撤回消息失败: ${msg}`);
-		return { success: false, error: msg };
+		return { success: false, code: "PLATFORM_ERROR", error: msg };
 	}
 };
 
@@ -231,7 +231,7 @@ export class ActionRouter {
 			return {
 				success: false,
 				error: `Unsupported action type: ${action.type}`,
-				code: "UNSUPPORTED_ACTION"
+				code: "ACTION_UNSUPPORTED"
 			} as ActionResponses[T["type"]];
 		}
 
