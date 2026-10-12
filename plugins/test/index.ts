@@ -1,8 +1,5 @@
 import type { Message } from "../../src/entity/message";
 import type { PluginContext } from "../../src/plugin/contexts/context"
-import Logger from "../../src/utils/logger";
-
-const logger = new Logger("test");
 
 export default {
 	init(ctx: PluginContext) {

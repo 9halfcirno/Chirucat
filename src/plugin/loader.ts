@@ -1,5 +1,5 @@
 import esbuild, { type Plugin } from "esbuild";
-import type { NPMPackages, PluginModule } from "./types";
+import type { PluginModule } from "./types";
 import path from "path";
 import module from "module";
 
@@ -7,19 +7,6 @@ const PLUGIN_MODULE_VAR = "__chirucat_plugin_module__";
 
 /**
  * 受限插件禁止导入的内置模块
- *
- * 按完整模块名列举(含 `node:` 前缀的两种写法), 按风险分组。插件应有对应的
- * 受控替代品, 而不是直接拿到宿主的原生能力:
- *
- * - 文件系统: 改用 `ctx.fs`(有根目录约束与越界保护)
- * - 进程/系统: 能执行任意命令或读取宿主信息, 直接突破沙箱
- * - 原始网络: 需要联网时用全局 `fetch` / `WebSocket`(Node 18+ 内置,
- *   它们不是模块导入, 不经过这里)
- * - 沙箱逃逸: worker / cluster 能另起执行环境, 绕过本列表
- *
- * 曾经只列 "fs"/"node:fs", 于是 "fs/promises" 作为另一个内置模块被放行,
- * 受限插件照样能拿到文件系统; 同样的缺口存在于 child_process / os / net 等 ——
- * `import { exec } from "child_process"` 之前是畅通的。
  */
 const REFUSE_MODULE = new Set([
 	// 文件系统
@@ -41,27 +28,16 @@ const REFUSE_MODULE = new Set([
 ]);
 
 export type PluginLoaderOption = {
-	/**
-	 * 是否允许导入受限内置模块(fs 等), 缺省 false
-	 *
-	 * 服务插件(services/)属于框架级可信代码, 需要在宿主进程里做真实基础设施
-	 * (监听文件、起服务、连数据库), 因此放开; 普通插件维持受限。
-	 */
 	allowRestrictedBuiltins?: boolean;
 }
 
 export class PluginLoader {
 	constructor(private readonly option: PluginLoaderOption = {}) { }
 
-	/**
-	 * 构建插件代码并导出插件模块
-	 *
-	 * 泛型参数用于区分宿主: 普通插件用默认的 PluginModule, 服务插件传 `PluginModule<ServiceContext>`
-	 * (构建产物不在编译期检查之列, 这里只是把“同一个模块契约、不同上下文”表达出来)。
-	 * @param fileURL 入口文件
-	 */
 	async load<M = PluginModule>(fileURL: string): Promise<{ default: M; }> {
-		const prequire = module.createRequire(path.join(path.dirname(fileURL), "package.json"))
+		// 插件根目录：入口文件所在目录，也是 prequire 的解析基准目录
+		const pluginRoot = path.dirname(fileURL);
+		const prequire = module.createRequire(path.join(pluginRoot, "package.json"))
 
 		const option: esbuild.BuildOptions = {
 			bundle: true,
@@ -72,7 +48,7 @@ export class PluginLoader {
 			globalName: PLUGIN_MODULE_VAR,
 
 			plugins: [
-				this.createImportResolver(prequire)
+				this.createImportResolver(prequire, pluginRoot)
 			]
 		}
 
@@ -81,56 +57,58 @@ export class PluginLoader {
 		const code = output.outputFiles?.[0]?.text;
 		if (!code) throw new Error(`构建产物为空`)
 		return new Function("require", `${code};return ${PLUGIN_MODULE_VAR};`)(prequire) as { default: M };
-
 	}
 
-
 	/**
-	 * 创建用于解决插件导入的esbuild插件
-	 * @param root 插件模块根目录
-	 * @returns 
+	 * 创建用于解决插件导入的 esbuild 插件
+	 * @param require  插件目录解析出来的 require
+	 * @param pluginRoot 插件根目录(入口文件所在目录), 该目录之外的相对/绝对导入一律视为外部依赖
 	 */
-	private createImportResolver(require: NodeJS.Require) {
+	private createImportResolver(require: NodeJS.Require, pluginRoot: string) {
 		const self = this;
 		const importResolver: Plugin = {
 			name: "plugin-import-resolver",
 			setup(build) {
 				const importMap = new Map<string, string>();
 				build.onResolve({ filter: /.*/ }, (args) => {
-					let mod = args.path;
+					const mod = args.path;
+
+					// 1) 内置模块
 					if (module.isBuiltin(mod)) {
-						if (!self.option.allowRestrictedBuiltins && REFUSE_MODULE.has(mod)) throw new Error(`被拒绝的原生模块: ${mod}`);
-						return {
-							external: true // 内置模块返回
+						if (!self.option.allowRestrictedBuiltins && REFUSE_MODULE.has(mod)) {
+							throw new Error(`被拒绝的原生模块: ${mod}`);
 						}
-					}
-					// 原生模块(.node 二进制): 不参与打包, 交给宿主按绝对路径 require。
-					// 否则 esbuild 会把二进制当普通文件处理而构建失败
-					if (mod.endsWith(".node")) {
-						const resolved = self.isNPM(mod)
-							? require.resolve(mod) // npm 包内的子路径, 由插件目录解析
-							: path.resolve(args.resolveDir || ".", mod);
-						return {
-							path: resolved,
-							external: true
-						};
-					}
-					if (self.isNPM(args.path)) {
-						if (importMap.has(mod)) return {
-							path: importMap.get(mod)!,
-							external: true
-						};
-						// 未命中缓存
-						const rpath = require.resolve(mod); // 解决npm包
-						importMap.set(mod, rpath);
-						return {
-							path: rpath,
-							external: true
-						}
-					} else { // 不是npm包
-						return null; // 先放行
+						return { external: true };
 					}
 
+					// 2) 原生模块 (.node 二进制): 不参与打包, 交给宿主按绝对路径 require
+					if (mod.endsWith(".node")) {
+						const resolved = self.isNPM(mod)
+							? require.resolve(mod)
+							: path.resolve(args.resolveDir || pluginRoot, mod);
+						return { path: resolved, external: true };
+					}
+
+					// 3) npm 包
+					if (self.isNPM(mod)) {
+						if (importMap.has(mod)) {
+							return { path: importMap.get(mod)!, external: true };
+						}
+						const rpath = require.resolve(mod);
+						importMap.set(mod, rpath);
+						return { path: rpath, external: true };
+					}
+
+					// 4) 相对 / 绝对路径：只要解析后的路径落在插件目录之外,
+					//    就当作外部依赖。避免插件写错路径(如 ../../../src/foo)
+					//    把框架源码整个打包进插件产物。
+					const abs = path.resolve(args.resolveDir || pluginRoot, mod);
+					if (!self.isInside(pluginRoot, abs)) {
+						throw new Error(`被拒绝的模块: ${abs} 插件仅可导入自身目录下的代码`)
+					}
+
+					// 插件目录内部的文件：交给 esbuild 继续打包
+					return null;
 				})
 			}
 		}
@@ -142,6 +120,10 @@ export class PluginLoader {
 			&& !url.startsWith("/")
 			&& !path.isAbsolute(url);
 	}
+
+	/** child 是否位于 parent 目录(含自身)之内 */
+	private isInside(parent: string, child: string) {
+		const rel = path.relative(parent, child);
+		return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+	}
 }
-
-

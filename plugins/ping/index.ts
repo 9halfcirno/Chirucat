@@ -1,8 +1,5 @@
 import type { Message } from "../../src/entity/message";
 import type { PluginContext } from "../../src/plugin/contexts/context"
-import Logger from "../../src/utils/logger";
-
-const logger = new Logger("ping");
 
 export default {
 	init(ctx: PluginContext) {
@@ -11,7 +8,6 @@ export default {
 		let com = ctx.command.register(command, reply)
 
 		ctx.config.watch((k, n, o) => {
-			ctx.logger.log(k, n, o)
 			if (k === "command") {
 				if (o === n) return;
 				ctx.logger.log(`Ping指令变化: ${o} -> ${n}`)
