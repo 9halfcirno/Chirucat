@@ -1,4 +1,5 @@
 import type { MessageBlockReceive } from "../protocols/message-block";
+import type { User } from "../protocols/user";
 
 export type MessageReplyOption = {
 	/** 引用的消息token/id, 为布尔true时代表引用当前消息 */
@@ -15,9 +16,5 @@ export type MessageQuote = {
 	blocks: Array<MessageBlockReceive>;
 
 	/** 被引用消息的发送者 */
-	sender: {
-		id: string;
-		unionId: string | null;
-		name: string;
-	}
+	sender: User;
 }

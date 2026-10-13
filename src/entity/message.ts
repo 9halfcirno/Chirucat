@@ -45,7 +45,8 @@ export class Message extends Entity {
 				sender: {
 					id: event.quote.senderId,
 					name: event.quote.senderName,
-					unionId: this.bot?.core.user?.getUnion(event.quote.senderId) ?? null
+					unionId: this.bot?.core.user?.getUnion(event.quote.senderId) ?? null,
+					permission: 0
 				}
 			}
 			if (event.quote.messageId) this.quote.id = event.quote.messageId;

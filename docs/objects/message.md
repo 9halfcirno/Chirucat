@@ -18,6 +18,7 @@
   - `id`: 发送者账号uuid
   - `unionId`: 发送者跨平台uuid
   - `name`: 发送者昵称
+  - `permission`: 发送者权限等级
 - `session`: 消息来源会话信息
   - `id`: 会话uuid
   - `type`: 会话类型, 值为`private`, `group`, `channel`其中之一
@@ -43,6 +44,7 @@
   - `id`: 发送者账号uuid
   - `unionId`: 发送者跨平台uuid
   - `name`: 发送者昵称
+  - `permission`: 发送者权限等级
 
 # MessageReplyOption对象
 
