@@ -34,7 +34,7 @@ export class CommandManager {
 	 * @param args 参数
 	 * @returns 命中的指令名, 未命中为 false
 	 */
-	exec(name: string, args: (string | number)[]): string | false;
+	exec(name: string, args?: (string | number)[]): string | false;
 	/**
 	 * 对消息进行匹配
 	 * @param message 进行匹配的消息
