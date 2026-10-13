@@ -7,4 +7,7 @@ export interface User {
 
 	/** 用户的内部组id, 用于跨平台识别同一用户 */
 	unionId: string | null;
+
+	/** 用户权限等级, 数值越高等级越高 */
+	permission: number;
 }

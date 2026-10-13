@@ -48,8 +48,8 @@ export class CommandManager {
 			text = message.text;
 		} else text = message;
 
-		if (typeof message === "string" || text.startsWith(this.prefix)) { // 如果以前缀开头
-			if (typeof message !== "string") text = text.slice(this.prefix.length); // 移除前缀
+		if (typeof message === "string" || text.startsWith(this.prefix)) { // 如果是字符串调用、以前缀开头
+			if (typeof message !== "string") text = text.slice(this.prefix.length); // 如果是用户消息 -> 移除前缀
 			let command: string | null = null;
 			for (let com of this.commands.keys()) { // O(n)获取前缀最长的指令
 				if (text.startsWith(com)) { // 前缀匹配到了
@@ -70,7 +70,16 @@ export class CommandManager {
 				argStart: command.length
 			})
 			const msgArg = message instanceof Message ? message : null;
+
+			let permission;
+			if (typeof message === "string") permission = 0; // 如果是文本调用，没上下文，默认0等级
+			else permission = message.sender.permission; // 用用户权限等级
+
 			for (let com of coms) {
+				if ((com.permission || 0) > permission) {
+					if (typeof message !== "string") message.reply(`当前权限不足: 目标指令所需权限等级为 ${com.permission || 0}, 而操作等级只有 ${permission}, 请尝试联系Bot管理员`);
+					continue;
+				}
 				// Hook 埋点: 指令执行之前, 可被服务插件取消(跳过该指令处理函数)
 				if (this.hookBus?.dispatch("before.command.handle", { message: msgArg, command: com, args: params })) {
 					continue;

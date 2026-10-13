@@ -6,6 +6,12 @@ export type Command = {
 	name: string;
 	/** 指令处理 */
 	handler: (message: Message | null, args: CommandArgs) => void;
+
+	/** 最低权限等级, 默认所有人可调用（0级） */
+	permission?: number;
+
+	/** 额外数据, 为扩展地带 */
+	[k: string]: any;
 }
 
 

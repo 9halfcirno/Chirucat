@@ -1,5 +1,4 @@
 import type { Bot } from "../bot/bot";
-import type { MessageSendResponse } from "../protocols/action/message-send";
 import type { MessageCreateEvent } from "../protocols/event/message";
 import type { BotEventMeta } from "../protocols/events";
 import type { MessageBlockReceive, MessageBlockSend } from "../protocols/message-block";
@@ -34,7 +33,8 @@ export class Message extends Entity {
 		this.sender = {
 			id: event.senderId,
 			name: event.senderName,
-			unionId: this.bot?.core.user?.getUnion(event.senderId) ?? null
+			unionId: this.bot?.core.user?.getUnion(event.senderId) ?? null,
+			permission: 0 // 默认均为0，即没有任何权限
 		}
 
 		// 引用消息

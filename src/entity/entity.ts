@@ -13,6 +13,9 @@ export class Entity {
 	/** 事件携带的额外数据 */
 	extra: Record<string, any>;
 
+	/** 插件间共享的实体附加数据, 由服务插件在 before.message.handle 等阶段写入 */
+	data: Record<string, any> = {};
+
 	readonly source: Record<string, any> | null;
 
 	constructor(readonly event: BotEvents, readonly meta: BotEventMeta, protected bot: Bot) {

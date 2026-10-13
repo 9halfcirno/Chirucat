@@ -43,7 +43,7 @@ export interface PluginCommandAPI {
 	 * @param name 指令名, 可包含空格
 	 * @param handler 指令回调
 	 */
-	register(name: string, handler: Command["handler"]): Command;
+	register(name: string, handler: Command["handler"], options?: CommandRegisterOptions): Command;
 	/**
 	 * 注销指令
 	 * @param command 要注销的指令
@@ -62,6 +62,10 @@ export interface PluginCommandAPI {
 	 * @returns 命中的指令名, 未命中为 false
 	 */
 	exec(message: Message): string | false;
+}
+
+export type CommandRegisterOptions = {
+	permission?: number;
 }
 
 export interface PluginFileSystemAPI {

@@ -5,7 +5,7 @@ import { Message } from "../../entity/message";
 import type { BotActions } from "../../protocols/actions";
 import type { PluginManifest } from "../types";
 import { MessageAPI } from "./apis/message";
-import type { MessageCallbackEntry, PluginBotAPI, PluginCommandAPI, PluginConfigAPI, PluginFileSystemAPI, PluginKVAPI, PluginMessageAPI, PluginSessionAPI, PluginUserAPI, ReadonlyFsAPI } from "./types";
+import type { CommandRegisterOptions, MessageCallbackEntry, PluginBotAPI, PluginCommandAPI, PluginConfigAPI, PluginFileSystemAPI, PluginKVAPI, PluginMessageAPI, PluginSessionAPI, PluginUserAPI, ReadonlyFsAPI } from "./types";
 import { FileSystemAPI } from "./apis/fs";
 import { KVStore } from "./apis/kv";
 import { PluginConfig } from "./apis/config";
@@ -85,9 +85,12 @@ export class PluginContext {
 	}
 
 	command: PluginCommandAPI = {
-		register: (name, handler) => {
+		register: (name, handler, options) => {
 			this.assertAlive("注册指令");
-			const command: Command = { name, handler };
+			const command: Command = {
+				name, handler,
+				permission: options?.permission ?? 0
+			 };
 
 			this._commands.add(command);
 			this._bot.command.register(command);
