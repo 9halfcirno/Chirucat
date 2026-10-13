@@ -30,6 +30,10 @@
 				{
 					"label": "富媒体测试",
 					"value": "media"
+				},
+				{
+					"label": "权限等级测试",
+					"value": "permission"
 				}
 			],
 			"default": [
@@ -43,26 +47,62 @@
 			"type": "group",
 			"label": "富媒体文件链接",
 			"id": "mediaUrl",
-			"controls": [{
-				"type": "input",
-				"id": "image",
-				"label": "图片链接",
-				"placeholder": "https://example.com/image.png"
-			},{
-				"type": "input",
-				"id": "video",
-				"label": "视频链接",
-				"placeholder": "https://example.com/video.mp4"
-			},{
-				"type": "input",
-				"id": "audio",
-				"label": "音频链接",
-				"placeholder": "https://example.com/audio.mp3"
-			}],
+			"controls": [
+				{
+					"type": "input",
+					"id": "image",
+					"label": "图片链接",
+					"placeholder": "https://example.com/image.png"
+				},
+				{
+					"type": "input",
+					"id": "video",
+					"label": "视频链接",
+					"placeholder": "https://example.com/video.mp4"
+				},
+				{
+					"type": "input",
+					"id": "audio",
+					"label": "音频链接",
+					"placeholder": "https://example.com/audio.mp3"
+				}
+			],
 			"visible": {
 				"op": "in",
 				"ref": "features",
-				"target": ["media"]
+				"target": [
+					"media"
+				]
+			}
+		},
+		{
+			"type": "group",
+			"label": "高权限测试指令",
+			"id": "highCommand",
+			"desc": "演示权限门槛: 调用等级低于所需等级时, 框架不会进入回调",
+			"controls": [
+				{
+					"type": "input",
+					"id": "name",
+					"label": "指令名",
+					"default": "high_test",
+					"required": true
+				},
+				{
+					"type": "slider",
+					"id": "level",
+					"label": "所需权限等级",
+					"min": 0,
+					"max": 3,
+					"step": 1,
+					"default": 1,
+					"desc": "0 = 普通用户, 1 = 管理员, 3 = 框架持有者"
+				}
+			],
+			"visible": {
+				"op": "in",
+				"ref": "features",
+				"target": ["permission"]
 			}
 		}
 	]

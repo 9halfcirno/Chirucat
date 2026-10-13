@@ -1,0 +1,38 @@
+{
+	"$schema": "../../src/config/schema.json",
+	"controls": [
+		{
+			"type": "text",
+			"label": "Chirucat 权限控制"
+		},
+		{
+			"type": "input",
+			"id": "master",
+			"label": "框架持有者",
+			"desc": "即框架的主人, 同时也是所有Bot的主人, 能够使用最高级别的能力 (权限等级 3)",
+			"default": ""
+		},
+		{
+			"type": "table",
+			"id": "admins",
+			"label": "管理员",
+			"desc": "拥有权限等级 1, 可执行框架管理员级别的操作",
+			"default": [],
+			"controls": [
+				{
+					"type": "input",
+					"id": "unionId",
+					"label": "Union ID",
+					"desc": "管理员的跨平台用户 uuid (即 msg.sender.unionId)",
+					"default": ""
+				},
+				{
+					"type": "input",
+					"id": "_comment",
+					"label": "备注",
+					"placeholder": "备注，不影响逻辑"
+				}
+			]
+		}
+	]
+}

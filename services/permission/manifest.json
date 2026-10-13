@@ -3,7 +3,8 @@
 	"version": "0.0.0",
 	"main": "index.ts",
 	"type": "service",
-	"name": "Chirucat 权限控制 - 未完工",
+	"name": "Chirucat 权限控制",
 	"author": "9halfcirno",
-	"description": "* 该服务当前未完工, 无实际功能 * | 框架权限控制与管理服务, 以支持仅限管理员可用的指令/功能"
+	"config": "config.schema.json",
+	"description": "框架权限控制服务, 在消息处理前判定发送者权限级别并附加到 entity.data.permission, 供其他插件使用"
 }
