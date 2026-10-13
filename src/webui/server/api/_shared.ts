@@ -96,7 +96,7 @@ export async function savePluginConfig(
 	patch: unknown,
 	label: string,
 ): Promise<{ success: true; config: ConfigValues }> {
-	const errors = config.vaildate(patch);
+	const errors = config.validate(patch);
 	if (errors.length) {
 		const detail = errors
 			.map(e => `${e.path || "配置"}: ${e.message}`)

@@ -4,7 +4,7 @@ import { readProp } from "../utils/readProp";
 import { root } from "../utils/root";
 import { SerialQueue, cloneValue, deepEqual, isPlainObject, writeJsonFile } from "./store";
 import type { ConfigRoot, Control } from "./types";
-import { validateConfig } from "./vaildate-config";
+import { validateConfig } from "./validate-config";
 
 /**
  * 一份配置值。
@@ -319,7 +319,7 @@ export class ConfigManager {
 	 * 校验一份配置值是否符合控件定义
 	 * @param config 待校验的值, 缺省校验当前值
 	 */
-	vaildate(config: unknown = this.data) {
+	validate(config: unknown = this.data) {
 		return validateConfig(this.schema, config);
 	}
 
