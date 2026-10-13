@@ -410,24 +410,43 @@ export default {
 
 ### 插件间导入导出(exports/require)
 
-用法与[普通上下文](./normal.md#插件间导入导出exportsrequire)一致, 差异在可见性:
+用于插件间互相协作，服务插件的导入导出与普通上下文略有不同:
 
-- 服务插件的导出对**所有 Bot 的插件**可见(普通插件之间只在同一个 Bot 内可见);
-- Bot 插件的 `ctx.require` 先查本 Bot 的插件, 未命中再回退到服务插件; 同名时 Bot 私有导出优先;
-- `ctx.require(serviceId)` 导入的是**其他服务插件**的导出, 目标没有导出时抛 `StateError`。
+- 服务插件仅可见其他服务插件的导出，无法获取普通Bot插件的导出
+
+- 服务插件没有`exports`字段，通过`provide`方法用于向`ctx.service`注入字段
+
+- 服务插件只能通过`ctx.service.xx`/`ctx.require("xx")`获取其他插件的导出
+
+> 服务插件的导入导出实际上也是在PluginExports上操作
+
+导出:
+
+- `ctx.provide(key: string, service: unknown)`: 向其他上下文提供一个服务，`key`可以是任意字符串，而不仅仅是插件id，比如`"permission"`, `"filter"`等
+
+导入:
+
+- `ctx.require<T = any>(id: string): T`: 导入指定插件的导出, 泛型用于标注导出类型，导入可见性仅在服务插件中
+
+- `ctx.service[key]: unknown`: 获取其他插件的导出，实际上是`require`的糖，该方法找不到导出值时不会报错，而是静默返回undefined
+
+> 如果需要其他服务的导出，仍需要在清单声明
 
 ```js
 // 服务插件 a
 export default {
 	init(ctx) {
-		ctx.exports = { hello: () => "hi" };
+		ctx.provide("hello", {
+			world: () => `Hello world!`
+		})
 	}
 };
 ```
 
 ```js
 // 另一个服务插件(或任意 Bot 的插件)
-const a = ctx.require("a");
+const hello = ctx.service.hello as { world: () => string } | void;
+ctx.logger.log(hello?.world());
 ```
 
 依赖关系仍然写在清单的 `dependencies` 里: 依赖先于本插件加载, 存在依赖环或依赖缺失时本插件拒绝加载。与普通上下文一样, **不要缓存 `require` 的返回值** —— 目标插件卸载后导出即被释放。

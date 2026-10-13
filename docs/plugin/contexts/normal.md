@@ -220,7 +220,11 @@ await ctx.action(entity, action)
 
 导入:
 
-- `ctx.require<T = any>(pluginId: string): T`: 导入指定插件的导出, 泛型用于标注导出类型
+- `ctx.require<T = any>(pluginId: string): T`: 导入指定插件的导出, 泛型用于标注导出类型，导入的可见性仅在Bot插件内，如果需要服务插件提供的功能通过`ctx.service`访问
+
+- `ctx.service[key]: unknown`: 获取服务插件的导出，该方法不会报错，不需要在清单中声明就可以用，没有目标就静默返回undefined
+
+> 一般服务插件加载先于普通插件，所以只要用户启用了服务就可以获取到导出
 
 约定:
 

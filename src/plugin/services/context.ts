@@ -95,6 +95,9 @@ export class ServiceContext {
 	/** 本上下文注册的 WebUI 路由与页面注销函数 (dispose 时统一注销) */
 	private _webuiDisposers: (() => void)[] = [];
 
+	/** 本上下文的导出 */
+	private _provideIds = new Set<string>();
+
 	/** 本上下文挂载的插件静态目录注销函数 (dispose 时注销) */
 	private _unmountPublic: (() => void) | null = null;
 
@@ -191,27 +194,41 @@ export class ServiceContext {
 	 *
 	 * 每次调用实时查询注册表, 因此不要缓存返回值 ——
 	 * 目标服务卸载后其导出即被释放, 缓存下来只会拿到已失效的对象。
-	 * @param serviceId 导入的服务插件id
+	 * @param id 导入的服务插件id
 	 * @throws 目标服务当前没有导出(未加载/未导出/已卸载)时抛出 StateError
 	 */
-	require<T = any>(serviceId: string): T {
-		if (this._serviceExports.hasExports(serviceId)) {
-			return this._serviceExports.getExports(serviceId) as T;
+	require<T = any>(id: string): T {
+		if (this._serviceExports.hasExports(id)) {
+			return this._serviceExports.getExports(id) as T;
 		}
 		const available = this._serviceExports.ids();
 		throw new StateError(
-			`服务插件 ${this._manifest.id} 导入失败: 服务插件 ${serviceId} 当前没有导出` +
+			`服务插件 ${this._manifest.id} 导入失败: 服务插件 ${id} 当前没有导出` +
 			(available.length ? `(当前可导入: ${available.join(", ")})` : "(当前没有任何服务插件提供导出)")
 		);
 	}
 
-	/** 对外暴露的导出, 供其他服务插件通过 require 获取 */
-	set exports(value: any) {
-		this._serviceExports.setExports(this._manifest.id, value, this);
-	}
+	/**
+	 * 其他服务插件的导出，由服务插件注入
+	 * 
+	 * 本质为对ServiceExports的代理包装，在清单里还是要声明依赖
+	 */
+	service: Record<string, unknown> = new Proxy({}, {
+		get: (_, key) => {
+			if (typeof key !== "string") return undefined;
+			return this._serviceExports?.getExports(key);
+		}
+	})
 
-	get exports(): any {
-		return this._serviceExports.getExports(this._manifest.id);
+	/**
+	 * 导出服务插件的对象，供外部调用
+	 * @param key 服务的键名，如`"permission"`, `"filter"`
+	 * @param service 导出的对象, 供外部使用的接口
+	 */
+	provide(key: string, service: unknown) {
+		this.assertAlive("注入服务");
+		this._provideIds.add(key);
+		this._serviceExports.setExports(key, service, this);
 	}
 
 	/**
@@ -299,6 +316,9 @@ export class ServiceContext {
 
 		// 释放本服务插件导出(归属校验为当前上下文, 不会误删重新加载后的新条目)
 		this._serviceExports.releaseExports(this._manifest.id, this);
+		for (let key of this._provideIds) {
+			this._serviceExports.releaseExports(key, this);
+		}
 
 		this._onMessageCallback = []; // 置空;
 		this._filters = [];

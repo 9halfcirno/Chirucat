@@ -103,11 +103,8 @@ export class PluginManager {
 		// 更新注册表
 		for (const [id, manifest] of collected) {
 			const existing = registry.get(id);
-			if (existing?.status === "enabled") {
-				// 下面这两行先不要了, 避免运行中插件的清单状态不一致
-				// 运行中的插件不替换实例, 仅更新清单
-				// existing.manifest = manifest;
-			} else {
+			// 只替换未启动、只注册、不存在的实例
+			if (!existing || existing?.status === "disabled" || existing?.status === "registered") {
 				// 实例即将被丢弃, 先释放其运行时资源(含对外导出)
 				existing?.context?.dispose();
 				const plugin = new Plugin({ manifest, scope, bot: this.bot });
