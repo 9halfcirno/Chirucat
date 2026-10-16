@@ -9,6 +9,11 @@
     // See also https://aka.ms/tsconfig/module
     "module": "es2022",
     "target": "esnext",
+    // 源码按 ESM 写法省略了扩展名, npm 包又需要按 node_modules 解析:
+    // bundler 是同时满足这两点的解析策略(esbuild 打包插件时也是这么解析的)。
+    // 缺了它 check:types / check:plugins 会整片红: 内置模块要求 default 导入、
+    // 裸包(json5/uuid/esbuild)解析不到, 报的都是解析失败而不是真实类型错误。
+    "moduleResolution": "bundler",
     "types": [],
 
     "paths": {

@@ -6,10 +6,14 @@
 	// 协议改了(如 MessageBlock 拆成收发两侧)插件却不会报错。
 	//
 	// 用法: tsc -p tsconfig.plugins.json --noEmit  (或 npm run check:plugins)
+	//
+	// 注意 include 里的目录: 插件实际位于 bots/<botId>/plugins/**, 原来写的
+	// "plugins/**" 一个文件都匹配不到, 于是 tsc 退化成"检查整个项目" ——
+	// 插件代码依然没被约束。缺省排除 node_modules, 插件自带的依赖不会被扫。
 	"extends": "./tsconfig.json",
 	"compilerOptions": {
 		"noEmit": true,
 		"types": ["node"]
 	},
-	"include": ["plugins/**/*.ts"]
+	"include": ["bots/*/plugins/**/*.ts"]
 }
