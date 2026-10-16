@@ -16,6 +16,15 @@ export type SessionPlatformInfo = {
 
 export class SessionManager {
 	db: sqlite.Database;
+
+	// 预编译语句与事务包装: init() 建表后一次性编译(表不存在时 prepare 会直接抛错, 不能提前)
+	#stmtSessionByKey!: sqlite.Statement<[string, SessionType, string], { uuid: string }>;
+	#stmtInsertSession!: sqlite.Statement<[string, string, SessionType, string]>;
+	#stmtExistsByKey!: sqlite.Statement<[string, SessionType, string], { is_exist: 0 | 1 }>;
+	#stmtQuery!: sqlite.Statement<[string], { platform_id: string; platform_type: SessionType; platform_name: string }>;
+	#stmtQueryMany!: sqlite.Statement<[string], { uuid: string; platform_id: string; platform_type: SessionType; platform_name: string }>;
+	#txGet!: (platform: string, type: SessionType, id: string) => string;
+
 	constructor(db: sqlite.Database) {
 		this.db = db;
 	}
@@ -32,6 +41,48 @@ export class SessionManager {
 				UNIQUE (platform_name, platform_type, platform_id)
 			)
 		`)
+
+		this.#prepare();
+	}
+
+	/** 编译全部语句与事务包装, 只在 init() 建表之后调用 */
+	#prepare() {
+		this.#stmtSessionByKey = this.db.prepare<[string, SessionType, string], { uuid: string }>(
+			'SELECT uuid FROM session_map WHERE platform_name = ? AND platform_type = ? AND platform_id = ?'
+		);
+		this.#stmtInsertSession = this.db.prepare<[string, string, SessionType, string]>(
+			'INSERT OR IGNORE INTO session_map (uuid, platform_name, platform_type, platform_id) VALUES (?, ?, ?, ?)'
+		);
+		this.#stmtExistsByKey = this.db.prepare<[string, SessionType, string], { is_exist: 0 | 1 }>(`
+			SELECT EXISTS (SELECT 1 FROM session_map WHERE platform_name = ? AND platform_type = ? AND platform_id = ?) AS is_exist
+		`);
+		this.#stmtQuery = this.db.prepare<[string], { platform_id: string; platform_type: SessionType; platform_name: string }>(
+			'SELECT platform_id, platform_type, platform_name FROM session_map WHERE uuid = ?'
+		);
+		// 变长 IN 列表: 走 json_each 保持单条固定语句, 不受参数个数影响
+		this.#stmtQueryMany = this.db.prepare<[string], { uuid: string; platform_id: string; platform_type: SessionType; platform_name: string }>(`
+			SELECT uuid, platform_id, platform_type, platform_name FROM session_map
+			WHERE uuid IN (SELECT value FROM json_each(?))
+		`);
+
+		this.#txGet = this.db.transaction((platformName: string, sessionType: SessionType, platformId: string) => {
+			// 1. 先尝试直接查询
+			const row = this.#stmtSessionByKey.get(platformName, sessionType, platformId);
+
+			if (row) {
+				return row.uuid;
+			}
+
+			// 2. 查询不到，生成新的 uuid 并插入
+			let key = [platformName.length, platformName, sessionType, platformId.length, platformId].join(":CHIRUCAT:");
+			const newUuid = uuidv5(key, CHIRUCAT_SESSION_NS);
+			this.#stmtInsertSession.run(newUuid, platformName, sessionType, platformId);
+
+			// 3. 再次查询返回（防止并发冲突时 INSERT 被 IGNORE 导致没拿对 uuid）
+			const result = this.#stmtSessionByKey.get(platformName, sessionType, platformId)!;
+
+			return result.uuid;
+		});
 	}
 
 	/**
@@ -42,32 +93,8 @@ export class SessionManager {
 	 */
 	get(platform: string, type: SessionType, id: string): string {
 		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
-		const getOrCreate = this.db.transaction((platformName: string, sessionType: SessionType, platformId: string) => {
-			// 1. 先尝试直接查询
-			const row = this.db.prepare(
-				'SELECT uuid FROM session_map WHERE platform_name = ? AND platform_type = ? AND platform_id = ?'
-			).get(platformName, sessionType, platformId) as { uuid: string } | undefined;
 
-			if (row) {
-				return row.uuid;
-			}
-
-			// 2. 查询不到，生成新的 uuid 并插入
-			let key = [platformName.length, platformName, sessionType, platformId.length, platformId].join(":CHIRUCAT:");
-			const newUuid = uuidv5(key, CHIRUCAT_SESSION_NS);
-			this.db.prepare(
-				'INSERT OR IGNORE INTO session_map (uuid, platform_name, platform_type, platform_id) VALUES (?, ?, ?, ?)'
-			).run(newUuid, platformName, sessionType, platformId);
-
-			// 3. 再次查询返回（防止并发冲突时 INSERT 被 IGNORE 导致没拿对 uuid）
-			const result = this.db.prepare(
-				'SELECT uuid FROM session_map WHERE platform_name = ? AND platform_type = ? AND platform_id = ?'
-			).get(platformName, sessionType, platformId) as { uuid: string };
-
-			return result.uuid;
-		});
-
-		return getOrCreate(platform, type, id);
+		return this.#txGet(platform, type, id);
 	}
 
 	/**
@@ -78,25 +105,15 @@ export class SessionManager {
 	find(platform: string, type: SessionType, id: string): string | null {
 		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
 
-		const row = this.db.prepare(
-			'SELECT uuid FROM session_map WHERE platform_name = ? AND platform_type = ? AND platform_id = ?'
-		).get(platform, type, id) as { uuid: string } | undefined;
+		const row = this.#stmtSessionByKey.get(platform, type, id);
 
 		return row?.uuid ?? null;
 	}
 
 	has(platform: string, type: SessionType, id: string) {
 		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
-		let has = this.db.transaction((p: string, t: SessionType, id: string) => {
-			let res = this.db.prepare(`
-				SELECT EXISTS (SELECT 1 FROM session_map WHERE platform_name = ? AND platform_type = ? AND platform_id = ?) AS is_exist
-			`).get(p, t, id) as { is_exist: boolean } | undefined;
 
-			if (!res?.is_exist) return false;
-			return true;
-		})
-
-		return has(platform, type, id)
+		return this.#stmtExistsByKey.get(platform, type, id)?.is_exist === 1;
 	}
 
 	/**
@@ -105,13 +122,7 @@ export class SessionManager {
 	 */
 	query(id: string): SessionPlatformInfo | null {
 		if (!this.db.open) throw new StateError(`Internal表连接已关闭`);
-		const row = this.db.prepare(
-			'SELECT platform_id, platform_type, platform_name FROM session_map WHERE uuid = ?'
-		).get(id) as {
-			platform_id: string,
-			platform_name: string,
-			platform_type: SessionType
-		} | undefined;
+		const row = this.#stmtQuery.get(id);
 		if (!row) {
 			return null;
 		}
@@ -129,10 +140,7 @@ export class SessionManager {
 		const result = new Map<string, SessionPlatformInfo>();
 		if (ids.length === 0) return result;
 
-		const placeholders = ids.map(() => "?").join(", ");
-		const rows = this.db.prepare(`
-			SELECT uuid, platform_id, platform_type, platform_name FROM session_map WHERE uuid IN (${placeholders})
-		`).all(...ids) as { uuid: string; platform_id: string; platform_type: SessionType; platform_name: string }[];
+		const rows = this.#stmtQueryMany.all(JSON.stringify(ids));
 
 		for (const row of rows) {
 			result.set(row.uuid, {
