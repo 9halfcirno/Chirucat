@@ -1,5 +1,6 @@
 import type { Message } from "../entity/message";
 import type { MessageBlockReceive } from "../protocols/message-block";
+import { getLogLevel, LOG_LEVELS } from "../utils/logger";
 import type { Bot } from "./bot";
 
 /**
@@ -21,7 +22,8 @@ export class MessageHandler {
 			// Hook 埋点: 消息处理之前, 可被服务插件取消(取消后不匹配指令、不触发插件回调)
 			if (this.bot.core.hooks.dispatch("before.message.handle", msg)) return;
 
-			this._logMessage(msg);
+			// 只有日志等级小于2时打印
+			if (LOG_LEVELS.indexOf(getLogLevel()) < 2) this._logMessage(msg);
 
 			// 采集昵称供 WebUI 展示; 值变化才落盘, 与统计模块无关 (统计可关闭)
 			this.bot.core.profile?.touch(msg.sender.id, msg.sender.name);
