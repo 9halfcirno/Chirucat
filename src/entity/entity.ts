@@ -1,10 +1,10 @@
 import type { Bot } from "../bot/bot";
 import type { ActionResponses, BotActions } from "../protocols/actions";
 import type { BotEventMeta, BotEvents } from "../protocols/events";
-import { uuid } from "../utils/uuid";
+import { v6 as uuidv6 } from "uuid";
 
 export class Entity {
-	uuid = uuid();
+	uuid = uuidv6();
 	type: BotEvents["type"];
 	time: number;
 	/** 该字段建议配合UserManager使用, 不应直接使用, 如果插件要用...也行吧 */
