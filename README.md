@@ -1,4 +1,9 @@
-# Chirucat!
+<div align="center">
+  <img src="./src/webui/public/favicon.png" alt="可爱小团子" width="250">
+</div>
+
+  # Chirucat!
+
 
 [English](./README.en.md)
 

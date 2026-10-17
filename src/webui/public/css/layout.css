@@ -370,6 +370,13 @@ body:not(.authed) #main {
 	box-shadow: var(--shadow-2);
 }
 
+.login-icon {
+	align-self: center;
+
+	width: min(80px, 40%);
+	height: auto;
+}
+
 .login-logo {
 	align-self: center;
 
