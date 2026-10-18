@@ -331,6 +331,7 @@ export default {
 | `before.plugin.enable` | 插件启用之前 | `Plugin` 实例 | 跳过该插件的启用 |
 | `before.message.handle` | 消息处理之前 | `Message` 对象 | 整条消息不再处理: 不匹配指令、不触发任何插件的消息回调 |
 | `before.command.handle` | 指令处理之前 | `{ message, command, args }` | 不执行该指令的处理函数 |
+| `before.action.send` | 任意 Action 转发给适配器之前 | `{ action, adapter, extra }` | 该 Action 不再转发, 调用方收到 `code: "HOOK_CANCELED"` 的失败响应 |
 
 约定:
 
