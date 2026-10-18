@@ -1,6 +1,9 @@
 import type { MessageBlockSend } from "../message-block";
-import type { ActionResponse } from "./action";
 
+/**
+ * 向指定会话发送一条消息
+ * @baseline 最基础的Bot交互Action
+ */
 export interface MessageSend {
 	type: "message.send";
 
