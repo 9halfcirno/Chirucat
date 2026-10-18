@@ -213,7 +213,7 @@ export default {
 			if (sink) sink("action");
 			if (action.type === "message.send") return { success: true, id: "ack-" + (++seq) };
 			if (action.type === "message.delete") return { success: true };
-			return { success: false, error: "bench-adapter 不支持该动作" };
+			return { success: false, error: "bench-adapter 不支持该动作", code: "ACTION_UNSUPPORTED" };
 		});
 	},
 };`,

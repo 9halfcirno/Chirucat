@@ -1,5 +1,6 @@
 import type { AdapterContext } from "../../src/plugin/contexts/adapter-context";
 import type { ActionResponses, BotActions } from "../../src/protocols/actions";
+import type { ActionErrorCode } from "../../src/protocols/errors";
 import type Logger from "../../src/utils/logger";
 import type { QQApi } from "./api";
 import { splitSendBlocks, stringifyContent } from "./codec";
@@ -12,7 +13,7 @@ import type { MediaUploader } from "./uploader";
  *
  * 动作类型到处理器的映射集中在 {@link QQ_ACTIONS}: 它被声明为 {@link QQActionHandlers},
  * 因此框架新增一个 Action 类型时, 这里会因为"少一个键"而编译失败 —— 不会出现
- * 新增动作无人处理、调用方只拿到 ACTION_NOT_HANDLED 的情况。
+ * 新增动作无人处理、调用方只拿到 ADAPTER_UNHANDLED 的情况。
  */
 
 /** 动作处理器依赖 */
@@ -92,13 +93,13 @@ export class SessionSendGate {
 /** 目标会话解析结果 */
 type TargetResult =
 	| { ok: true; target: QQSendTarget }
-	| { ok: false; error: string; code: string };
+	| { ok: false; error: string; code: ActionErrorCode };
 
 /**
  * 把框架会话 uuid 解析为 QQ 发送目标
  *
  * 平台不匹配、会话类型不支持都返回失败而不是静默忽略: 动作既然已被框架路由到
- * 本适配器, "不归我管" 就不是合法状态, 静默会让问题伪装成 ACTION_NOT_HANDLED。
+ * 本适配器, "不归我管" 就不是合法状态, 静默会让问题伪装成 ADAPTER_UNHANDLED。
  */
 function resolveTarget(ctx: AdapterContext, session: string): TargetResult {
 	const info = ctx.session.query(session);

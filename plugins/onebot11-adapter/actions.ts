@@ -1,5 +1,6 @@
 import type { AdapterContext } from "../../src/plugin/contexts/adapter-context";
 import type { ActionResponses, BotActions } from "../../src/protocols/actions";
+import type { ActionErrorCode } from "../../src/protocols/errors";
 import type { SessionType } from "../../src/protocols/session";
 import type Logger from "../../src/utils/logger";
 import { blocksToSegments, type Ob11CodecDeps, type SendableBlock } from "./codec";
@@ -12,7 +13,7 @@ import type { OneBotSegment } from "./types";
  *
  * 动作类型到处理器的映射集中在 {@link OB11_ACTIONS}: 它被声明为 {@link Ob11ActionHandlers},
  * 因此框架新增 Action 类型时这里会因"少一个键"而编译失败, 不会出现动作无人处理、
- * 调用方只拿到 ACTION_NOT_HANDLED 的情况。
+ * 调用方只拿到 ADAPTER_UNHANDLED 的情况。
  */
 
 /** 动作处理器依赖 */
@@ -49,7 +50,7 @@ interface SendTarget {
 
 type TargetResult =
 	| { ok: true; target: SendTarget }
-	| { ok: false; error: string; code: string };
+	| { ok: false; error: string; code: ActionErrorCode };
 
 /** 取错误文本 */
 function errorMessage(e: unknown): string {
@@ -74,7 +75,7 @@ function isSendableSessionType(type: SessionType): type is "group" | "private" {
  * 把框架会话 uuid 解析为发送目标
  *
  * 平台不匹配、会话类型不支持都返回失败而不是静默忽略: 动作已被框架路由到本适配器,
- * "不归我管" 不是合法状态, 静默会让问题伪装成 ACTION_NOT_HANDLED。
+ * "不归我管" 不是合法状态, 静默会让问题伪装成 ADAPTER_UNHANDLED。
  *
  * 撤回动作其实不需要会话 id, 但仍做同样校验 —— 保持"路由到本适配器的动作必须属于
  * 本平台"这一不变量, 否则平台串号会悄无声息地成功。

@@ -1,4 +1,5 @@
 import type { ActionResponses, BotActions } from "../../protocols/actions";
+import type { ActionErrorCode } from "../../protocols/errors";
 import type { BotEvents } from "../../protocols/events";
 import type { PluginExports } from "../exports";
 import { PluginContext } from "./context";
@@ -89,7 +90,7 @@ export class AdapterContext extends PluginContext {
 	}
 
 	/** 统一的失败响应: 本方法的契约是"总能给出响应对象", 不允许 undefined */
-	private failure<T extends BotActions>(error: string, code: string): ActionResponses[T["type"]] {
+	private failure<T extends BotActions>(error: string, code: ActionErrorCode): ActionResponses[T["type"]] {
 		return {
 			success: false,
 			error,

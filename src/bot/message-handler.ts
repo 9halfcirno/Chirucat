@@ -1,5 +1,4 @@
 import { concatBlocks, type Message } from "../entity/message";
-import type { MessageBlockReceive } from "../protocols/message-block";
 import { getLogLevel, LOG_LEVELS } from "../utils/logger";
 import type { Bot } from "./bot";
 

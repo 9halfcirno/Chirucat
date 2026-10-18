@@ -13,7 +13,7 @@ import EventEmitter from "events";
 import type { ActionResponses, BotActions } from "../protocols/actions";
 import type { MessageSend } from "../protocols/action/message-send";
 import { StateError } from "../errors/state-error";
-import Logger from "../utils/logger";
+import Logger, { getLogLevel, LOG_LEVELS } from "../utils/logger";
 import { concatBlocks } from "../entity/message";
 
 /**
@@ -305,26 +305,30 @@ export class Bot extends EventEmitter {
 		};
 		
 		if (action.type === "message.send") {
-			this._logMsgAction(action, adapter);
+			this._logMsgAction(action);
 			this.recordSend(action);
 		}
 		return await this.plugin.handleAction(action, adapter, extra);
 	}
 
-	private _logMsgAction(action: MessageSend, adapter: string) {
-		const session = action.session;
+	private _logMsgAction(action: MessageSend) {
+		// 与接收侧日志一致: 只有 debug/info 级别才构建, 避免无谓的会话查询与块拼接
+		if (LOG_LEVELS.indexOf(getLogLevel()) >= 2) return;
 
-		const sinfo = this.core.session?.query(session);
+		try {
+			const sinfo = this.core.session?.query(action.session);
+			const txt = typeof action.message === "string"
+				? action.message
+				: concatBlocks(action.message);
 
-		let txt = "";
-		if (typeof action.message === "string") txt = action.message;
-		else txt = concatBlocks(action.message)
-		let str = "";
-		str += "[发]"
-		str += `[${sinfo?.platform} ${sinfo?.type}:${sinfo?.id || "unknown"}]\n`
-		str += `<Bot> ${txt}`;
-
-		this.logger.log(str)
+			this.logger.log(
+				`[发][${sinfo?.platform} ${sinfo?.type}:${sinfo?.id || "unknown"}]\n` +
+				`<Bot> ${txt}`
+			);
+		} catch (e) {
+			// 辅助日志不该影响发送主流程
+			this.logger.debug(`打印发送消息日志失败: ${e instanceof Error ? e.message : e}`);
+		}
 	}
 
 	/**
@@ -337,13 +341,18 @@ export class Bot extends EventEmitter {
 		const stats = this.core.statistics;
 		if (!stats) return;
 
-		const session = this.core.session?.query(action.session);
-		if (!session) return;
+		try {
+			const session = this.core.session?.query(action.session);
+			if (!session) return;
 
-		stats.recordSend(action, {
-			botId: this.id,
-			platform: session.platform,
-			sessionType: session.type,
-		});
+			stats.recordSend(action, {
+				botId: this.id,
+				platform: session.platform,
+				sessionType: session.type,
+			});
+		} catch (e) {
+			// 同日志: 统计失败不能阻断发送
+			this.logger.debug(`记录发送统计失败: ${e instanceof Error ? e.message : e}`);
+		}
 	}
 }
