@@ -82,3 +82,32 @@ export class Message extends Entity {
 		})
 	}
 }
+
+/**
+ * 将消息快按顺序拼接为字符串
+ * @param blocks 消息块数组
+ * @returns 
+ */
+export function concatBlocks(blocks: (MessageBlockReceive | MessageBlockSend)[]): string {
+	let text = "";
+	for (const block of blocks) {
+		switch (block.type) {
+			case "text":
+				text += block.text;
+				break;
+			case "mention":
+				text += `@${(block as { name: string }).name || block.id}`;
+				break;
+			case "image":
+				text += `[图片: ${block.url ?? "Buffer"}]`;
+				break;
+			case "video":
+				text += `[视频: ${block.url ?? "Buffer"}]`
+				break;
+			case "audio":
+				text += `[音频: ${block.url ?? "Buffer"}]`
+				break;
+		}
+	}
+	return text;
+}

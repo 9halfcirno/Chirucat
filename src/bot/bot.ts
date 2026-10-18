@@ -14,6 +14,7 @@ import type { ActionResponses, BotActions } from "../protocols/actions";
 import type { MessageSend } from "../protocols/action/message-send";
 import { StateError } from "../errors/state-error";
 import Logger from "../utils/logger";
+import { concatBlocks } from "../entity/message";
 
 /**
  * 一个 Bot: 一组插件的独立容器
@@ -297,8 +298,33 @@ export class Bot extends EventEmitter {
 	 * @param extra 额外数据, 应从对应event.extra取
 	 */
 	async action<T extends BotActions>(action: T, adapter: string, extra?: Record<string, any>): Promise<ActionResponses[T["type"]]> {
-		if (action.type === "message.send") this.recordSend(action);
+		if (this.core.hooks.dispatch("before.action.send", { action, adapter, extra })) return {
+			success: false,
+			error: "Hook钩子取消了该动作",
+			code: "HOOK_CANCELED"
+		};
+		
+		if (action.type === "message.send") {
+			this._logMsgAction(action, adapter);
+			this.recordSend(action);
+		}
 		return await this.plugin.handleAction(action, adapter, extra);
+	}
+
+	private _logMsgAction(action: MessageSend, adapter: string) {
+		const session = action.session;
+
+		const sinfo = this.core.session?.query(session);
+
+		let txt = "";
+		if (typeof action.message === "string") txt = action.message;
+		else txt = concatBlocks(action.message)
+		let str = "";
+		str += "[发]"
+		str += `[${sinfo?.platform} ${sinfo?.type}:${sinfo?.id || "unknown"}]\n`
+		str += `<Bot> ${txt}`;
+
+		this.logger.log(str)
 	}
 
 	/**

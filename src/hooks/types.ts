@@ -3,6 +3,7 @@ import type { Command, CommandArgs } from "../command/types";
 import type { Core } from "../core";
 import type { Message } from "../entity/message";
 import type { Plugin } from "../plugin/plugin";
+import type { BotActions } from "../protocols/actions";
 
 /**
  * 指令处理 Hook 的载体: 完整执行上下文。
@@ -32,6 +33,9 @@ export type Hooks = {
 	"before.message.handle": HookCallback<Message>;
 	/** 指令处理之前, 传入命中的指令执行上下文 */
 	"before.command.handle": HookCallback<HookCommandContext>;
+
+	/** Action触发前 */
+	"before.action.send": HookCallback<{ action: BotActions; adapter: string; extra: void | Record<string, any> }>
 
 	// 部分的after完全可以注册为
 }

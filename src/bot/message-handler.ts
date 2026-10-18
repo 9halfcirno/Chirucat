@@ -1,4 +1,4 @@
-import type { Message } from "../entity/message";
+import { concatBlocks, type Message } from "../entity/message";
 import type { MessageBlockReceive } from "../protocols/message-block";
 import { getLogLevel, LOG_LEVELS } from "../utils/logger";
 import type { Bot } from "./bot";
@@ -54,7 +54,7 @@ export class MessageHandler {
 		const sinfo = this.bot.core.session?.query(session.id);
 
 		// 优先把消息块拼接成一段文本, 再随整条日志一次性打印
-		const content = this._concatBlocks(message.blocks) || message.text;
+		const content = concatBlocks(message.blocks) || message.text;
 
 		let str = "";
 		str += "[收]"
@@ -63,30 +63,5 @@ export class MessageHandler {
 
 		this.bot.logger.log(str);
 		
-	}
-
-	/** 按顺序把消息块拼接为可读文本 */
-	private _concatBlocks(blocks: MessageBlockReceive[]): string {
-		let text = "";
-		for (const block of blocks) {
-			switch (block.type) {
-				case "text":
-					text += block.text;
-					break;
-				case "mention":
-					text += `@${block.name || block.id}`;
-					break;
-				case "image":
-					text += `[图片: ${block.url}]`;
-					break;
-				case "video":
-					text += `[视频: ${block.url}]`	
-					break;
-				case "audio":
-					text += `[音频: ${block.url}]`
-					break;
-			}
-		}
-		return text;
 	}
 }
