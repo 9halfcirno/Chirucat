@@ -14,6 +14,7 @@ import type { AdapterContext } from "./contexts/adapter-context";
 import Logger from "../utils/logger";
 import { dfs } from "../utils/dfs";
 import { PluginExports } from "./exports";
+import { deepEqual } from "../utils/deepEqual";
 
 export class PluginManager {
 	loader = new PluginLoader();
@@ -103,8 +104,16 @@ export class PluginManager {
 		// 更新注册表
 		for (const [id, manifest] of collected) {
 			const existing = registry.get(id);
-			// 只替换未启动、只注册、不存在的实例
-			if (!existing || existing?.status === "disabled" || existing?.status === "registered") {
+			// 未启动/仅注册的实例在清单变化时重建; 不存在则直接新建
+			if ( // 只有满足以下条件的重建Plugin对象
+				!existing || // 之前不存在
+				(
+					(
+						existing.status === "disabled" || // 状态是disabled
+						existing.status === "registered" // 状态停在仅注册
+					) && !deepEqual(existing.manifest, manifest) // 且清单发生变化
+				)
+			) {
 				// 实例即将被丢弃, 先释放其运行时资源(含对外导出)
 				existing?.context?.dispose();
 				const plugin = new Plugin({ manifest, scope, bot: this.bot });
@@ -319,7 +328,7 @@ export class PluginManager {
 		const adapterPlugin = this.enabledPlugins.find(p => p.id === adapter && p.manifest.type === "adapter");
 		if (!adapterPlugin) {
 			this.bot.logger.error(`已启用插件中找不到id为 ${adapter} 的适配器插件!`);
-			return { success: false, error: "No adapter on this bot.", code: "ADAPTER_NOT_FOUND"};
+			return { success: false, error: "No adapter on this bot.", code: "ADAPTER_NOT_FOUND" };
 		}
 		return await (adapterPlugin.context as AdapterContext).handleAction(action, extra);
 	}
