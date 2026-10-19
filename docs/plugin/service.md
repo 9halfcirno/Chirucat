@@ -130,7 +130,7 @@ export default {
 }
 ```
 
-`dependencies` 里可以写其他服务插件的 id: 依赖会先于本插件加载, 存在依赖环或依赖缺失时本插件拒绝加载。依赖方可以通过 `ctx.require` 取到对方发布的导出(见[服务插件上下文](contexts/service.md#插件间导入导出exportsrequire))。
+`dependencies` 里可以写其他服务插件的 id: 依赖会先于本插件加载, 存在依赖环或依赖缺失时本插件拒绝加载。依赖方可以通过 `ctx.require` 或 `ctx.service.xx` 取到对方发布的导出(见[服务插件上下文](contexts/service.md#插件间导入导出exportsrequire))。
 
 ## 上下游
 
