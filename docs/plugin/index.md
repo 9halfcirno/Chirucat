@@ -4,10 +4,11 @@
 
 ## 概述
 
-插件是Chirucat的核心部分, 既可以通过插件来扩展框架的功能, 也可以通过插件来接入不同的聊天平台。插件由两部分组成：
+插件是Chirucat的核心部分, 既可以通过插件来扩展框架的功能, 也可以通过插件来接入不同的聊天平台。插件由三部分组成：
 
 - **`manifest.json`**：插件清单，声明插件 ID、版本、入口文件等
 - **入口模块**：默认导出一个 `{ init(ctx), unload?(ctx) }`
+- **配置Schema**: 该部分是可选的插件配置定义文件, 用于为插件添加配置选项
 
 ## 插件的三种类型
 
@@ -23,10 +24,13 @@
 
 Chirucat插件系统使用**esbuild**对插件代码进行打包, 因此插件开发语言可使用任意esbuild支持的语言, 例如TypeScript, JavaScript, JSX, TSX等
 
+具体加载行为请见 [**插件加载器**](loader.md) (建议优先阅读)
+
 ### 文档
 
 - [插件开发准则](guidelines.md)
 - [插件格式](format.md)
+- [插件加载器](loader.md)
 - [适配器插件开发](adapter.md)
 - [服务插件](service.md)
 - [插件上下文](./contexts/index.md)
