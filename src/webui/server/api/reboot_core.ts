@@ -1,4 +1,3 @@
-import { startCore, stopCore } from "../../../app";
 import Logger from "../../../utils/logger";
 import type { WebUIAPI } from "../types";
 import { fail, requireCore } from "./_shared";
@@ -15,6 +14,8 @@ const api: WebUIAPI = {
 
 	async handler(_, core) {
 		requireCore(core);
+
+		const { startCore, stopCore } = await import("../../../app"); // 异步加载模块, 无核导入app.ts
 
 		logger.log(`尝试重启Chirucat Core!`)
 		try {
