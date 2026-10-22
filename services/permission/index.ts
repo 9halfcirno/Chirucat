@@ -1,6 +1,6 @@
 import type { ServiceContext } from "../../src/plugin/services/context";
 import type { ServiceModule } from "../../src/plugin/services/service";
-import type { User } from "../../src/protocols/user";
+import type { User } from "../../src/entity/user";
 import { PermissionLevel, type AdminEntry } from "./types";
 
 /**
