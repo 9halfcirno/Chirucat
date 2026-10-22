@@ -29,7 +29,7 @@ Download and install the LTS version from [nodejs.org](https://nodejs.org).
 
 > Node 24 is recommended. If you encounter dependency package version issues, please try downgrading the dependency versions in `package.json`.
 >
-> The minimum supported version is Node 22, as some code utilizes newer syntax.
+> The minimum supported version is Node 22.18+ or 24.2+, as some code utilizes newer syntax and features.
 
 ### 2. Get Chirucat
 
