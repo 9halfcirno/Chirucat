@@ -77,7 +77,7 @@ export default {
 		ctx.message.includes("ping", () => { globalThis.__calls.push("msg-a"); });
 		ctx.event.filter((e) => e.type === "message.create");
 		ctx.event.observe((e) => { globalThis.__calls.push("observe:" + e.type); });
-		ctx.exports = { value: 42 };
+		ctx.provide("a", { value: 42 });
 	},
 	unload() { globalThis.__calls.push("unload-a"); }
 };
@@ -162,7 +162,7 @@ const consumer = new Plugin({
 const ownExports = new PluginExports();
 const ctx = PluginContextFactory.create(consumer, ownExports, core.services.exports);
 
-check("Bot 插件可通过 ctx.require 读取服务导出", ctx.require<{ value: number }>("a")?.value === 42);
+check("Bot 插件可通过 ctx.require 读取服务导出", (ctx.service.a as { value: number })?.value === 42);
 
 ownExports.setExports("a", { value: 7 });
 check("本 Bot 插件导出优先于同名服务导出", ctx.require<{ value: number }>("a")?.value === 7);
