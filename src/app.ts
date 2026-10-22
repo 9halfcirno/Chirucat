@@ -11,6 +11,9 @@ import {
 	STATISTICS_SETTINGS_FILE,
 	initialStatisticsSettings,
 } from "./config/settings/domains/statistics";
+import { buildWarning } from "./node-check";
+import { ArgParseError, createParser, type ParseResult, type ValuesOf } from "./utils/cli";
+import { features } from "./node-features";
 
 const logger = new Logger("App");
 
@@ -138,26 +141,73 @@ async function exit(exitCode: number) {
 	setTimeout(() => process.exit(exitCode), 1000).unref();
 }
 
-// 全局异常兜底
-process.on("unhandledRejection", (reason) => {
-	logger.error("未捕获的 Promise 异常: ", reason);
-	void exit(1);
-});
 
-process.on("uncaughtException", (e) => {
-	logger.error("未捕获的异常: ", e);
-	void exit(1);
-});
 
-// 进程退出信号注册
-process.once("SIGINT", () => void exit(0));
-process.once("SIGTERM", () => void exit(0));
+const argsSchema = {
+	'ver-check': { type: 'boolean', default: true, desc: "跳过 Node 版本检查, 以不受控制的状态启动框架" },
+	"help": { type: 'boolean', alias: 'h', desc: '显示帮助' },
+} as const;
+let args: ParseResult<ValuesOf<typeof argsSchema>>
+
+const argsParser = createParser(argsSchema, { onWarn() { }, })
+try {
+
+	args = argsParser.parse(process.argv.slice(2));
+} catch (e) {
+	if (e instanceof ArgParseError) {
+		console.error(`[${e.code}] ${e.message}`);
+		process.exit(1);
+	}
+	throw e;
+}
+
+if (args.values["help"] === true) { // 显式带help
+	let h = argsParser.help();
+	logger.log(`\n============ Chirucat Help ===============\n${h}`)
+	process.exit(0);
+}
+
+
+
+let verCheck;
+const nodeVer = process.versions.node.replace(/-(.*)/, "");
+
+if (args.values.verCheck !== false) {// 进入前进行版本检查
+
+	verCheck = buildWarning(nodeVer, features);
+
+	if (verCheck) {
+		// error 级不满足时继续跑只会得到段错误或"看起来没在跑"的静默失败, 早退比晚退诚实
+		if (verCheck.blocking) logger.error(`\n${verCheck.text}`);
+		else logger.warn(`\n${verCheck.text}`);
+	}
+
+	if (verCheck?.blocking) {
+		logger.error("Node 版本不满足框架必需特性, 已中止启动 (exit 1)");
+		void exit(1);
+	}
+} else {
+	logger.warn(`Node 版本预检查已被关闭, 当前为 Node v${nodeVer}, 框架可能会出现意料之外的行为`)
+}
 
 // 作为主入口文件运行时直接启动;
-// 被其他模块 import 时不启动核心 (WebUI 启动时会扫描并 import api 目录下的所有模块)
-if (import.meta.main) {
+// 被其他模块 import 时不启动核心
+if (import.meta.main && !verCheck?.blocking) {
+	// 全局异常兜底
+	process.on("unhandledRejection", (reason) => {
+		logger.error("未捕获的 Promise 异常: ", reason);
+		void exit(1);
+	});
+
+	process.on("uncaughtException", (e) => {
+		logger.error("未捕获的异常: ", e);
+		void exit(1);
+	});
+
+	// 进程退出信号注册
+	process.once("SIGINT", () => void exit(0));
+	process.once("SIGTERM", () => void exit(0));
 	startCore().catch(async () => {
 		await exit(1);
 	});
 }
-
