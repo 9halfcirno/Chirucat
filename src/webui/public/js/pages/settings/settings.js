@@ -136,12 +136,23 @@ async function handleSave(domain, list) {
 		|| (domain.id === "webui" && changed.includes("frontConfig.enableTestLab"));
 	if (pageSwitchChanged) await syncServicePages();
 
-	// 换监听端口: 服务器马上会先关旧监听再在新端口上重开, 这个页面所在的原址会失效
-	const nextPort = Number(patch?.port);
-	if (domain.id === "webui" && Number.isInteger(nextPort) && String(nextPort) !== location.port) {
-		const url = `${location.protocol}//${location.hostname}:${nextPort}/`;
-		toast(`监听端口已改为 ${nextPort}, 即将跳转到 ${url}`, { type: "warn", duration: 8000 });
-		setTimeout(() => { location.href = url; }, 2000);
+	// 换监听端口: 服务器马上会先关旧监听再在新端口上重开, 这个页面所在的原址会失效。
+	// 是否真的换了端口以服务端的 changed 为准 —— 绑定域名 / 反向代理 / 端口映射时,
+	// 页面端口与监听端口本来就不同, 拿 location.port 比较会在没改端口时也触发跳转。
+	if (domain.id === "webui" && changed.includes("port")) {
+		const nextPort = Number(result?.values?.port);
+		if (Number.isInteger(nextPort)) {
+			// 当前页面只有直连旧监听端口时才谈得上"跳到新端口"; 经域名/代理访问时
+			// 外部 URL 由代理决定, 跳过去一定打不开, 只提示去更新转发目标。
+			const currentPort = location.port || (location.protocol === "https:" ? "443" : "80");
+			if (String(domain.values?.port ?? "") === currentPort) {
+				const url = `${location.protocol}//${location.hostname}:${nextPort}/`;
+				toast(`监听端口已改为 ${nextPort}, 即将跳转到 ${url}`, { type: "warn", duration: 8000 });
+				setTimeout(() => { location.href = url; }, 2000);
+			} else {
+				toast(`监听端口已改为 ${nextPort}; 当前经域名/代理访问, 请更新转发目标后再访问`, { type: "warn", duration: 8000 });
+			}
+		}
 		return;
 	}
 
