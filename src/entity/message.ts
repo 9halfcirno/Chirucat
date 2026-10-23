@@ -3,7 +3,7 @@ import type { MessageCreateEvent } from "../protocols/event/message";
 import type { BotEventMeta } from "../protocols/events";
 import type { MessageBlockReceive, MessageBlockSend } from "../protocols/message-block";
 import type { Session } from "../protocols/session";
-import type { User } from "../protocols/user";
+import type { User } from "./user";
 import { Entity } from "./entity";
 import type { MessageQuote, MessageReplyOption } from "./types";
 

@@ -1,5 +1,5 @@
 import type { MessageBlockReceive } from "../protocols/message-block";
-import type { User } from "../protocols/user";
+import type { User } from "./user";
 
 export type MessageReplyOption = {
 	/** 引用的消息token/id, 为布尔true时代表引用当前消息 */
