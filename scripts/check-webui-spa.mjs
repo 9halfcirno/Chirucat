@@ -224,15 +224,17 @@ function setNarrow(matches) {
 	globalThis.matchMedia(NARROW).matches = matches;
 }
 
-// 页面骨架: #main / #page-view / #activity-bar / #side-bar
+// 页面骨架: #main / #page-view / #activity-bar / #side-bar, 外加顶栏标题 #page-title
 const main = new El("div");
 main.clientHeight = 800;
 const root = new El("div");
 const nav = new El("nav");
+const titleEl = new El("span");
 const sideBar = new El("aside");
 elements.set("main", main);
 elements.set("page-view", root);
 elements.set("activity-bar", nav);
+elements.set("page-title", titleEl);
 elements.set("side-bar", sideBar);
 
 // ==================== 断言小工具 ====================
@@ -348,6 +350,7 @@ await settle();
 
 eq(navTitles(), ["首页", "日志"], "活动栏按注册顺序生成按钮");
 eq(pageBone(), "首页-骨架", "启动后打开了第一个页面");
+eq(titleEl.textContent, "首页", "顶栏标题显示当前页面名");
 eq(app.sidebar.currentPageId(), "home", "当前页面 id 正确");
 eq(menuTitles(), ["概览", "明细"], "声明式二级菜单已渲染");
 eq(activeTitle(), "概览", "首个可点击项自动选中");
@@ -374,6 +377,7 @@ eq(contentText(), "内容:概览", "内容跟着换到新选中项");
 eq(app.sidebar.remove("明细"), true, "remove 声明式项");
 eq(menuTitles(), ["概览"], "声明式项也能删");
 await app.navigate("logs", { push: false });
+eq(titleEl.textContent, "日志", "切换页面时顶栏标题跟着改");
 await app.navigate("home", { push: false });
 eq(menuTitles(), ["概览"], "离开再回来, 被删的声明式项不会自己冒回来");
 eq(app.sidebar.list().map((i) => i.title), ["概览"], "list() 与界面一致");
@@ -412,11 +416,13 @@ eq(navTitles(), ["首页", "日志", "用户"], "活动栏立即多出按钮");
 eq(log.filter((l) => l === "render:users").length, 0, "新注册的页面不会自动抢当前页");
 await app.navigate("users", { push: false });
 eq(pageBone(), "用户-骨架", "新页面可正常打开");
+eq(titleEl.textContent, "用户", "顶栏标题跟着打开的新页面");
 eq(menuTitles(), ["列表"], "新页面的二级菜单正常");
 
 section("update(): 改标题 / 调顺序");
 app.update("users", { title: "用户管理" });
 eq(navTitles(), ["首页", "日志", "用户管理"], "标题更新反映到活动栏");
+eq(titleEl.textContent, "用户管理", "正在显示的页面改标题, 顶栏当场同步");
 app.update("users", { index: 0 });
 eq(navTitles(), ["用户管理", "首页", "日志"], "index 调整一级导航顺序");
 eq(app.listPages().map((p) => p.id), ["users", "home", "logs"], "listPages() 顺序一致");
@@ -458,6 +464,7 @@ eq(pageBone(), "用户-骨架", "先落到第一个页面 (此时 users 排在�
 app.register(makePage("late", "迟到", [menuItem("子项", log)], log));
 await settle();
 eq(pageBone(), "迟到-骨架", "页面注册上来后按 hash 自动打开");
+eq(titleEl.textContent, "迟到", "深链补齐时顶栏标题也到位");
 eq(navHas("迟到"), true, "活动栏也有它");
 
 section("注销一级页面");
@@ -469,6 +476,7 @@ eq(app.unregister("late"), true, "注销当前页面");
 await settle();
 // users 已在上面被注销, 剩下的第一个页面是 home
 eq(pageBone(), "首页-骨架", "落到的确实是第一个页面 (home)");
+eq(titleEl.textContent, "首页", "兜底导航时顶栏标题一并改掉");
 eq(location.hash, "#/home", "地址栏改写为兜底页面 (不新增历史记录)");
 eq(log.filter((l) => l === "destroy:late").length, 1, "被注销的页面收到了 destroy()");
 eq(app.sidebar.list({ page: "late" }).length, 0, "被注销页面的动态菜单状态一并丢弃");
@@ -572,16 +580,17 @@ const botModule = dataModule(`
 export default { render(container, bot) { container.textContent = "Bot 名单: " + bot.id; } };
 `);
 
-/** 服务端清单的替身 */
-function pageViews(version, pages) {
-	return { version, pages };
+/** 服务端清单的替身 (核心可选页面与插件页面同一份清单) */
+function pageViews(version, pages, corePages = []) {
+	return { version, corePagesVersion: corePages.length > 0 ? 1 : 0, pages, corePages };
 }
 
 let payload = pageViews(1, []);
 let fetchCount = 0;
 globalThis.fetch = async (url) => {
 	fetchCount++;
-	if (String(url).includes("/api/get_webui_pages")) {
+	const target = String(url);
+	if (target.includes("/api/get_webui_pages")) {
 		return { ok: true, status: 200, json: async () => payload };
 	}
 	return { ok: false, status: 404, json: async () => ({ err: `unexpected url ${url}` }) };
@@ -651,6 +660,7 @@ ok(documentStub.head.children.some((l) => String(l.href).includes("/service/chir
 payload = pageViews(3, [{ ...earlyView }, { ...filterView, title: "过滤名单" }, botView]);
 await serviceSync.sync();
 ok(navHas("过滤名单") && !navHas("黑白名单"), "标题变化走 update");
+eq(titleEl.textContent, "过滤名单", "当前服务页被改名, 顶栏当场同步");
 
 // 停用当前页面: 注销 + 落到别的页面 + 提示
 payload = pageViews(4, [earlyView, botView]);
@@ -779,6 +789,138 @@ toggle.fire("click");
 eq(toggle.getAttribute("aria-expanded"), "false", "再点收起");
 eq(sideBar.querySelector(".spa-sidebar").style.height, "0px", "收起高度归零");
 setNarrow(false);
+
+section("核心可选页面: 随开关走同一份清单对账");
+
+// 锚点页: 统计页应排在它之前 (与静态注册时的排版一致)
+app.register({ id: "bots", title: "机器人", render: (el) => { el.textContent = "机器人页"; } });
+
+const statsModule = dataModule(`
+export default {
+	render(container) {
+		const bone = document.createElement("div");
+		bone.className = "bone";
+		bone.textContent = "统计页内容";
+		container.appendChild(bone);
+	},
+};
+`);
+const statsView = {
+	key: "stats",
+	scope: "app",
+	title: "统计",
+	icon: "/img/icons/stats.svg",
+	module: statsModule,
+	before: "bots",
+	order: 0,
+	menu: [],
+};
+
+payload = pageViews(10, [filterView, botView], [statsView]);
+await serviceSync.sync();
+ok(app.hasPage("stats"), "统计模块开启时清单里带上统计页");
+ok(
+	app.listPages().findIndex((p) => p.id === "stats") + 1 === app.listPages().findIndex((p) => p.id === "bots"),
+	"统计页插在机器人页之前",
+);
+ok(navHas("统计"), "活动栏出现统计按钮");
+eq(serviceSync.coreAppliedIds(), ["stats"], "coreAppliedIds 与清单一致");
+
+await app.navigate("stats", { push: false });
+eq(pageBone(), "统计页内容", "统计页模块可正常打开");
+
+// 服务页清单没动, 只有 corePagesVersion 变了: 依然要重新对账并摘掉统计页
+payload = pageViews(10, [filterView, botView], []);
+await serviceSync.sync();
+await settle(6); // 注销当前页会异步落到兜底页面
+eq(app.hasPage("stats"), false, "统计模块关闭后页面从活动栏消失");
+eq(serviceSync.coreAppliedIds(), [], "本地记账同步清空");
+ok(app.sidebar.currentPageId() !== "stats", "当时正打开它: 已落到别的页面");
+const coreToasts = documentStub.body.querySelectorAll(".toast-msg");
+ok(String(coreToasts[coreToasts.length - 1]?.textContent).includes("模块已停用"), "并且提示了原因");
+
+payload = pageViews(10, [filterView, botView], [statsView]);
+await serviceSync.sync();
+ok(app.hasPage("stats"), "重新开启后统计页立即回来");
+ok(navHas("统计"), "活动栏按钮也回来了");
+
+const stableCoreOrder = app.listPages().map((p) => p.id).join(",");
+payload = { ...pageViews(10, [filterView, botView], [statsView]), corePagesVersion: 2 };
+await serviceSync.sync();
+eq(app.listPages().map((p) => p.id).join(","), stableCoreOrder, "版本变化但清单没变: 重复对账幂等 (不重复注册、位置不漂移)");
+eq(serviceSync.coreAppliedIds(), ["stats"], "核心页面记账不重复");
+
+// 多个核心可选页面各有自己的 before 锚点: 互不干扰
+const labModule = dataModule(`
+export default {
+	render(container) {
+		const bone = document.createElement("div");
+		bone.className = "bone";
+		bone.textContent = "测试页内容";
+		container.appendChild(bone);
+	},
+};
+`);
+const labView = {
+	key: "test-lab",
+	scope: "app",
+	title: "测试页",
+	icon: "/img/icons/test.svg",
+	module: labModule,
+	before: "logs",
+	order: 0,
+	menu: [],
+};
+
+payload = pageViews(10, [filterView, botView], [statsView, labView]);
+await serviceSync.sync();
+ok(app.hasPage("test-lab"), "清单里的第二个核心可选页面也被注册");
+ok(
+	app.listPages().findIndex((p) => p.id === "test-lab") + 1 === app.listPages().findIndex((p) => p.id === "logs"),
+	"测试页按自己的 before 锚点插在日志页之前",
+);
+ok(
+	app.listPages().findIndex((p) => p.id === "stats") + 1 === app.listPages().findIndex((p) => p.id === "bots"),
+	"统计页仍按自己的锚点排在机器人页之前",
+);
+await app.navigate("test-lab", { push: false });
+eq(pageBone(), "测试页内容", "测试页模块可正常打开");
+
+const bothCoreOrder = app.listPages().map((p) => p.id).join(",");
+payload = { ...pageViews(10, [filterView, botView], [statsView, labView]), corePagesVersion: 3 };
+await serviceSync.sync();
+eq(app.listPages().map((p) => p.id).join(","), bothCoreOrder, "多核心页面下重复对账也稳定");
+eq(serviceSync.coreAppliedIds().sort(), ["stats", "test-lab"], "两个核心页面都只记一次");
+
+section("页面加载失败: 旧页面与二级菜单一起卸载");
+
+const doomedPage = makePage("doomed", "将失败", [menuItem("旧菜单", log)], log);
+doomedPage.styles = ["/js/pages/doomed.css"];
+app.register(doomedPage);
+await app.navigate("doomed", { push: false });
+await settle();
+eq(pageBone(), "将失败-骨架", "先正常打开旧页面");
+eq(menuTitles(), ["旧菜单"], "旧页面的二级菜单在位");
+const doomedLink = documentStub.head.children.find(
+	(l) => l.tagName === "LINK" && String(l.href).includes("doomed.css")
+);
+ok(!!doomedLink, "旧页面的样式表已加载");
+
+app.register({ id: "broken", title: "坏页", load: async () => { throw new Error("加载失败(测试)"); } });
+await app.navigate("broken", { push: false });
+await settle();
+ok(!!root.querySelector(".page-error"), "显示页面加载失败提示");
+ok(log.includes("destroy:doomed"), "旧页面收到 destroy()");
+ok(!documentStub.head.children.includes(doomedLink), "旧页面的样式表被移除");
+ok(!sideBar.querySelector(".spa-sidebar"), "旧页面的二级菜单被卸载");
+ok(documentStub.body.classList.contains("nav-collapsed"), "侧栏整块隐藏");
+eq(titleEl.textContent, "坏页", "顶栏显示失败页面的标题");
+
+// 菜单表没有被丢: 重新打开原页面时, 二级菜单照常挂上
+await app.navigate("doomed", { push: false });
+await settle();
+eq(pageBone(), "将失败-骨架", "失败后还能重新打开原页面");
+eq(menuTitles(), ["旧菜单"], "二级菜单随页面重新挂上");
 
 // ==================== 汇总 ====================
 

@@ -363,6 +363,38 @@ const realBase = `http://127.0.0.1:${real.listening!.port}`;
 
 const frontConfig = await get(`${realBase}/api/get_webui_front_config`);
 check("核心 API 模块仍注册在 /api 下", frontConfig.status !== 404, `status=${frontConfig.status}`);
+const corePagesBody = await (await get(`${realBase}/api/get_webui_pages`)).json() as {
+	corePages?: unknown[];
+	corePagesVersion?: number;
+};
+check(
+	"统计模块关闭时核心可选页面清单为空",
+	Array.isArray(corePagesBody.corePages)
+		&& corePagesBody.corePages.length === 0
+		&& corePagesBody.corePagesVersion === 0,
+	JSON.stringify({ corePages: corePagesBody.corePages, corePagesVersion: corePagesBody.corePagesVersion }),
+);
+
+// 测试页的来源是 webui.front (设置域热更新), 清单要如实反映
+real.front = { enableTestLab: true };
+const withTestLab = await (await get(`${realBase}/api/get_webui_pages`)).json() as {
+	corePages?: any[];
+	corePagesVersion?: number;
+};
+check(
+	"开启测试实验室后核心可选页面清单带上测试页",
+	withTestLab.corePages?.length === 1
+		&& withTestLab.corePages[0].key === "test"
+		&& withTestLab.corePages[0].before === "logs"
+		&& withTestLab.corePages[0].module === "/js/pages/test/index.js",
+	JSON.stringify(withTestLab.corePages),
+);
+check(
+	"核心可选页面版本号随开关变化",
+	typeof withTestLab.corePagesVersion === "number"
+		&& withTestLab.corePagesVersion !== (corePagesBody.corePagesVersion ?? 0),
+	String(withTestLab.corePagesVersion),
+);
 
 const moved = await post(`${realBase}/api/filter_list`, { action: "list", scope: "global" });
 check("名单端点已不在核心 /api 下(由服务插件提供)", moved.status === 404, `status=${moved.status}`);
