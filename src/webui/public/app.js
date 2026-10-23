@@ -19,14 +19,11 @@
  *
  * 鉴权流程:
  * - 进入页面先请求 /api/auth/verify 查询登录状态
- * - 已登录 (或无密码): 取前端配置 -> 注册页面 -> 显示主界面并启动 SPA
+ * - 已登录 (或无密码): 注册固定页面 -> 显示主界面并启动 SPA
  * - 未登录: 隐藏主界面, 正中显示登录卡片; 登录成功后再走上面那条路径
  * - 任意 API 返回 401 (token 过期/换密码被吊销): 全局切回登录态
  *
- * 注意: 页面注册依赖 /api/get_webui_front_config, 而它声明了 auth: true ——
- * 所以不能把它放在模块顶层 await。否则未登录时该请求 401 抛错, 会让整个模块
- * 中断, 连后面的 showLogin() 都执行不到, 表现为"未鉴权时整页空白"。
- * 现在把注册动作延后到鉴权通过之后, 且配置读取失败也不阻塞进入。
+ * 固定页面的注册放在鉴权通过之后, 避免主界面在鉴权结果出来之前闪一下。
  */
 import { createApp } from "./js/spa/framework.js";
 import { startServicePages } from "./js/spa/service-pages.js";
@@ -37,29 +34,22 @@ const app = createApp({
 	main: document.getElementById("main"),
 	root: document.getElementById("page-view"),
 	nav: document.getElementById("activity-bar"),
+	title: document.getElementById("page-title"),
 	sidebar: document.getElementById("side-bar"),
 });
 
 /**
- * 注册全部页面
+ * 注册启动时的固定页面
  *
- * 只有"测试页面"是否注册依赖前端配置, 其余固定注册。
- *
- * @param {{ enableTestLab?: boolean }} config 前端配置 (读取失败时传空对象)
+ * 统计页与测试页不在这里: 它们由后端页面清单 (`corePages`) 按模块/开关状态下发,
+ * 由 startServicePages() 动态增删, 见 js/spa/service-pages.js。
  */
-function registerPages(config) {
+function registerPages() {
 	app.register({
 		id: "home",
 		title: "首页",
 		icon: "/img/icons/home.svg",
 		load: () => import("./js/pages/home/home.js"),
-	});
-
-	app.register({
-		id: "stats",
-		title: "统计",
-		icon: "/img/icons/stats.svg",
-		load: () => import("./js/pages/stats/stats.js"),
 	});
 
 	app.register({
@@ -86,15 +76,6 @@ function registerPages(config) {
 		load: () => import("./js/pages/plugins/plugins.js"),
 	});
 
-	if (config.enableTestLab) {
-		app.register({
-			id: "test",
-			title: "测试页面",
-			icon: "/img/icons/test.svg",
-			load: () => import("./js/pages/test/index.js"),
-		});
-	}
-
 	app.register({
 		id: "logs",
 		title: "日志",
@@ -107,6 +88,13 @@ function registerPages(config) {
 		title: "设置",
 		icon: "/img/icons/setting.svg",
 		load: () => import("./js/pages/settings/settings.js"),
+	});
+
+	app.register({
+		id: "info",
+		title: "关于",
+		icon: "/img/icons/info.svg",
+		load: () => import("./js/pages/info/info.js"),
 	});
 }
 
@@ -142,32 +130,24 @@ function setLoginError(message) {
 	loginError.hidden = false;
 }
 
-/** 是否已完成"取配置 + 注册页面 + 启动 SPA" */
+/** 是否已完成"注册页面 + 启动 SPA" */
 let bootstrapped = false;
 
 /**
  * 进入主界面
  *
- * 首次调用: 取前端配置 -> 注册页面 -> 显示主界面 -> 启动 SPA。
+ * 首次调用: 注册固定页面 -> 显示主界面 -> 启动 SPA。
  * 之后调用 (登出后重新登录) 只切回主界面: 重复 app.register() 会抛
  * "页面重复注册", 重复 app.start() 会重跑导航, 都不该发生。
  */
-async function enterMain() {
+function enterMain() {
 	if (bootstrapped) {
 		showMain();
 		return;
 	}
 	bootstrapped = true;
 
-	let config = {};
-	try {
-		config = await auth.apiFetch("/api/get_webui_front_config").then((r) => r.json());
-	} catch (err) {
-		// 配置接口失败不应把用户挡在门外: 用默认配置继续进入
-		toast(`读取前端配置失败, 使用默认配置: ${err.message}`, { type: "warn" });
-	}
-
-	registerPages(config);
+	registerPages();
 	showMain();
 	app.start();
 
@@ -187,7 +167,7 @@ loginForm.addEventListener("submit", async (e) => {
 	try {
 		await auth.login(password);
 		loginPassword.value = "";
-		await enterMain();
+		enterMain();
 	} catch (err) {
 		setLoginError(err.message);
 		loginPassword.select();
@@ -206,7 +186,7 @@ auth.onUnauthorized(() => {
 // 启动: 先查鉴权状态, 再决定进入主界面还是显示登录卡片
 (async () => {
 	if (await auth.verifyAuth()) {
-		await enterMain();
+		enterMain();
 	} else {
 		showLogin();
 	}

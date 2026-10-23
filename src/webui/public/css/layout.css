@@ -94,6 +94,26 @@ body {
 	white-space: nowrap;
 }
 
+/* 当前页面名: 品牌之后, 窄屏下与品牌一起让位给省略号, 主题按钮始终留在最右 */
+#top-nav .page-title {
+	min-width: 0;
+	font-size: var(--fs-sm);
+	font-weight: 600;
+	color: var(--fg);
+
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 与品牌之间的分隔符; 没有页面名 (尚未导航) 时不显示 */
+#top-nav .page-title:not(:empty)::before {
+	content: "\203A"; /* › */
+	margin-right: var(--sp-2);
+	color: var(--fg-subtle);
+	font-weight: 400;
+}
+
 /* 主题切换按钮: 推到顶栏最右 */
 #theme-toggle {
 	margin-left: auto;

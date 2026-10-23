@@ -4,6 +4,7 @@
  * 轻量级单页应用框架, 不依赖任何第三方库, 原生 ES Modules 实现:
  *
  * - 一级导航: 活动栏 (#activity-bar) 按钮由注册的页面生成, 点击切换页面
+ * - 顶栏标题: #page-title 显示当前页面名 (窄屏下活动栏只剩图标, 靠它辨认页面)
  * - 二级菜单: 侧栏 (#side-bar) 的菜单项由页面声明, 或运行期动态增删
  * - 页面通过动态 import() 按需加载, 加载期间显示遮罩盖住内容区 (#main)
  * - 使用 hash 路由 (#/page-id), 支持浏览器前进/后退与刷新后定位
@@ -133,6 +134,7 @@ export function getApp() {
  * @param {HTMLElement} [options.main] 内容区 #main, 也是遮罩的宿主
  * @param {HTMLElement} [options.root] 页面内容容器, 默认 #page-view
  * @param {HTMLElement} [options.nav] 活动栏 (一级导航), 默认 #activity-bar
+ * @param {HTMLElement | null} [options.title] 顶栏标题, 默认 #page-title; 导航时写入当前页面名
  * @param {HTMLElement | null} [options.sidebar] 次级侧栏, 默认 #side-bar
  * @param {number} [options.minLoadTime=250] 加载遮罩最小时长(ms), 0 表示不限制
  * @param {number} [options.fadeMs=200] 遮罩淡入/淡出动画时长(ms), 需与 CSS 的 transition 一致
@@ -153,6 +155,7 @@ export function createApp(options = {}) {
 	const main = options.main ?? document.getElementById("main");
 	const root = options.root ?? document.getElementById("page-view");
 	const nav = options.nav ?? document.getElementById("activity-bar");
+	const titleEl = options.title ?? document.getElementById("page-title");
 	const sideBar = options.sidebar ?? document.getElementById("side-bar");
 
 	if (!main || !root || !nav) {
@@ -290,6 +293,8 @@ export function createApp(options = {}) {
 		// 注意: 正在显示的页面不会被重新加载 —— 改动从下次进入该页面起生效
 		if (index !== undefined) reorder(id, index);
 		if (started) renderNav();
+		// 标题是例外: 顶栏当场跟着改 (改了别的东西也顺带写一遍, 无副作用)
+		if (current?.id === id) setPageTitle(def.title);
 		return api;
 	}
 
@@ -321,6 +326,7 @@ export function createApp(options = {}) {
 				void navigate(fallback, { push: false });
 			} else {
 				sidebar.clear();
+				setPageTitle("");
 				if (location.hash) history.replaceState(null, "", `${location.pathname}${location.search}`);
 			}
 		}
@@ -386,6 +392,11 @@ export function createApp(options = {}) {
 		for (const [pid, btn] of buttons) {
 			btn.classList.toggle("active", pid === id);
 		}
+	}
+
+	/** 顶栏显示的当前页面名 (页面没有顶栏标题元素时静默跳过) */
+	function setPageTitle(text) {
+		if (titleEl) titleEl.textContent = text ?? "";
 	}
 
 	/**
@@ -471,6 +482,7 @@ export function createApp(options = {}) {
 
 		const seq = ++navSeq;
 		setActive(id);
+		setPageTitle(def.title);
 		// 淡入到完全不透明后再切换页面, 避免切换过程被看到
 		await overlay.show();
 		if (seq !== navSeq) return; // 淡入期间已被更新的导航取代
@@ -509,6 +521,12 @@ export function createApp(options = {}) {
 		} catch (err) {
 			if (seq === navSeq) {
 				console.error(`[SPA] 加载页面 ${id} 失败:`, err);
+				// 失败也要卸载: load 失败时旧页面还没卸, 渲染失败时新页面只挂了一半 ——
+				// 两种都要收 destroy()、移除样式, 不能留在后台
+				unmountCurrent();
+				// 侧栏跟着撤掉: 它服务的页面已经不在, 留着只会点击后往已脱离文档的
+				// 节点里渲染; 菜单表仍保留, 重新打开该页面时会再挂上
+				sidebar.clear();
 				root.replaceChildren();
 				const box = document.createElement("div");
 				box.className = "page-error";
@@ -518,9 +536,6 @@ export function createApp(options = {}) {
 				p.textContent = String(err?.message ?? err);
 				box.append(h, p);
 				root.appendChild(box);
-				// 渲染失败: 一并移除本次已加载的样式, 避免页面样式残留
-				for (const link of links) link.remove();
-				current = null;
 			}
 		} finally {
 			// 页面加载/渲染完成后淡出遮罩 (仅最后一次导航负责隐藏)
