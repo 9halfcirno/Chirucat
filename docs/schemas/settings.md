@@ -66,8 +66,8 @@ await domain.load();
 
 ## 内置的域
 
-- **`core`** (`configs/core.json`): `webui`(只读 —— 关掉就再也进不来)、`statistics` 模块开关(热生效: 开着就建、关了就关)
-- **`webui`** (`configs/webui.json`): 密码 / 监听端口 / 监听地址 / 本机免密 / `frontConfig` —— 全部热生效
+- **`core`** (`configs/core.json`): `webui`(只读 —— 关掉就再也进不来)、`statistics` 模块开关(热生效: 开着就建、关了就关, 统计页同时从活动栏增删)
+- **`webui`** (`configs/webui.json`): 密码 / 监听端口 / 监听地址 / 本机免密 / `frontConfig`(测试页随开关增删) —— 全部热生效
 - **`statistics`** (`configs/statistics.json`): 冲刷间隔、缓冲条数、两级保留天数(全部热生效)
 - **`logging`** (`configs/logging.json`): 日志级别(枚举, **热生效** —— 保存即改 `Logger` 的最低级别)
 - **`bot:<id>`**: 每个 Bot 各自一份, 见下

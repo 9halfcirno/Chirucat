@@ -13,6 +13,7 @@
 import { callAPI } from "../../spa/api.js";
 import { createButton } from "../../spa/components/button.js";
 import { createConfigList } from "../../spa/components/config-editor.js";
+import { syncServicePages } from "../../spa/service-pages.js";
 import toast from "../../spa/toast.js";
 
 /** 域 id → 侧栏展示名; 未列出的域直接显示 id */
@@ -127,6 +128,13 @@ async function handleSave(domain, list) {
 
 	// 用后端回传的规范化值回填 (数字项可能已从字符串转成数字)
 	if (result?.values) list.setValues(result.values);
+
+	// 统计 / 测试页开关改变的是"页面该不该存在": 当场对账页面清单, 不必刷新页面
+	const changed = Array.isArray(result?.changed) ? result.changed : [];
+	const pageSwitchChanged =
+		(domain.id === "core" && changed.includes("statistics"))
+		|| (domain.id === "webui" && changed.includes("frontConfig.enableTestLab"));
+	if (pageSwitchChanged) await syncServicePages();
 
 	// 换监听端口: 服务器马上会先关旧监听再在新端口上重开, 这个页面所在的原址会失效
 	const nextPort = Number(patch?.port);

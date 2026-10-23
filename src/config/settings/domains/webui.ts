@@ -83,7 +83,7 @@ export const webuiSettings: SettingsDefinition = defineSettings({
 			type: "boolean",
 			default: false,
 			label: "测试实验室",
-			desc: "在侧栏显示 test 页, 供接口调试用",
+			desc: "在活动栏显示测试页, 供接口调试用; 保存后页面立即增删",
 		},
 	},
 });

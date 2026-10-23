@@ -41,7 +41,7 @@ export const coreSettings: SettingsDefinition = defineSettings({
 			type: "boolean",
 			default: true,
 			label: "启用统计",
-			desc: "关闭后不再收集业务数据统计, 已有数据保留; 保存后立即生效",
+			desc: "关闭后不再收集业务数据统计, 统计页同时从活动栏移除; 已有数据保留, 重新打开即恢复",
 		},
 	},
 });

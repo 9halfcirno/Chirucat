@@ -4,10 +4,10 @@ WebUI 前端是一个不依赖第三方库的极简单页应用, 源码在 `src/
 
 | 文件 | 职责 |
 | --- | --- |
-| `app.js` | 入口: 鉴权 → 注册启动时的页面 → `start()` → 启动服务插件页面对账 |
+| `app.js` | 入口: 鉴权 → 注册启动时的页面 → `start()` → 启动导航页面清单对账 |
 | `js/spa/framework.js` | SPA 引擎: 页面注册表、hash 路由、遮罩、一级导航 |
 | `js/spa/sidebar.js` | 二级菜单: 菜单表 (声明式 + 运行动态增删) 与侧栏渲染 |
-| `js/spa/service-pages.js` | 服务插件注册的页面: 拉清单、幂等对账、变更订阅 |
+| `js/spa/service-pages.js` | 服务插件页面与核心可选页面: 拉清单、幂等对账、变更订阅 |
 | `js/spa/*.js` | 遮罩、鉴权、toast、API 封装与通用组件 |
 
 ## 一级导航 = 页面
@@ -15,12 +15,16 @@ WebUI 前端是一个不依赖第三方库的极简单页应用, 源码在 `src/
 ```js
 import { createApp } from "/js/spa/framework.js";
 
-const app = createApp();          // 默认取 #main / #page-view / #activity-bar / #side-bar
+const app = createApp();          // 默认取 #main / #page-view / #activity-bar / #page-title / #side-bar
 app.register({ id: "home", title: "首页", icon: "/img/icons/home.svg", load: () => import("./js/pages/home/home.js") });
 app.start();                      // 之后可以继续注册/注销
 ```
 
 - 活动栏按钮按注册顺序生成; `#/<页面id>` 是路由, 刷新/前进后退都能定位
+- 顶栏 `#page-title` 显示当前页面名: 导航时写入该页面的 `title`, 当前页被 `update` 改名时当场同步
+  (窄屏下活动栏只剩图标, 手机端靠它辨认页面)
+- 页面加载/渲染失败时: 旧页面会 `destroy()` 并移除样式, 二级菜单一并卸载 (整块隐藏),
+  内容区显示失败提示; 该页菜单表仍保留, 重新打开时恢复
 - 页面模块可以用 `load()` 动态 import, 也可以直接把 `render()` 写在注册对象里 (内联页面)
 - 页面 `render(container, app)` 会拿到应用对象, 可以在里面按数据生成菜单
 - 静态注册全部挤在入口里**不是必须的**: 运行期注册会立即反映到活动栏
@@ -91,6 +95,21 @@ getApp()?.sidebar.add({ title: "面板", render(el) { /* ... */ } }, { page: "my
 
 应用还没创建 (`createApp` 之前) 时 `getApp()` 返回 `null`, 用 `?.` 跳过即可。
 
+## 核心可选页面 (统计 / 测试页)
+
+统计页依赖可选的 `src/statistics` 模块, 测试页由 `frontConfig.enableTestLab` 控制。
+两者都不写死在启动注册里, 而是由后端作为 `corePages` 条目放进
+`/api/get_webui_pages` 的同一份清单, 前端沿用 `js/spa/service-pages.js` 的对账逻辑
+动态挂载:
+
+- 统计模块启动成功 (`core.statistics` 非空) 时清单里才有统计页, 关闭时条目消失;
+- 设置页打开 **WebUI → 前端 → 测试实验室** 时清单里才有测试页, 关闭时条目消失;
+- 设置页保存 **核心 → 启用统计** 或 WebUI 的测试实验室开关后调用 `syncServicePages()`
+  立即重新对账, 活动栏当场增删, 不需要刷新页面;
+- 每个条目自带 `before` 锚点: 统计页排在"机器人"之前, 测试页排在"日志"之前,
+  与原先静态注册的排版一致;
+- statistics 目录缺失或模块启动失败时 `core.statistics` 为 null, 页面同样不会出现。
+
 ## 服务插件注册的页面
 
 服务插件不写核心前端代码, 而是**注册**: `ctx.core.webui.pages.register(...)` 进活动栏,
@@ -100,17 +119,22 @@ getApp()?.sidebar.add({ title: "面板", render(el) { /* ... */ } }, { page: "my
 前端这边(`js/spa/service-pages.js`)只做一件事: **拿权威清单来对账**。
 
 ```
-GET /api/get_webui_pages → { version, pages: [{ key, scope, service, title, icon, module, styles, order, menu }] }
+GET /api/get_webui_pages → {
+  version, corePagesVersion,
+  pages: [{ key, scope, service, title, icon, module, styles, order, menu }],
+  corePages: [{ key, scope, title, icon, module, order, menu, before }],
+}
 ```
 
 - 全部对账都是幂等的: 清单有本地没有 → `app.register`; 本地有清单没有 → `app.unregister`;
   定义变了 → `app.update`。因此**触发方式可以随便叠加**, 任何一条路生效都不会不一致;
 - 触发点: 启动一次; 服务启停 / `refresh_services` 之后主动一次(那是导航变化的直接原因);
-  窗口重新聚焦 / 标签页恢复可见; 兜底轮询(60s)。版本号没变就直接返回, 所以这些加起来
-  也只花一次很小请求;
-- **停用即注销**: 服务停用 → 服务上下文把页面从清单里摘掉 → 下一次对账注销它。框架会调
-  `destroy()`、移除页面样式, 若用户正停在它上面就落到别的页面并提示一句; 打开着的 Bot
-  详情窗口会通过 `subscribe()` 收到通知, 当场把那一项从菜单里去掉。
+  设置页保存 core / webui 域后主动一次(统计 / 测试页开关); 窗口重新聚焦 / 标签页恢复可见;
+  兜底轮询(60s)。两个版本号拼成的键没变就直接返回, 所以这些加起来也只花一次很小请求;
+- **停用即注销**: 服务停用 → 服务上下文把页面从清单里摘掉 → 下一次对账注销它; 核心可选
+  页面同理 (统计模块被关闭 → `corePages` 条目消失)。框架会调 `destroy()`、移除页面样式,
+  若用户正停在它上面就落到别的页面并提示一句; 打开着的 Bot 详情窗口会通过 `subscribe()`
+  收到通知, 当场把那一项从菜单里去掉。
 
 ### 模块 URL 与缓存
 
@@ -146,7 +170,8 @@ npm run check:webui-spa   # 无浏览器的冒烟测试: 极简 DOM 桩 + 导航
 
 `scripts/check-webui-spa.mjs` 覆盖: 启动前后注册、`update` 改标题与排序、`unregister` 当前页的
 兜底与清理、深链补齐、二级菜单的增删改查/set/reset/预埋/抑制、空菜单的侧栏隐藏与恢复、
-窄屏折叠菜单在列表变化时的高度重算, **TestLab 页面本身的按钮逐个点一遍**, 以及
+窄屏折叠菜单在列表变化时的高度重算, **TestLab 页面本身的按钮逐个点一遍**,
+**核心可选页面 (统计 / 测试页) 的启停增删**, 以及
 **服务插件页面的清单对账**(用 `data:` URL 当插件模块, 连"import 模块 → 渲染"都真跑一遍:
 注册/更新/停用注销/排序/版本短路/Bot 窗口挂载与实时消失)。
 
@@ -155,9 +180,9 @@ npm run check:webui-spa   # 无浏览器的冒烟测试: 极简 DOM 桩 + 导航
 
 ## 手动验证 (TestLab)
 
-设置页打开 **WebUI → 前端 → 测试实验室** (`frontConfig.enableTestLab`, 热生效), 刷新页面后
-活动栏会出现**测试页面**: 里面把上面这些接口全摆成了按钮 —— 点一下就能看到活动栏与侧栏的
-即时变化, 等价的 API 调用记在页面的"调用日志"里, 并实时列出本页菜单快照与一级导航现状。
+设置页打开 **WebUI → 前端 → 测试实验室** (`frontConfig.enableTestLab`, 热生效), 活动栏
+立即出现**测试页面**, 无需刷新: 里面把上面这些接口全摆成了按钮 —— 点一下就能看到活动栏与
+侧栏的即时变化, 等价的 API 调用记在页面的"调用日志"里, 并实时列出本页菜单快照与一级导航现状。
 
 覆盖的演示: 运行期注册/改名/调序/注销页面 (含内联页面自己注销自己)、菜单的追加/插位/文本项/
 同 id 更新/set 整表替换/按 id 与按下标删除/select/refresh/reset, 以及给没打开的页面预埋菜单。

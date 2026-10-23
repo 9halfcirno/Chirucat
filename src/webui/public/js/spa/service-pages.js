@@ -1,17 +1,28 @@
 /**
- * 服务插件页面的前端对账器
+ * 导航页面的前端对账器
  *
- * 一级导航 (活动栏) 与 Bot 详情窗口的二级导航都可以由服务插件在运行期注册。
+ * 一级导航 (活动栏) 与 Bot 详情窗口的二级导航都可以由服务插件在运行期注册;
+ * 核心自己的可选页面 (统计) 也走**同一份清单**, 不另建同步通道。
  * 前端不做"事件流"那套增量同步, 而是**每次都拿权威清单来对账**:
  *
  * ```
- * GET /api/get_webui_pages  →  { version, pages: [{ key, scope, service, title, icon, module, styles, order, menu }] }
+ * GET /api/get_webui_pages  →  {
+ *   version,          // 服务插件页面清单版本
+ *   corePagesVersion, // 核心可选页面清单版本
+ *   pages: [{ key, scope, service, title, icon, module, styles, order, menu }],
+ *   corePages: [{ key, scope, title, icon, module, order, menu, before }],
+ * }
  * ```
+ *
+ * 两个版本号分开: `version` 同时用于拼服务插件模块的 `?v=` (统计开关不该让插件
+ * 模块换地址), 而核心页面的模块是静态路径; 对账时把两者拼成一个键, 任一变化都会
+ * 重新对账。
  *
  * 对账是幂等的, 所以触发方式可以随便叠加, 任何一条路生效都不会导致不一致:
  *
  * - 启动时一次;
  * - 服务启停 / `refresh_services` 之后主动一次(那是导航变化的直接原因);
+ * - 设置页保存 core 域后主动一次(统计开关会决定统计页该不该存在);
  * - 窗口重新获得焦点 / 标签页重新可见时一次;
  * - 兜底轮询 (默认 60s, 清单很小)。
  *
@@ -29,6 +40,7 @@
  * 服务停用 → 服务上下文的注销函数把页面从服务器清单里摘掉 → 版本号 +1 → 下一次对账
  * 发现"本地有、清单没有" → `app.unregister(id)`: 框架会调 `destroy()`、移除页面样式、
  * 并把用户带到别的页面(若正停在它上面, 这里再补一句提示)。
+ * 核心可选页面同理: 模块被关闭后清单里的 `corePages` 条目消失, 对账时按同一套逻辑注销。
  */
 import { callAPI } from "./api.js";
 import toast from "./toast.js";
@@ -54,6 +66,7 @@ function signature(view) {
 		view.icon ?? null,
 		view.order,
 		view.module,
+		view.before ?? null,
 		view.styles ?? [],
 		(view.menu ?? []).map((item) => [item.key, item.title, item.module, item.styles ?? []]),
 	]);
@@ -152,12 +165,16 @@ function pageDef(view) {
  * @param {number} [options.pollMs] 兜底轮询周期, 0 表示不轮询
  */
 export function createServicePageSync(app, { insertBefore = null, pollMs = DEFAULT_POLL_MS } = {}) {
-	/** 已对过账的版本号 */
-	let version = -1;
+	/** 已对过账的清单版本 (服务页版本:核心页版本, 空串 = 还没对过) */
+	let version = "";
 	/** 本地已注册的插件页面: 前端页面 id → 服务端条目 */
 	const applied = new Map();
+	/** 本地已注册的核心可选页面: 前端页面 id → 服务端条目 */
+	const coreApplied = new Map();
 	/** 最近一次清单里的顺序 (服务端已按 order 排好) —— 重排时以它为准 */
 	let orderedIds = [];
+	/** 最近一次清单里的核心可选页面条目 (按清单顺序) */
+	let coreViews = [];
 	/** 最近一次清单里的 Bot 作用域条目 */
 	let botEntries = [];
 	/** 变更订阅者 (Bot 详情窗口据此增删自己的二级菜单) */
@@ -180,24 +197,38 @@ export function createServicePageSync(app, { insertBefore = null, pollMs = DEFAU
 	}
 
 	/**
-	 * 服务插件页面该从哪个下标开始排
+	 * 一组页面该从哪个下标开始排
 	 *
-	 * 保持它们**连续**: 排在锚点页面之前(锚点不存在就排在末尾)。锚点由 app.js 指定,
-	 * 这样"插件页面"在活动栏里的位置是核心前端的排版决定, 插件自己不用操心顺序之争。
+	 * 保持它们**连续**: 排在锚点页面之前(锚点不存在就排在末尾)。服务插件页面的锚点
+	 * 由 app.js 指定, 核心页面则各带一个 `before` —— 位置是核心前端的排版决定,
+	 * 插件自己不用操心顺序之争。
 	 *
-	 * 关键点: 锚点页面**当前**的下标里已经包含先前插进去的服务页面, 拿它当目标会让
+	 * 关键点: 锚点页面**当前**的下标里已经包含先前插进去的同类页面, 拿它当目标会让
 	 * 每次对账都把整块再往后挪一格(下一次又挪回来 —— 按钮就在锚点前后跳)。所以这里
-	 * 数的是"锚点之前有多少个**非服务**页面", 那才是稳定目标: 对账用的下标一旦稳定,
+	 * 数的是"锚点之前有多少个**非本组**页面", 那才是稳定目标: 对账用的下标一旦稳定,
 	 * 重复对账就是幂等的。
 	 *
-	 * @param {string[]} ids 本次要排的服务插件页面 id
+	 * @param {string[]} ids 本次要排的页面 id
+	 * @param {string | null} anchor 插到哪个页面之前 (null = 末尾)
 	 */
-	function baseIndex(ids) {
+	function baseIndex(ids, anchor) {
 		const pages = app.listPages();
 		const mine = new Set(ids);
-		const anchor = insertBefore ? pages.findIndex((page) => page.id === insertBefore) : -1;
-		const scope = anchor >= 0 ? pages.slice(0, anchor) : pages;
+		const at = anchor ? pages.findIndex((page) => page.id === anchor) : -1;
+		const scope = at >= 0 ? pages.slice(0, at) : pages;
 		return scope.filter((page) => !mine.has(page.id)).length;
+	}
+
+	/** 把一组页面按给定顺序连续摆到锚点之前 */
+	function placeGroup(ids, anchor) {
+		if (ids.length === 0) return;
+
+		const base = baseIndex(ids, anchor);
+		ids.forEach((id, offset) => {
+			const current = app.listPages().findIndex((page) => page.id === id);
+			const desired = base + offset;
+			if (current >= 0 && current !== desired) app.update(id, { index: desired });
+		});
 	}
 
 	/**
@@ -207,15 +238,24 @@ export function createServicePageSync(app, { insertBefore = null, pollMs = DEFAU
 	 * 后来的页面即使 order 更小也只能排到末尾。
 	 */
 	function reorder() {
-		const ids = orderedIds.filter((id) => applied.has(id));
-		if (ids.length === 0) return;
+		placeGroup(orderedIds.filter((id) => applied.has(id)), insertBefore);
+	}
 
-		const base = baseIndex(ids);
-		ids.forEach((id, offset) => {
-			const current = app.listPages().findIndex((page) => page.id === id);
-			const desired = base + offset;
-			if (current >= 0 && current !== desired) app.update(id, { index: desired });
-		});
+	/**
+	 * 按清单顺序重排本地已注册的核心可选页面
+	 *
+	 * 每个条目自带 `before` 锚点 (如统计页排在"机器人"之前); 同锚点的条目保持连续。
+	 * 先摆核心页面再摆插件页面: 后者数"锚点之前有多少页"时会把前者算进去, 位置不会漂移。
+	 */
+	function reorderCore() {
+		const groups = new Map();
+		for (const view of coreViews) {
+			if (!coreApplied.has(view.key)) continue;
+			const anchor = view.before ?? null;
+			if (!groups.has(anchor)) groups.set(anchor, []);
+			groups.get(anchor).push(view.key);
+		}
+		for (const [anchor, ids] of groups) placeGroup(ids, anchor);
 	}
 
 	/**
@@ -232,7 +272,7 @@ export function createServicePageSync(app, { insertBefore = null, pollMs = DEFAU
 			return;
 		}
 
-		const next = Number(payload?.version ?? 0);
+		const next = `${Number(payload?.version ?? 0)}:${Number(payload?.corePagesVersion ?? 0)}`;
 		if (!force && next === version) return;
 		version = next;
 
@@ -265,6 +305,33 @@ export function createServicePageSync(app, { insertBefore = null, pollMs = DEFAU
 			}
 		}
 
+		// ---- 核心可选页面: 同一份清单, 同一套对账 ----
+		coreViews = (Array.isArray(payload?.corePages) ? payload.corePages : [])
+			.filter((view) => view.scope !== "bot");
+		const coreWanted = new Map(coreViews.map((view) => [view.key, view]));
+
+		for (const [id, view] of coreWanted) {
+			const prev = coreApplied.get(id);
+			if (!prev) {
+				app.register(pageDef(view));
+			} else if (signature(prev) !== signature(view)) {
+				app.update(id, pageFields(view));
+			}
+			coreApplied.set(id, view);
+		}
+
+		for (const [id, view] of [...coreApplied]) {
+			if (coreWanted.has(id)) continue;
+			coreApplied.delete(id);
+
+			const wasOpen = app.sidebar.currentPageId() === id;
+			app.unregister(id);
+			if (wasOpen) {
+				toast(`「${view.title}」模块已停用, 已离开该页面`, { type: "warn", duration: 5000 });
+			}
+		}
+
+		reorderCore();
 		reorder();
 		notify();
 	}
@@ -316,11 +383,15 @@ export function createServicePageSync(app, { insertBefore = null, pollMs = DEFAU
 		botPages() {
 			return botEntries.slice();
 		},
-		/** 当前离线的前端页面 id (调试/测试用) */
+		/** 当前已注册的服务插件页面 id (调试/测试用) */
 		appliedIds() {
 			return [...applied.keys()];
 		},
-		/** 当前已对过账的版本号 (-1 = 还没对过) */
+		/** 当前已注册的核心可选页面 id (调试/测试用) */
+		coreAppliedIds() {
+			return [...coreApplied.keys()];
+		},
+		/** 当前已对过账的清单版本 ("服务页:核心页", 空串 = 还没对过) */
 		get version() {
 			return version;
 		},
