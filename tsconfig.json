@@ -2,9 +2,8 @@
   // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
     // File Layout
-    // "rootDir": "./src",
+    "rootDir": "./src", // ← 取消注释，显式指定源根目录
     "outDir": "./dist",
-
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
     "module": "es2022",
@@ -15,24 +14,18 @@
     // 裸包(json5/uuid/esbuild)解析不到, 报的都是解析失败而不是真实类型错误。
     "moduleResolution": "bundler",
     "types": [],
-
-    "paths": {
-
-    },
+    "paths": {},
     // For nodejs:
     // "lib": ["esnext"],
     // "types": ["node"],
     // and npm install -D @types/node
-
     // Other Outputs
     "sourceMap": true,
     "declaration": true,
     "declarationMap": true,
-
     // Stricter Typechecking Options
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-
     // Style Options
     // "noImplicitReturns": true,
     // "noImplicitOverride": true,
@@ -40,7 +33,6 @@
     // "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     // "noPropertyAccessFromIndexSignature": true,
-
     // Recommended Options
     "strict": true,
     "jsx": "react-jsx",
@@ -48,6 +40,12 @@
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
-    "skipLibCheck": true,
-  }
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

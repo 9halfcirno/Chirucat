@@ -1,6 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
-import { pathToFileURL } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import type { Server as HttpServer } from "http";
 import express from "express";
 import type { ErrorRequestHandler, Express, NextFunction, Request, RequestHandler, Response, Router } from "express";
@@ -192,7 +192,7 @@ export class WebUIServer {
 		this.host = options.host ?? "0.0.0.0";
 		this.localNoAuth = options.localNoAuth === true;
 		this.staticDir = options.staticDir ?? path.join(root, "src", "webui", "public");
-		this.apiDir = options.apiDir ?? path.join(root, "src", "webui", "server", "api");
+		this.apiDir = options.apiDir ?? path.join(import.meta.dirname, "api");
 		options.core && (this.core = options.core);
 		options.password && (this.password = options.password);
 		options.frontConfig && (this.front = options.frontConfig);
@@ -310,14 +310,18 @@ export class WebUIServer {
 
 		for (const file of files) {
 			// 只加载模块文件, 跳过 .d.ts、index 入口与 _ 前缀的内部模块(如 _shared.ts)
+			const currentExt = path.extname(fileURLToPath(import.meta.url)) === ".ts" ? ".ts" : ".js";
+
+			// 只加载模块文件, 跳过 .d.ts、index 入口与 _ 前缀的内部模块(如 _shared.ts)
 			const isModule = file.endsWith(".ts") || file.endsWith(".js");
 			if (!isModule || file.endsWith(".d.ts") || file === "index.ts" || file.startsWith("_")) {
 				continue;
 			}
 
-			const apiUrl = pathToFileURL(path.join(this.apiDir, file)).href;
+			const targetFile = file.replace(/\.(ts|js)$/, currentExt);
+			const apiUrl = pathToFileURL(path.join(this.apiDir, targetFile)).href;
 			const mod = await import(apiUrl).catch((err) => {
-				this.logger.error(`加载 API 模块失败: ${file}`, err);
+				this.logger.error(`加载 API 模块失败: ${targetFile}`, err);
 				return null;
 			});
 			if (!mod) continue;

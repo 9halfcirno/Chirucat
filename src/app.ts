@@ -2,7 +2,7 @@ import path from "path";
 import { Core } from "./core";
 import Logger from "./utils/logger";
 import { root } from "./utils/root";
-import { readJSONOrCreate } from "./utils/readJSON";
+import { readJSON, readJSONOrCreate } from "./utils/readJSON";
 import type { CoreOption } from "./types";
 import type { WebUIServerOptions } from "./webui/server/server";
 import { CORE_SETTINGS_FILE, initialCoreSettings } from "./config/settings/domains/core";
@@ -144,7 +144,7 @@ async function exit(exitCode: number) {
 
 
 const argsSchema = {
-	'ver-check': { type: 'boolean', default: true, desc: "跳过 Node 版本检查, 以不受控制的状态启动框架" },
+	'no-ver-check': { type: 'boolean', default: false, desc: "跳过 Node 版本检查, 以不受控制的状态启动框架" },
 	"help": { type: 'boolean', alias: 'h', desc: '显示帮助' },
 } as const;
 let args: ParseResult<ValuesOf<typeof argsSchema>>
@@ -167,12 +167,13 @@ if (args.values["help"] === true) { // 显式带help
 	process.exit(0);
 }
 
+logger.log(`Chirucat V${(await readJSON(`${path.join(root, "package.json")}`)).version} =^ - ^= `)
 
 
 let verCheck;
 const nodeVer = process.versions.node.replace(/-(.*)/, "");
 
-if (args.values.verCheck !== false) {// 进入前进行版本检查
+if (args.values.noVerCheck !== true) {// 进入前进行版本检查
 
 	verCheck = buildWarning(nodeVer, features);
 

@@ -11,8 +11,13 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "app": "tsx src/app.ts",
-    "webui": "tsx src/webui/server/server.ts",
+    "app": "node scripts/run.mjs dist/app.js src/app.ts",
+    "app:js": "node dist/app.js",
+    "app:tsx": "tsx src/app.ts",
+    "webui:js": "node dist/webui/server/server.js",
+    "webui:tsx": "tsx src/webui/server/server.ts",
+    "build": "tsc",
+
     "check:state": "tsx scripts/check-bot-state.ts",
     "check:services": "tsx scripts/check-services.ts",
     "check:service-state": "tsx scripts/check-service-state.ts",
