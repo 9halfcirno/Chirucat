@@ -75,8 +75,19 @@ export default {
 		if (!fs.constants) throw new Error("fs 不可用");
 		ctx.command.register("hello-a", () => { globalThis.__calls.push("cmd-a"); });
 		ctx.message.includes("ping", () => { globalThis.__calls.push("msg-a"); });
-		ctx.event.filter((e) => e.type === "message.create");
-		ctx.event.observe((e) => { globalThis.__calls.push("observe:" + e.type); });
+		ctx.event.filter((e, _bot, meta) => {
+			globalThis.__filterMeta = meta?.adapter;
+			return e.type === "message.create";
+		});
+		ctx.event.observe((e, _bot, meta, accepted) => {
+			globalThis.__observeMeta = meta?.adapter;
+			globalThis.__observeAccepted = accepted;
+			globalThis.__calls.push("observe:" + e.type);
+		});
+		ctx.event.observe((e, _bot, _meta, accepted) => {
+			globalThis.__observeFilteredAccepted = accepted;
+			globalThis.__calls.push("observe-filtered:" + e.type);
+		}, { includeFiltered: true });
 		ctx.provide("a", { value: 42 });
 	},
 	unload() { globalThis.__calls.push("unload-a"); }
@@ -181,14 +192,45 @@ ctx.dispose();
 
 const msgEvent = { type: "message.create", time: Date.now(), platform: "test" } as any;
 const otherEvent = { type: "notice.create", time: Date.now(), platform: "test" } as any;
+const evtMeta = { adapter: "test-adapter", bot: bot.id };
 
 // a 的过滤器只放行 message.create, b 的过滤器恒抛错 —— 抛错按放行处理, 不影响 a 的结论
-check("过滤器放行符合条件的事件", core.services.filterEvent(msgEvent, bot) === true);
-check("过滤器拦截不符合条件的事件", core.services.filterEvent(otherEvent, bot) === false, "notice.create 应被 a 拦截");
+check("过滤器放行符合条件的事件", core.services.filterEvent(msgEvent, bot, evtMeta) === true);
+check("过滤器拦截不符合条件的事件", core.services.filterEvent(otherEvent, bot, evtMeta) === false, "notice.create 应被 a 拦截");
+check(
+	"过滤器收到事件来源适配器",
+	(globalThis as any).__filterMeta === "test-adapter",
+	String((globalThis as any).__filterMeta),
+);
 
 calls.length = 0;
-core.services.observeEvent(msgEvent, bot);
+core.services.observeEvent(msgEvent, bot, evtMeta, true);
 check("观察回调被触发", calls.includes("observe:message.create"), calls.join(","));
+check(
+	"观察回调收到事件来源适配器",
+	(globalThis as any).__observeMeta === "test-adapter",
+	String((globalThis as any).__observeMeta),
+);
+check("观察回调收到放行标记", (globalThis as any).__observeAccepted === true, String((globalThis as any).__observeAccepted));
+
+// 被拦下的事件: 默认观察者看不到, 声明 includeFiltered 的才能看到
+calls.length = 0;
+core.services.observeEvent(otherEvent, bot, evtMeta, false);
+check(
+	"被过滤的事件默认不通知观察者",
+	!calls.some(c => c.startsWith("observe:")),
+	calls.join(","),
+);
+check(
+	"声明 includeFiltered 的观察者能看到被拦的事件",
+	calls.includes("observe-filtered:notice.create"),
+	calls.join(","),
+);
+check(
+	"includeFiltered 的观察者拿到 accepted=false",
+	(globalThis as any).__observeFilteredAccepted === false,
+	String((globalThis as any).__observeFilteredAccepted),
+);
 
 /* ---------- 6. 受限加载器仍拒绝 fs ---------- */
 

@@ -137,6 +137,22 @@ multiBus.register("before.command.handle", (ctx) => {
 cm3.exec("hi");
 check("多同名指令: 被取消的跳过, 其余执行", aCalls === 0 && bCalls === 1, `a=${aCalls} b=${bCalls}`);
 
+// 精确前缀匹配: 指令名之后必须是文本结尾或空白, 否则注册 bind 时会误吃 /bind_session
+const cm4 = new CommandManager({ prefix: "/" });
+let bindCalls = 0, sessionCalls = 0;
+cm4.register({ name: "bind", handler: () => { bindCalls++; } });
+cm4.register({ name: "bind_session", handler: () => { sessionCalls++; } });
+cm4.exec("bind");
+cm4.exec("bind token");
+cm4.exec("bind_session");
+cm4.exec("bind_session_extra");
+cm4.exec("binder");
+check(
+	"指令名后是空白/结尾才命中",
+	bindCalls === 2 && sessionCalls === 1,
+	`bind=${bindCalls} session=${sessionCalls}`,
+);
+
 /* ── 3. 服务插件 ctx.hook 注册与自动注销 ─────────────────────────────── */
 
 console.log("服务插件集成");

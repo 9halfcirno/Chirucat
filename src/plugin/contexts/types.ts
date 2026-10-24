@@ -4,7 +4,7 @@ import type { Command } from "../../command/types";
 import type { Hooks } from "../../hooks/types";
 import type { Message } from "../../entity/message";
 import type { ActionResponses, BotActions } from "../../protocols/actions";
-import type { BotEvents } from "../../protocols/events";
+import type { BotEventMeta, BotEvents } from "../../protocols/events";
 import type { SessionType } from "../../protocols/session";
 import type { SessionPlatformInfo } from "../../internal/session-manager";
 import type { UserPlatformInfo } from "../../internal/user-manager";
@@ -350,11 +350,39 @@ export interface AdapterSessionAPI extends PluginSessionAPI {
  *
  * 返回 false 表示拦截该事件: 它不会再进入收到它的那个 Bot 的处理链。
  * `bot` 是收到事件的 Bot, 便于做"只在某些 Bot 上放行"的判断。
+ *
+ * `meta` 是该事件的来源元数据(适配器 id / Bot id)。多个适配器可能共用同一个
+ * `platform`(例如 QQBot 与 OneBot11 都是 `qq`), 需要区分"是哪个适配器收到的"
+ * 时只能看这里。
  */
-export type PluginEventFilter = (event: BotEvents, bot: Bot) => boolean;
+export type PluginEventFilter = (event: BotEvents, bot: Bot, meta: BotEventMeta) => boolean;
 
-/** 事件观察回调: 事件通过全部过滤器后调用, 返回值不被等待 */
-export type PluginEventObserver = (event: BotEvents, bot: Bot) => unknown;
+/**
+ * 事件观察回调
+ *
+ * 第四个参数 `accepted` 表示该事件是否通过了全部过滤器: 恒为 `true`, 除非注册时
+ * 声明了 `includeFiltered`(见 {@link PluginEventAPI.observe}), 那种情况下被拦下的
+ * 事件也会回调, 并把 `accepted` 置为 `false`。
+ * 返回值不被等待。
+ */
+export type PluginEventObserver = (
+	event: BotEvents,
+	bot: Bot,
+	meta: BotEventMeta,
+	accepted: boolean,
+) => unknown;
+
+/** `observe` 的选项 */
+export interface PluginEventObserveOptions {
+	/**
+	 * 被过滤器拦下的事件是否也要回调, 默认 `false`
+	 *
+	 * 默认只在事件“真的会进入处理链”时才观察 —— 被拦下的消息不产生任何业务影响。
+	 * 需要在拦截发生的同时也计数(例如判断“我拦掉的是不是本来就只有一端收到”)时
+	 * 打开它; 回调可通过 `accepted` 区分两种情况。
+	 */
+	includeFiltered?: boolean;
+}
 
 /**
  * Hook API (仅服务插件可用)
@@ -398,6 +426,7 @@ export interface PluginEventAPI {
 	 * 与 `filter` 的区别: 不返回拦截结果, 只观察; 对通过过滤的事件触发,
 	 * 包括 EntityFactory 不认识、不会被任何处理链消费的裸事件。
 	 * @param handler 事件回调
+	 * @param options 见 {@link PluginEventObserveOptions}; 缺省只观察通过过滤的事件
 	 */
-	observe(handler: PluginEventObserver): void;
+	observe(handler: PluginEventObserver, options?: PluginEventObserveOptions): void;
 }

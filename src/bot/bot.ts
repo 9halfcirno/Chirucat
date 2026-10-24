@@ -279,10 +279,13 @@ export class Bot extends EventEmitter {
 
 	dispatch(event: BotEvents, meta: BotEventMeta) {
 		// 服务插件可拦截事件传播: 任一过滤器返回 false, 该事件不再进入本 Bot 的处理链
-		if (!this.core.services.filterEvent(event, this)) return;
+		const accepted = this.core.services.filterEvent(event, this, meta);
 
-		// 通过过滤的事件交给服务插件观察(含 EntityFactory 不认识的裸事件)
-		this.core.services.observeEvent(event, this);
+		// 观察发生在**过滤结果已知**之后: 默认只观察放行的事件, 声明了 includeFiltered
+		// 的观察者能连被拦下的一起看到(并靠 accepted 区分)
+		this.core.services.observeEvent(event, this, meta, accepted);
+
+		if (!accepted) return;
 
 		const entity = EntityFactory.create(event, meta, this);
 		if (!entity) return;

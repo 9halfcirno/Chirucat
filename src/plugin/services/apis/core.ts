@@ -43,7 +43,10 @@ export const USER_KEYS = [
 export type UserAPI = Pick<UserManager, (typeof USER_KEYS)[number]>;
 
 /** 会话标识视图的成员白名单: 同样摘掉 `init` */
-export const SESSION_KEYS = ["get", "find", "has", "query", "queryMany"] as const;
+export const SESSION_KEYS = [
+	"find", "query", "queryMany", "has", "get", "getUnion", "unionOf", "getLast",
+	"bind", "unbind", "restore", "listMembers",
+] as const;
 export type SessionAPI = Pick<SessionManager, (typeof SESSION_KEYS)[number]>;
 
 /** 用户档案视图的成员白名单: 同样摘掉 `init` */

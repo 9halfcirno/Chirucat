@@ -6,7 +6,7 @@ import { readConfigDefine } from "../../config/define";
 import type { Core } from "../../core";
 import type { Message } from "../../entity/message";
 import { StateError } from "../../errors/state-error";
-import type { BotEvents } from "../../protocols/events";
+import type { BotEvents, BotEventMeta } from "../../protocols/events";
 import { dfs } from "../../utils/dfs";
 import Logger from "../../utils/logger";
 import { dirCheck } from "../../utils/dir-check";
@@ -570,26 +570,32 @@ export class ServiceHost {
 	}
 
 	/**
-	 * 事件过滤: 任一服务插件的过滤器返回 false, 该事件不再传播
+	 * 事件过滤: 任一服务插件的过滤器返回 false, 该事件不再进入处理链
 	 * @param event 适配器派发的原始事件
 	 * @param bot 收到事件的 Bot
+	 * @param meta 事件来源元数据(适配器 id / Bot id)
 	 * @returns 是否放行
 	 */
-	filterEvent(event: BotEvents, bot: Bot): boolean {
+	filterEvent(event: BotEvents, bot: Bot, meta: BotEventMeta): boolean {
 		for (const service of this.enabledServices) {
-			if (!service.context?.filterEvent(event, bot)) return false;
+			if (!service.context?.filterEvent(event, bot, meta)) return false;
 		}
 		return true;
 	}
 
 	/**
 	 * 事件观察: 通知所有已启用服务插件的观察回调
-	 * @param event 已通过过滤的事件
+	 *
+	 * 由事件派发链在**过滤结果已知**之后调用, 不论结果如何 —— 是否把被拦下的事件
+	 * 交给某个观察者, 由观察者注册时的 `includeFiltered` 决定(见 `ctx.event.observe`)。
+	 * @param event 适配器派发的原始事件
 	 * @param bot 收到事件的 Bot
+	 * @param meta 事件来源元数据(适配器 id / Bot id)
+	 * @param accepted 该事件是否通过过滤
 	 */
-	observeEvent(event: BotEvents, bot: Bot) {
+	observeEvent(event: BotEvents, bot: Bot, meta: BotEventMeta, accepted: boolean) {
 		for (const service of this.enabledServices) {
-			service.context?.observeEvent(event, bot);
+			service.context?.observeEvent(event, bot, meta, accepted);
 		}
 	}
 

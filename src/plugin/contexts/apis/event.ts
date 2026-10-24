@@ -1,4 +1,15 @@
-import type { PluginEventAPI, PluginEventFilter, PluginEventObserver } from "../types";
+import type {
+	PluginEventAPI,
+	PluginEventFilter,
+	PluginEventObserver,
+	PluginEventObserveOptions,
+} from "../types";
+
+/** 一条已登记的观察回调及其选项 */
+export type EventObserverEntry = {
+	handler: PluginEventObserver;
+	includeFiltered: boolean;
+};
 
 /**
  * 事件 API 实现: 把过滤器与观察回调注册进上下文
@@ -9,14 +20,14 @@ import type { PluginEventAPI, PluginEventFilter, PluginEventObserver } from "../
 export class EventAPI implements PluginEventAPI {
 	constructor(
 		private readonly registerFilter: (filter: PluginEventFilter) => void,
-		private readonly registerObserver: (observer: PluginEventObserver) => void,
+		private readonly registerObserver: (entry: EventObserverEntry) => void,
 	) { }
 
 	filter(predicate: PluginEventFilter): void {
 		this.registerFilter(predicate);
 	}
 
-	observe(handler: PluginEventObserver): void {
-		this.registerObserver(handler);
+	observe(handler: PluginEventObserver, options: PluginEventObserveOptions = {}): void {
+		this.registerObserver({ handler, includeFiltered: options.includeFiltered === true });
 	}
 }

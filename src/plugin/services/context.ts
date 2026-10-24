@@ -5,12 +5,12 @@ import type { CommandManager } from "../../command/manager";
 import type { Command } from "../../command/types";
 import { Message } from "../../entity/message";
 import { StateError } from "../../errors/state-error";
-import type { BotEvents } from "../../protocols/events";
+import type { BotEventMeta, BotEvents } from "../../protocols/events";
 import Logger from "../../utils/logger";
 import { root } from "../../utils/root";
 import type { PluginExports } from "../exports";
 import { PluginConfig } from "../contexts/apis/config";
-import { EventAPI } from "../contexts/apis/event";
+import { EventAPI, type EventObserverEntry } from "../contexts/apis/event";
 import { FileSystemAPI } from "../contexts/apis/fs";
 import { HooksAPI } from "./apis/hooks";
 import { KVStore } from "../contexts/apis/kv";
@@ -85,7 +85,7 @@ export class ServiceContext {
 
 	/** 事件过滤器与观察回调 (dispose 时清空) */
 	private _filters: PluginEventFilter[] = [];
-	private _observers: PluginEventObserver[] = [];
+	private _observers: EventObserverEntry[] = [];
 
 	/** 本上下文注册的 Hook 注销函数 (dispose 时统一调用) */
 	private _hookDisposers: Array<() => void> = [];
@@ -232,20 +232,37 @@ export class ServiceContext {
 	}
 
 	/**
+	 * 对外暴露的导出, 与 `PluginContext.exports` 同语义。
+	 *
+	 * 键为本插件自己的 id, 因此其它插件用 `ctx.service[<本插件id>]` 就能拿到;
+	 * 需要在别的键名下再暴露一份时用 {@link provide}。
+	 * 写入同样登记归属上下文, 卸载时由 `dispose` 连同释放。
+	 */
+	set exports(value: unknown) {
+		this.assertAlive("设置服务导出");
+		this._serviceExports.setExports(this._manifest.id, value, this);
+	}
+
+	get exports(): unknown {
+		return this._serviceExports.getExports(this._manifest.id);
+	}
+
+	/**
 	 * 过滤事件: 任一过滤器返回 false 即拦截
 	 *
 	 * 拦截是显式意图, 因此过滤器抛错时按放行处理并记录日志 —— 不能让一个
 	 * 出错的过滤器使事件无声消失。
 	 * @param event 适配器派发的原始事件
 	 * @param bot 收到事件的 Bot
+	 * @param meta 事件来源元数据(适配器 id / Bot id)
 	 * @returns 是否放行
 	 */
-	filterEvent(event: BotEvents, bot: Bot): boolean {
+	filterEvent(event: BotEvents, bot: Bot, meta: BotEventMeta): boolean {
 		if (this._disposed) return true;
 
 		for (const filter of this._filters) {
 			try {
-				if (!filter(event, bot)) return false;
+				if (!filter(event, bot, meta)) return false;
 			} catch (e) {
 				this.logger.error("Service event filter error:", e);
 			}
@@ -255,15 +272,20 @@ export class ServiceContext {
 
 	/**
 	 * 通知本服务插件的事件观察回调: 错误不阻断后续, 期约不等待
-	 * @param event 已通过过滤的事件
+	 * @param event 适配器派发的原始事件
 	 * @param bot 收到事件的 Bot
+	 * @param meta 事件来源元数据(适配器 id / Bot id)
+	 * @param accepted 该事件是否通过了全部过滤器
 	 */
-	observeEvent(event: BotEvents, bot: Bot) {
+	observeEvent(event: BotEvents, bot: Bot, meta: BotEventMeta, accepted: boolean) {
 		if (this._disposed) return;
 
 		for (const observer of this._observers) {
+			// 默认只在事件真的会进入处理链时观察; 声明了 includeFiltered 的才能看到被拦的
+			if (!accepted && !observer.includeFiltered) continue;
+
 			try {
-				const result = observer(event, bot);
+				const result = observer.handler(event, bot, meta, accepted);
 				if (result instanceof Promise) {
 					// 期约同步抛出, 不等待; 仅吞掉 rejection 防止 unhandledRejection
 					result.catch((e) => this.logger.error("Service event observer error:", e));
