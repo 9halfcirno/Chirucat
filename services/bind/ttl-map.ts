@@ -76,6 +76,11 @@ export class TTLMap<K = any, V = any> {
 		return this.map.size;
 	}
 
+	/** 当前全部键的快照（含可能尚未被扫描到的已过期键） */
+	public keys(): K[] {
+		return [...this.map.keys()];
+	}
+
 	/**
 	 * 销毁实例，清理后台定时器
 	 */

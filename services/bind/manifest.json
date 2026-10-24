@@ -1,10 +1,10 @@
 {
 	"id": "chirucat-bind",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"main": "index.ts",
 	"type": "service",
 	"name": "Chirucat 跨平台绑定服务",
 	"author": "9halfcirno",
 	"config": "config.schema.json",
-	"description": "在聊天中提供框架级跨平台账号绑定, 以实现用户侧账号绑定"
+	"description": "在聊天中提供框架级跨平台账号绑定与会话绑定: 账号绑定合并用户身份, 会话绑定把同一物理群/频道在不同适配器上的会话归入同一 unionId"
 }

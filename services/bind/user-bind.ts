@@ -6,7 +6,7 @@ import { TTLMap } from "./ttl-map";
 import { uuid } from "./uuid";
 import type { UserAPI } from "../../src/plugin/services/apis/core";
 
-export class BindManager {
+export class UserBind {
 	/** token -> aid 映射 */
 	tokens = new TTLMap<string, string>();
 	/** aid -> token 反向映射，用于保证同一 aid 重新生成时刷新旧 token */

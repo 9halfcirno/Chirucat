@@ -6,7 +6,7 @@
 			"id": "command",
 			"label": "绑定功能指令",
 			"default": "bind",
-			"desc": "设定绑定功能的指令"
+			"desc": "设定账号绑定功能的指令"
 		},
 		{
 			"type": "slider",
@@ -17,6 +17,30 @@
 			"min": 30,
 			"step": 10,
 			"desc": "已签发的令牌有效期不会改变, 只影响新令牌"
+		},
+		{
+			"type": "group",
+			"id": "session",
+			"label": "会话绑定",
+			"controls": [
+				{
+					"type": "input",
+					"id": "command",
+					"label": "会话绑定指令",
+					"default": "bind_session",
+					"desc": "在群聊/频道中 @ 任一 Bot 后发送该指令, 把同一物理会话在两个适配器上的会话并入同一 unionId"
+				},
+				{
+					"type": "slider",
+					"id": "duration",
+					"label": "握手等待时长(单位: 秒)",
+					"default": 5,
+					"max": 60,
+					"min": 2,
+					"step": 1,
+					"desc": "发起方发送握手消息后等待对端响应的时长, 超时即判定绑定失败"
+				}
+			]
 		},
 		{
 			"type": "group",
