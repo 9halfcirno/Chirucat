@@ -147,11 +147,16 @@ export type ReadonlyFsAPI = Omit<
 	"write" | "append" | "remove" | "mkdir" | "rename" | "copy"
 >;
 
-
+export interface KVInitOptions {
+	wal?: boolean;
+	synchronous?: "off" | "normal" | "full" | "extra";
+	busyTimeout?: number;
+	prepareCache?: boolean;
+}
 
 export interface PluginKVAPI {
 	/** 初始化kv存储, 需显式调用 */
-	init(): void;
+	init(options?: KVInitOptions): void;
 	/**
 	 * 读取键值
 	 * @param key 键
@@ -165,6 +170,11 @@ export interface PluginKVAPI {
 	 */
 	set(key: string, value: unknown): void;
 	/**
+	 * 批量写入kv, 值必须可JSON序列化
+	 * @param entries 可迭代键值对
+	 */
+	setMany(entries: Iterable<readonly [string, unknown]>): void;
+	/**
 	 * 键是否存在
 	 * @param key 键
 	 */
@@ -177,10 +187,30 @@ export interface PluginKVAPI {
 	delete(key: string): boolean;
 	/** 清空当前插件的全部键值 */
 	clear(): void;
+	/**
+	 * 按键名前缀清理值
+	 * @param prefix 要清理的键前缀
+	 */
+	clearPrefix(prefix: string): number;
 	/** 列出全部键 */
 	keys(): string[];
 	/** 列出全部键值对 */
 	entries(): [string, unknown][];
+	/**
+	 * 计算指定前缀的键值对数量
+	 * @param prefix 键名前缀
+	 */
+	count(prefix?: string): number;
+	/**
+	 * 在单个事务里执行 fn; fn 抛错则整体回滚
+	 * @param fn 要处理的事务, better-sqlite3要求该函数必须是同步函数
+	 */
+	tx<T>(fn: () => T): T;
+	/** 
+	 * 列出指定前缀的键值对
+	 * @param prefix 需要列出的键名前缀
+	 */
+	list<T = unknown>(prefix?: string): [string, T][];
 }
 
 /**

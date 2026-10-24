@@ -90,6 +90,7 @@ type SessionPlatformInfo = {
 }
 ```
 
+## 消息处理
 
 ### message对象
 
@@ -137,14 +138,33 @@ type SessionPlatformInfo = {
 
 下列方法均为同步方法
 
-- `init()`: 初始化kv存储, 需显式调用(重复调用安全; 未调用前访问其它方法会报错)
-- `get(key: string, defaultValue?: any): any`: 获取指定键的值, 如果键不存在则返回默认值
+- `init(options?: KVInitOptions)`: 初始化kv存储, 需显式调用
+- `get<T>(key: string, defaultValue?: T): T`: 获取指定键的值, 如果键不存在则返回默认值
 - `set(key: string, value: any)`: 设置指定键的值
+- `setMany(entries: Iterable<readonly [string, unknown]>): void`: 批量设置值, 在同时写大量值时性能更优
 - `delete(key: string)`: 删除指定键的值
-- `has(key: string)`: 检查指定键是否存在
+- `has(key: string): boolean`: 检查指定键是否存在
 - `clear()`: 清空所有键值对
+- `clearPrefix(prefix: string)`: 删除指定前缀的键值对
 - `keys(): string[]`: 获取所有键, 返回一个数组
 - `entries(): [string, any][]`: 获取所有键值对, 返回一个二维数组, 每个元素为一个键值对数组
+- `list<T>(prefix?: string, options?: KVListOptions): [string, T][]`
+- `count(prefix?: string): number`: 获取指定前缀下的键值对数量
+- `tx<T>(fn: () => T): T`: 在单次事务内指定函数, fn抛错则回滚, fn必须是同步函数, 否则better-sqlite3会在异步执行完前落盘
+
+```ts
+type KVListOptions = {
+  limit?: number;  // 每次获取的极限条数
+  offset?: number; // 获取偏移量
+}
+
+interface KVInitOptions {
+	wal?: boolean;          // 是否启用WAL, 默认为true 
+	synchronous?: "off" | "normal" | "full" | "extra";
+	busyTimeout?: number;
+	prepareCache?: boolean; // 是否使用预编译的SQL语句, 默认true
+}
+```
 
 ### fs对象
 
