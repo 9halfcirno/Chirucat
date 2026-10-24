@@ -135,7 +135,10 @@ function decorate(core: FilterCoreViews, entries: FilterEntry[]) {
 
 	return entries.map(entry => {
 		const isSession = entry.targetType === "session";
-		const info = isSession ? sessions.get(entry.target) : users.get(entry.target);
+		// 分组取: 会话与账号的查询结果形状不同(只有会话带 type), 先分开再统一取公共字段
+		const sessionInfo = isSession ? sessions.get(entry.target) : undefined;
+		const userInfo = isSession ? undefined : users.get(entry.target);
+		const info = sessionInfo ?? userInfo;
 
 		return {
 			id: entry.id,
@@ -146,7 +149,7 @@ function decorate(core: FilterCoreViews, entries: FilterEntry[]) {
 			target: entry.target,
 			platform: info?.platform ?? "",
 			platformId: info?.id ?? "",
-			sessionType: isSession && info ? (info as { type: string }).type : "",
+			sessionType: sessionInfo?.type ?? "",
 			name: isSession ? "" : (profiles.get(entry.target)?.name ?? ""),
 			reason: entry.reason,
 			createdAt: entry.createdAt,
