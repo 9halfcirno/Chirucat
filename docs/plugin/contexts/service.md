@@ -145,6 +145,9 @@ type UnionMember = UserPlatformInfo & {
 - `has(platform: string, type: SessionType, id: string): boolean`: 该平台会话是否已存在
 - `query(sessionId: string): SessionPlatformInfo | null`: 会话 uuid -> 平台信息
 - `queryMany(ids: string[]): Map<string, SessionPlatformInfo>`: 批量反查平台信息
+- `getUnion(sessionId: string): string | null`: 取会话所属逻辑组; 无记录时会分配一个默认组(写入)
+- `unionOf(sessionId: string): string | null`: 纯查询逻辑组, 不写入; 无记录时为 `null`
+- `listMembers(internalId: string): SessionLinkMember[]`: 列出逻辑组下的全部会话(跨适配器/平台)
 
 ```ts
 type SessionType = "private" | "group" | "channel"
@@ -153,7 +156,15 @@ type SessionPlatformInfo = {
 	type: SessionType;  // 会话类型
 	id: string;         // 会话平台id
 }
+
+// listMembers 的返回项: 同上, 额外带会话 uuid
+// (同一逻辑组里的每个成员各有自己的物理会话 uuid 与平台 id)
+type SessionLinkMember = SessionPlatformInfo & { sessionId: string }
 ```
+
+> 逻辑组(union)是跨适配器的共同标识: 同一个群被 QQBot 与 OneBot11 分别接入时,
+> 两边得到不同的会话 uuid, 但经会话绑定后共享同一个 `unionId`。需要“在多个适配器
+> 之间对齐同一个会话”的逻辑应该以它为准, 而不是 `session.id`。
 
 #### core.profile对象
 
@@ -348,8 +359,8 @@ export default {
 
 **仅服务插件可用**。`ctx.message` 是"收到消息后做点什么", 而 `ctx.event` 干预的是**事件传播本身**: 适配器派发的事件在进入 Bot 的处理链之前, 先过一遍全部已启用服务插件的过滤器。
 
-- `filter(predicate: (event: BotEvents, bot: Bot) => boolean): void`: 注册事件过滤器, 返回 `false` 表示拦截该事件
-- `observe(handler: (event: BotEvents, bot: Bot) => unknown): void`: 注册事件观察回调, 返回值不被等待
+- `filter(predicate: (event: BotEvents, bot: Bot, meta: BotEventMeta) => boolean): void`: 注册事件过滤器, 返回 `false` 表示拦截该事件
+- `observe(handler: (event: BotEvents, bot: Bot, meta: BotEventMeta, accepted: boolean) => unknown, options?: { includeFiltered?: boolean }): void`: 注册事件观察回调, 返回值不被等待
 
 ```js
 export default {
@@ -361,6 +372,11 @@ export default {
 		ctx.event.observe((event, bot) => {
 			ctx.logger.log(`[${bot.id}] ${event.type}`);
 		});
+
+		// 连被拦下的事件一起看: 第四个参数 accepted 区分两种情况
+		ctx.event.observe((event, bot, meta, accepted) => {
+			ctx.logger.log(`[${accepted ? "放行" : "拦截"}] ${meta.adapter} ${event.type}`);
+		}, { includeFiltered: true });
 	}
 };
 ```
@@ -369,8 +385,10 @@ export default {
 
 - **AND 语义**: 遍历全部过滤器, 任一返回 `false` 就丢掉该事件;
 - 第二个参数是**收到事件的 `Bot` 实例**(不是 `core.bot` 那样的只读快照), 便于做“只在某些 Bot 上放行”的判断 —— 它只应被当作判断依据(`id` / `name` 等), 不要拿它去操作 Bot;
+- 第三个参数是**事件来源元数据** `{ adapter, bot }`: `adapter` 是派发该事件的适配器插件 id。多个适配器可能共用同一个 `event.platform`(例如 QQBot 与 OneBot11 都是 `qq`), 需要区分"是哪个适配器收到的"时只能看这里; 不想用时可以省去该参数;
 - **过滤器抛错时按放行处理**并记录日志 —— 拦截是显式意图, 不能让一个出错的过滤器使事件无声消失;
 - `observe` 不参与拦截, 只观察, 能拿到 `EntityFactory` 不认识、不会被任何处理链消费的事件;
+- **默认只观察最终会进入处理链的事件**。加了 `{ includeFiltered: true }` 后, 被拦下的事件也会回调, 此时第四个参数 `accepted` 为 `false`。这个能力用于"拦截与计数需要同时发生"的场景 —— 注意你自己的 `filter` 一旦返回 `false`, 同一条事件就**不会**再进入你自己的普通 `observe`;
 - 过滤器与观察回调都注册在服务插件上, 卸载时自动清空, 只对**已启用**的服务插件生效;
 - 回调里的期约不被等待, 只吞掉 `rejection`, 避免未处理的拒绝。
 

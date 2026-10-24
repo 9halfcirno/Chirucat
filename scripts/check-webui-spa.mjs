@@ -738,6 +738,76 @@ await settle(6);
 ok(filterBotHost.textContent.includes("只对当前 Bot 生效"), "public/bot.js 渲染 Bot 私有名单视图");
 eq(filterBotHost.querySelectorAll(".filters-table").length, 2, "Bot 视图同样建出两张表");
 
+section("acceptor 插件的真实前端模块 (Bot 详情页)");
+
+const acceptorPage = (await import("../services/acceptor/public/bot.js")).default;
+eq(typeof acceptorPage.render, "function", "public/bot.js 导出可渲染的页面对象");
+
+// 接口可用: 按快照画出表头、模式徽章与会话行
+const realFetch = globalThis.fetch;
+let requested = "";
+const acceptorSnapshot = {
+	enabled: true,
+	dryRun: true,
+	now: 1_000_000,
+	windowMs: 60000,
+	thresholds: {
+		minSamples: 5,
+		transferThreshold: 2,
+		switchBackThreshold: 4,
+		cooldownMs: 300000,
+		relativeGap: 0.5,
+		minAbsoluteGap: 3,
+		absoluteGap: 5,
+	},
+	fastPath: { enabled: true, consecutive: 2, silenceMs: 15000 },
+	sessions: [{
+		unionId: "union-abcdef123456",
+		acceptor: "qq",
+		since: 940000,
+		transfers: 1,
+		cooldownRemainingMs: 120000,
+		fastStreak: 1,
+		scores: { onebot11: { transfer: 1, switchBack: 2 } },
+		counts: { qq: 8, onebot11: 1 },
+		mentions: { onebot11: 2 },
+		lastProbeAt: { qq: 995000, onebot11: 980000 },
+		adapters: ["onebot11", "qq"],
+		members: [
+			{ platform: "qq", type: "group", id: "123456" },
+			{ platform: "onebot11", type: "group", id: "123456" },
+		],
+	}],
+};
+
+globalThis.fetch = async (url) => {
+	requested = String(url);
+	return { ok: true, status: 200, json: async () => acceptorSnapshot };
+};
+
+const acceptorHost = document.createElement("div");
+acceptorPage.render(acceptorHost, { id: "bot-a", name: "机器人A" });
+await settle(8);
+
+eq(requested, "/service/chirucat-acceptor/api/acceptor_state", "页面只打本服务的端点");
+ok(acceptorHost.textContent.includes("演练模式"), "演练模式徽章");
+eq(acceptorHost.querySelectorAll("th").length, 6, "表头 6 列");
+ok(acceptorHost.textContent.includes("群 123456 · onebot11"), "会话成员按平台分行");
+ok(acceptorHost.textContent.includes("qq 8"), "窗口派发计数");
+ok(acceptorHost.textContent.includes("onebot11 1(@2)"), "@ 计数单独显示");
+ok(acceptorHost.textContent.includes("onebot11 转移 1/2 · 回切 2/4"), "证据进度带出阈值");
+ok(acceptorHost.textContent.includes("剩余 2m"), "冷却剩余时间");
+ok(acceptorHost.textContent.includes("@ 连击 1/2"), "快速通道连击");
+eq(acceptorHost.querySelectorAll(".acceptor-cell-actions").length, 1, "每行有切换与清空");
+
+// 接口不可用: 在表里说明原因, 而不是留一张空白
+globalThis.fetch = async () => { throw new Error("offline"); };
+const offlineHost = document.createElement("div");
+acceptorPage.render(offlineHost, { id: "bot-a" });
+await settle(8);
+ok(offlineHost.textContent.includes("读取受理人状态失败"), "接口不可用时在表里说明原因");
+globalThis.fetch = realFetch;
+
 section("Bot 详情窗口: 服务插件页面的挂载与实时消失");
 
 const { createBotContent } = await import("../src/webui/public/js/pages/bots/bot-content.js");

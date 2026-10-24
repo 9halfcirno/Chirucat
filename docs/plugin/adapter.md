@@ -67,6 +67,25 @@
 - 可选字段(如`quote`)给不出就整个不填;
 - 必填字段给不出时**丢弃该事件**, 而不是派发一个残缺事件 —— 残缺事件会在下游变成难以定位的问题。
 
+### 3.1 尽量填写 `mentionedSelf`
+
+`message.create` 的 `mentionedSelf` 表示该消息是否 @ 了本适配器对应的 Bot, 服务插件靠它做跨适配器去重与 @ 快速通道。
+
+- 平台只在被 @ 时推送的事件(如 QQ 的 `GROUP_AT_MESSAGE_CREATE`)直接填 `true`;
+- 平台下发全量消息时, 从提及列表里判断"是否提到了自己":
+  QQBot 看 `mentions[].is_you === true`, OneBot11 把 `self_id` 换算成框架账号 uuid 后与 `mention` 段比对;
+- 私聊没有 @ 语义, 填 `false`;
+- 平台根本给不出 @ 信息时可以整个不填: 下游会当作"未知", 而不是"确定没 @"。
+
+### 3.2 剥离消息开头的 @Bot
+
+指令系统按 `text` 的前缀匹配指令名。收到 "@Bot /命令" 时, 如果适配器把 @Bot 留在 `text` 里
+(例如 OneBot11 直接渲染成 `@<uuid> /命令`), 消息就永远命中不了指令。
+
+- 平台把 @Bot 作为独立消息元素下发时, 应在构造事件前删掉**开头那一个**, 再据此生成 `text` 与 `richContent`;
+- 只剥离开头的 @Bot: 消息中段 @ 别人属于内容, 必须保留;
+- `mentionedSelf` 用剥离前的原始信息判定。
+
 ### 4. 平台标识必须经过转换
 
 `senderId`/`sessionId`/`operatorId`一律通过`ctx.user.get`与`ctx.session.get`转换成框架id,
