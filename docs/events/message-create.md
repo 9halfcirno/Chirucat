@@ -23,6 +23,7 @@
 - `sessionId`: 会话框架id(会话uuid), 应使用[`ctx.session.get`](../plugin/contexts/adapter.md)从平台会话id转换得到
 - `text`: 消息纯文本内容
 - `richContent`: 消息富文本内容, 为[`MessageBlock`](../objects/message.md)数组
+- `mentionedSelf`: 该消息是否 @ 了本 Bot(即收到该事件的适配器自身)。私聊恒为 `false`; 平台给不出 @ 信息时**不填**(表示未知), 不要用 `false` 冒充"确定没有 @"
 - `quote`: 该消息引用的消息快照, 若平台无法提供 则不需要该字段
 - `quoteToken`: 该消息的引用Token, 用于回复时引用当前消息的字符串, 部分平台直接填消息ID即可
 
@@ -45,6 +46,7 @@
 - `sessionId`/`sessionType` -> `session.id`/`session.type`
 - `text` -> `text`
 - `richContent` -> `blocks`
+- `mentionedSelf` -> `mentionedSelf`
 - `quote.xxx` -> *参考顶层映射*
 - `quoteToken` -> `token`
 

@@ -31,6 +31,13 @@ export interface QQMessageRoute {
 	sessionId: (data: QQMessageData) => string | undefined;
 	/** 取发送者平台 id; 取不到返回 undefined, 该事件被丢弃 */
 	senderId: (data: QQMessageData) => string | undefined;
+	/**
+	 * 该路由收到的消息是否必然是 @ 本 Bot 的。
+	 *
+	 * 当平台只在"被 @"时才推送这类事件(如 `GROUP_AT_MESSAGE_CREATE`)时置 `true`;
+	 * 未设置时按 `mentions[].is_you` 判定。
+	 */
+	atSelf?: boolean;
 }
 
 /**
@@ -50,7 +57,8 @@ export const MESSAGE_ROUTES: Record<string, QQMessageRoute> = {
 	GROUP_AT_MESSAGE_CREATE: {
 		sessionType: "group",
 		sessionId: (data) => data.group_openid,
-		senderId: (data) => pickUserId(data.author)
+		senderId: (data) => pickUserId(data.author),
+		atSelf: true
 	},
 	// 群聊: 全量消息(需平台开通)
 	GROUP_MESSAGE_CREATE: {
@@ -90,6 +98,17 @@ export function buildQQEvent(payload: QQWebSocketPayload, deps: QQEventDeps): Bo
 	if (!senderPlatformId) return null;
 
 	return buildMessageCreate(data, route, sessionPlatformId, senderPlatformId, deps);
+}
+
+/**
+ * 判断该消息是否 @ 了本 Bot
+ *
+ * 平台不提供 @ 信息时返回 `false`(而不是 `undefined`): 路由已经决定了事件的
+ * 会话类型与来源, 缺少 mentions 只可能是私聊或平台裁剪, 两者都不构成 @。
+ */
+function isMentionedSelf(data: QQMessageData, route: QQMessageRoute): boolean {
+	if (route.atSelf === true) return true;
+	return (data.mentions ?? []).some((m) => m?.is_you === true);
 }
 
 /**
@@ -138,6 +157,7 @@ export function buildMessageCreate(
 		sessionId: deps.resolveSessionId(route.sessionType, sessionPlatformId),
 		text,
 		richContent,
+		mentionedSelf: isMentionedSelf(data, route),
 		quoteToken: resolveQuoteToken(data),
 		time: Date.now(),
 		platform: PLATFORM,

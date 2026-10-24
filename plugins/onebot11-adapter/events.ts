@@ -1,7 +1,7 @@
 import type { MessageCreateEvent, MessageDeleteEvent } from "../../src/protocols/event/message";
 import type { BotEvents } from "../../src/protocols/events";
 import type { SessionType } from "../../src/protocols/session";
-import { blocksToText, parseMessage, type Ob11CodecDeps } from "./codec";
+import { blocksToText, parseMessage, stripLeadingSelfMention, type Ob11CodecDeps } from "./codec";
 import { PLATFORM } from "./constants";
 import type { ContentFilter } from "./filters";
 import type { IdentityCache } from "./identity";
@@ -93,15 +93,23 @@ function buildMessageEvent(data: OneBotMessageEvent, ctx: Ob11EventContext): Bot
 	}
 
 	const parsed = parseMessage(data.message, ctx.codec);
-	const text = blocksToText(parsed.blocks);
+
+	// 是否 @ 了本 Bot: 私聊没有 @ 语义, 恒为 false; 群聊按 mention 段判断
+	// (selfId 未知时无法判断, 统一按 false 处理)
+	const selfUuid = ctx.selfId === null ? null : ctx.codec.resolveUserId(ctx.selfId);
+	const mentionedSelf = sessionType === "group"
+		&& selfUuid !== null
+		&& parsed.blocks.some((block) => block.type === "mention" && block.id === selfUuid);
+
+	// 指令系统按纯文本前缀匹配: 群里 "@Bot /cmd" 的 @ 段必须先剥掉,
+	// 否则 text 是 "@<uuid> /cmd", 永远命中不了指令。
+	const blocks = stripLeadingSelfMention(parsed.blocks, selfUuid);
+	const text = blocksToText(blocks);
 
 	// 仅 @ 机器人(只对群聊生效)
 	if (options.atOnly && sessionType === "group") {
 		if (ctx.selfId === null) return null;
-
-		const selfUuid = ctx.codec.resolveUserId(ctx.selfId);
-		const mentioned = parsed.blocks.some((block) => block.type === "mention" && block.id === selfUuid);
-		if (!mentioned) return null;
+		if (!mentionedSelf) return null;
 	}
 
 	// 内容过滤
@@ -124,7 +132,8 @@ function buildMessageEvent(data: OneBotMessageEvent, ctx: Ob11EventContext): Bot
 		sessionType,
 		sessionId: ctx.resolveSessionId(sessionType, String(rawSessionId)),
 		text,
-		richContent: parsed.blocks,
+		richContent: blocks,
+		mentionedSelf,
 		// OneBot 用消息 id 作为引用凭证: 回复时把该 id 放进 reply 段即可
 		quoteToken: messageId,
 		time: typeof data.time === "number" ? data.time * 1000 : Date.now(),

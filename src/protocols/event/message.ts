@@ -30,6 +30,14 @@ export interface MessageCreateEvent extends BotEvent {
 	/** 消息富文本内容 */
 	richContent: Array<MessageBlockReceive>;
 
+	/**
+	 * 该消息是否 @ 了本 Bot(即收到该事件的适配器自身)。
+	 *
+	 * 私聊恒为 `false`; 平台不提供 @ 信息时缺省(`undefined`)表示"未知",
+	 * 不要用 `false` 冒充"确定没有 @"。
+	 */
+	mentionedSelf?: boolean;
+
 	quote?: MessageQuote;
 }
 

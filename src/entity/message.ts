@@ -15,6 +15,9 @@ export class Message extends Entity {
 	session: Session;
 	sender: User;
 
+	/** 该消息是否 @ 了本 Bot; 平台未提供时为 null(未知) */
+	mentionedSelf: boolean | null;
+
 	quote?: MessageQuote;
 	token: string;
 
@@ -25,10 +28,12 @@ export class Message extends Entity {
 		this.text = event.text;
 		this.blocks = event.richContent;
 		this.token = event.quoteToken;
+		this.mentionedSelf = event.mentionedSelf ?? null;
 
 		this.session = {
 			id: event.sessionId,
-			type: event.sessionType
+			type: event.sessionType,
+			unionId: this.bot?.core.session?.unionOf(event.sessionId) ?? null,
 		}
 		this.sender = {
 			id: event.senderId,

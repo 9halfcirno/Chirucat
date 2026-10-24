@@ -19,9 +19,11 @@
   - `unionId`: 发送者跨平台uuid
   - `name`: 发送者昵称
   - `permission`: 发送者权限等级
+- `mentionedSelf`: 该消息是否 @ 了本 Bot; 平台未提供 @ 信息时为 `null`(未知)
 - `session`: 消息来源会话信息
-  - `id`: 会话uuid
+  - `id`: 会话uuid(平台物理会话)
   - `type`: 会话类型, 值为`private`, `group`, `channel`其中之一
+  - `unionId`: 该会话所属的逻辑会话组 ID; 多个适配器经会话绑定后会共享同一个值, 跨适配器去重/判定应以它为准; 未登记时为 `null`
 - `quote`: 被引用的消息, 为[`MessageQuote`对象](#messagequote对象), 适配器未提供时为`undefined`
 
 ### 方法

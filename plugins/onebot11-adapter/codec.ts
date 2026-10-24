@@ -55,6 +55,46 @@ export function parseMessage(message: OneBotMessage | undefined, deps: Ob11Codec
 	return segmentsToParsed(normalizeSegments(message), deps);
 }
 
+/**
+ * 剥离开头指向本 Bot 的提及
+ *
+ * 群里用户习惯先 @Bot 再输入指令, 消息段形如 `[at(qq=self), text(" /bind")]`。
+ * 若不剥离, {@link blocksToText} 会把提及渲染成 `@<uuid>`, 于是 text 变成
+ * `@<uuid> /bind`, 指令系统(要求文本以 `/` 开头)无法命中。
+ *
+ * 只剥离开头那一个, 且首个有效块之前只允许空白文本(平台常在 @ 前插空格);
+ * 消息中段的 @ 属于内容, 原样保留。selfId 未知或首块不是 @自己时原样返回。
+ */
+export function stripLeadingSelfMention(
+	blocks: MessageBlockReceive[],
+	selfId: string | null
+): MessageBlockReceive[] {
+	if (!selfId || blocks.length === 0) return blocks;
+
+	let index = 0;
+	while (index < blocks.length) {
+		const block = blocks[index];
+		if (!block || block.type !== "text" || block.text.trim() !== "") break;
+		index++;
+	}
+
+	const lead = blocks[index];
+	if (!lead || lead.type !== "mention" || lead.id !== selfId) return blocks;
+
+	// 前面的空白文本与 @ 一并丢弃
+	const rest = blocks.slice(index + 1);
+
+	// @ 与正文之间通常有一个空格: 剥掉它, 让 text 从指令本身开始
+	const first = rest[0];
+	if (first && first.type === "text") {
+		const text = first.text.trimStart();
+		if (text) rest[0] = { type: "text", text };
+		else rest.shift();
+	}
+
+	return rest;
+}
+
 /** 把两种消息体形式统一成段数组 */
 export function normalizeSegments(message: OneBotMessage | undefined): OneBotSegment[] {
 	if (Array.isArray(message)) {
@@ -193,7 +233,11 @@ function atBlock(data: Record<string, any>, deps: Ob11CodecDeps): MessageBlockRe
 	if (qq === undefined || qq === null || qq === "all") {
 		return { type: "text", text: "@全体成员" };
 	}
-	return { type: "mention", id: deps.resolveUserId(String(qq)) };
+
+	const id = deps.resolveUserId(String(qq));
+	// 部分实现(NapCat 等)在 at 段携带昵称: 有就带上, 让文本渲染成 @昵称 而不是 @uuid
+	const name = typeof data.name === "string" && data.name ? data.name : undefined;
+	return name ? { type: "mention", id, name } : { type: "mention", id };
 }
 
 // -------------------- 发: 协议 -> 平台 --------------------

@@ -13,4 +13,12 @@ export interface Session {
 	id: string;
 	/** 会话类型 */
 	type: SessionType;
+	/**
+	 * 该会话所属的逻辑会话组 ID(union)。
+	 *
+	 * 同一物理会话在不同适配器/平台下会得到不同的 `id`, 但经会话绑定后会共享
+	 * 同一个 `unionId` —— 跨适配器去重、受理人判定这类逻辑应当以它而非 `id` 为准。
+	 * 会话尚未登记(或查不到)时为 `null`。
+	 */
+	unionId: string | null;
 }
