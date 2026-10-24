@@ -1,0 +1,182 @@
+{
+	"$schema": "../../src/config/schema.json",
+	"controls": [
+		{
+			"type": "text",
+			"label": "受理人服务",
+			"desc": "同一个逻辑会话(多适配器绑定到同一个群)只由一个适配器响应。判定只依据两端的派发量差值, 不看消息内容 —— 同一条真实消息在不同平台上的渲染结果可能毫无共同点。"
+		},
+		{
+			"type": "switch",
+			"id": "enabled",
+			"label": "启用判定",
+			"default": true,
+			"desc": "关掉后完全不判定, 所有事件照常放行"
+		},
+		{
+			"type": "switch",
+			"id": "dryRun",
+			"label": "演练模式(不拦截)",
+			"default": true,
+			"desc": "完整跑判定并像生产一样演进状态, 但不真的拦截任何事件。确认参数与行为正常后再关闭"
+		},
+		{
+			"type": "checkbox",
+			"id": "sessionTypes",
+			"label": "生效的会话类型",
+			"default": ["group"],
+			"desc": "私聊通常不会绑定到同一逻辑会话, 默认只看群聊",
+			"items": [
+				{ "label": "私聊", "value": "private" },
+				{ "label": "群聊", "value": "group" },
+				{ "label": "频道", "value": "channel" }
+			]
+		},
+		{
+			"type": "group",
+			"id": "window",
+			"label": "滑动窗口",
+			"controls": [
+				{
+					"type": "slider",
+					"id": "windowMs",
+					"label": "窗口长度 (毫秒)",
+					"default": 60000,
+					"min": 5000,
+					"max": 600000,
+					"step": 5000,
+					"desc": "判定只看这段时间内的派发量。太短会把正常抖动当成故障, 太长则转移变慢"
+				},
+				{
+					"type": "slider",
+					"id": "flushIntervalMs",
+					"label": "汇总间隔 (毫秒)",
+					"default": 60000,
+					"min": 5000,
+					"max": 600000,
+					"step": 5000
+				}
+			]
+		},
+		{
+			"type": "group",
+			"id": "thresholds",
+			"label": "判定阈值",
+			"controls": [
+				{
+					"type": "slider",
+					"id": "minSamples",
+					"label": "最小样本量",
+					"default": 5,
+					"min": 2,
+					"max": 50,
+					"step": 1,
+					"desc": "两端窗口计数之和达到它才考虑转移, 避免冷启动时按一两条消息下结论"
+				},
+				{
+					"type": "slider",
+					"id": "silenceThreshold",
+					"label": "沉默阈值",
+					"default": 0,
+					"min": 0,
+					"max": 20,
+					"step": 1,
+					"desc": "受理人在窗口内的派发量不超过它就算沉默"
+				},
+				{
+					"type": "slider",
+					"id": "minAbsoluteGap",
+					"label": "抑制转移的最小绝对差",
+					"default": 3,
+					"min": 1,
+					"max": 50,
+					"step": 1,
+					"desc": "两端差值小于它一律视为接近, 清空转移证据 —— 正常聊天时两端都会派发, 不该被判成故障"
+				},
+				{
+					"type": "slider",
+					"id": "relativeGap",
+					"label": "相对差阈值",
+					"default": 0.5,
+					"min": 0.1,
+					"max": 1,
+					"step": 0.05,
+					"desc": "差值还要达到较大值的这个比例, 避免大流量下小比例差异被放过"
+				},
+				{
+					"type": "slider",
+					"id": "absoluteGap",
+					"label": "低速率兜底绝对差",
+					"default": 5,
+					"min": 1,
+					"max": 50,
+					"step": 1,
+					"desc": "样本量不足时, 单看差值是否已经足够说明问题"
+				},
+				{
+					"type": "slider",
+					"id": "transferThreshold",
+					"label": "转移阈值",
+					"default": 2,
+					"min": 1,
+					"max": 10,
+					"step": 1,
+					"desc": "证据次数超过它才真的转移受理人"
+				},
+				{
+					"type": "slider",
+					"id": "switchBackThreshold",
+					"label": "回切阈值",
+					"default": 4,
+					"min": 1,
+					"max": 20,
+					"step": 1,
+					"desc": "必须严格高于转移阈值: 转移是救火, 回切要更保守"
+				},
+				{
+					"type": "slider",
+					"id": "cooldownMs",
+					"label": "冷却期 (毫秒)",
+					"default": 300000,
+					"min": 0,
+					"max": 1800000,
+					"step": 30000,
+					"desc": "转移后的这段时间内不采纳回切证据, 防止来回抖动"
+				}
+			]
+		},
+		{
+			"type": "group",
+			"id": "fastPath",
+			"label": "@ 快速通道",
+			"controls": [
+				{
+					"type": "switch",
+					"id": "enabled",
+					"label": "启用",
+					"default": true
+				},
+				{
+					"type": "slider",
+					"id": "consecutive",
+					"label": "连续次数",
+					"default": 2,
+					"min": 1,
+					"max": 10,
+					"step": 1,
+					"desc": "非受理人连续被 @ 这么多次、且受理人毫无动静时立即转移"
+				},
+				{
+					"type": "slider",
+					"id": "silenceMs",
+					"label": "受理人沉默判定 (毫秒)",
+					"default": 15000,
+					"min": 1000,
+					"max": 300000,
+					"step": 1000,
+					"desc": "受理人多久没有非 @ 派发就算彻底沉默"
+				}
+			]
+		}
+	]
+}

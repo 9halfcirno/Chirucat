@@ -1,0 +1,188 @@
+/* 受理人 (Bot 详情窗口里的子页) */
+
+.acceptor-page {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-4);
+	color: var(--fg);
+}
+
+.acceptor-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-3);
+	padding: var(--sp-4);
+}
+
+.acceptor-head {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-3);
+}
+
+.acceptor-head h3 {
+	margin: 0;
+	font-size: var(--fs-sm);
+	font-weight: 600;
+}
+
+/* 把模式徽章与刷新按钮推到头部的两端 */
+.acceptor-spacer {
+	flex: 1;
+}
+
+/* ---- 模式徽章 ---- */
+.acceptor-badge {
+	padding: 0.1em 0.6em;
+	border-radius: 999px;
+	font-size: var(--fs-xs);
+	white-space: nowrap;
+}
+
+.acceptor-badge.live {
+	background: var(--accent);
+	color: var(--fg-on-accent);
+}
+
+/* 演练模式: 能看见判定结果, 但消息照常放行 —— 用偏暖的中性色, 不与"正式"抢注意力 */
+.acceptor-badge.dry {
+	background: var(--warning, #d9a441);
+	color: var(--fg-on-accent);
+}
+
+.acceptor-badge.off {
+	background: var(--bg-active);
+	color: var(--fg-muted);
+}
+
+/* ---- 说明与参数 ---- */
+.acceptor-hint {
+	margin: 0;
+	font-size: var(--fs-sm);
+	line-height: 1.5;
+}
+
+.acceptor-params {
+	font-variant-numeric: tabular-nums;
+}
+
+.acceptor-updated {
+	font-size: var(--fs-xs);
+	white-space: nowrap;
+}
+
+/* ---- 表格 ---- */
+.acceptor-table-wrap {
+	overflow-x: auto;
+}
+
+.acceptor-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--fs-sm);
+}
+
+.acceptor-table th,
+.acceptor-table td {
+	padding: var(--sp-2) var(--sp-3);
+	text-align: left;
+	vertical-align: top;
+	border-bottom: 1px solid var(--glass-border);
+}
+
+.acceptor-table th {
+	font-size: var(--fs-xs);
+	font-weight: 600;
+	color: var(--fg-muted);
+	white-space: nowrap;
+}
+
+.acceptor-table tbody tr:hover {
+	background: var(--bg-hover);
+}
+
+.acceptor-table td.num {
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+/* ---- 会话列: 成员逐行, unionId 缩写在下面 ---- */
+.acceptor-members {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.acceptor-member {
+	white-space: nowrap;
+}
+
+.acceptor-union {
+	margin-top: 2px;
+	font-family: monospace;
+	font-size: var(--fs-xs);
+	color: var(--fg-muted);
+}
+
+/* ---- 派发计数 ---- */
+.acceptor-adapters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sp-1);
+}
+
+.acceptor-chip {
+	padding: 0.05em 0.45em;
+	border-radius: var(--r-sm, 4px);
+	background: var(--bg-active);
+	font-size: var(--fs-xs);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.acceptor-chip.current {
+	background: var(--accent);
+	color: var(--fg-on-accent);
+}
+
+/* ---- 证据 ---- */
+.acceptor-evidence {
+	font-size: var(--fs-xs);
+	white-space: nowrap;
+}
+
+.acceptor-evidence + .acceptor-evidence {
+	margin-top: 2px;
+}
+
+/* ---- 操作列 ---- */
+.acceptor-cell-actions {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+}
+
+/* 自绘下拉不会随内容自动撑开, 给个下限 */
+.acceptor-cell-actions .config-select-wrap {
+	min-width: 8em;
+}
+
+.acceptor-table .btn {
+	height: auto;
+	padding: 0.1em 0.55em;
+	font-size: var(--fs-xs);
+}
+
+/* ---- 空态与错误 ---- */
+.acceptor-empty {
+	padding: var(--sp-4) var(--sp-3);
+	text-align: center;
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+	line-height: 1.6;
+}
+
+.acceptor-error {
+	padding: var(--sp-3);
+	color: var(--danger);
+}

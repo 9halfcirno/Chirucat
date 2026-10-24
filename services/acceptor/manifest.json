@@ -1,0 +1,10 @@
+{
+	"id": "chirucat-acceptor",
+	"version": "0.3.0",
+	"main": "index.ts",
+	"type": "service",
+	"name": "Chirucat 受理人服务",
+	"author": "9halfcirno",
+	"config": "config.schema.json",
+	"description": "多个适配器绑定到同一逻辑会话时, 只让其中一个响应入站消息。判定只依据两端非 @ 消息的派发量差值(滑动窗口), 不依赖消息内容 —— 同一条真实消息在不同平台上的渲染结果可能毫无共同点。默认演练模式, 只判定不拦截。附带 Bot 详情窗口里的受理人状态页"
+}
