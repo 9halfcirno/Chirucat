@@ -106,7 +106,7 @@ function createUserHandler(ctx: ServiceContext, ubm: UserBind, commandName: stri
 				msg.reply(`生成绑定令牌失败!`);
 				return;
 			}
-			msg.reply(`已生成绑定到此账号的绑定令牌! 请在 ${formatTime(time / 1000)} 内进行使用 "/${commandName} [你的令牌]" 绑定!\n\n令牌: ${newToken}`);
+			msg.reply(`已生成绑定到此账号的绑定令牌! 请在 ${formatTime(time / 1000)} 内 @另一个Bot 使用 "/${commandName} [你的令牌]" 绑定!\n\n令牌: ${newToken}\n\n> 成功绑定后, 在对面Bot产生的数据将全部失去`);
 		} else { // 有令牌
 			const ori = msg.sender.id;
 			const res = ubm.bind(ori, token);
@@ -152,21 +152,21 @@ async function runSessionBind(ctx: ServiceContext, sbm: SessionBind, commandName
 	const sent = await safeReply(msg, `/${HANDSHAKE_COMMAND} ${request.id}`);
 	if (!sent) {
 		sbm.cancel(request.id, "send_failed");
-		await safeReply(msg, `会话绑定失败!\n原因: 握手消息发送失败, 请检查当前适配器是否可发送消息。`);
+		await safeReply(msg, `会话绑定失败!\n原因: 握手消息发送失败, 请检查当前 Bot 是否可发送消息。`);
 		return;
 	}
 
 	try {
 		await request.promise;
 		// 额度③: 仅发起方回执, 对端保持静默
-		await safeReply(msg, `会话绑定成功! 两端会话已归入同一 unionId, 后续跨平台去重与受理人判定会将其视为同一会话。`);
+		await safeReply(msg, `会话绑定成功! 两端会话已归入同一 unionId, 后续去重与受理人判定会将其视为同一会话。`);
 	} catch (e) {
 		const code = e instanceof SessionBindError ? e.code : "bind_failed";
 		// 已有更新的一次绑定: 旧请求静默作废, 不再打扰用户
 		if (code === "superseded" || code === "canceled") return;
 
 		const hint = code === "bind_timeout"
-			? `\n可尝试 @ 对端 Bot 后发送 /${commandName} 反向绑定, 或确认对端适配器已开启群消息接收权限。`
+			? `\n可尝试 @ 另一个 Bot 后发送 /${commandName} 反向绑定, 或确认另一个 Bot 已开启群消息接收权限。`
 			: "";
 		await safeReply(msg, `会话绑定失败!\n原因: ${failureText(code)}${hint}`);
 	}
