@@ -120,8 +120,8 @@ class Ob11Adapter {
 	}
 
 	/** 平台事件 -> 框架事件 -> 派发 */
-	private handleEvent(event: OneBotEvent): void {
-		const built = buildOb11Event(event, {
+	private async handleEvent(event: OneBotEvent): Promise<void> {
+		const built = await buildOb11Event(event, {
 			codec: this.codec,
 			resolveSessionId: (type, platformId) => this.ctx.session.get(PLATFORM, type, platformId),
 			identities: this.identities,
@@ -134,7 +134,7 @@ class Ob11Adapter {
 				contentFilterEnabled: this.ctx.config.get("contentFilter", false),
 				filterRules: this.ctx.config.get("filterRules", [])
 			}
-		});
+		}, this.connection);
 
 		// 被过滤/不支持/字段缺失: 不派发, 也不报错(实现端会持续下发各类事件)
 		if (!built) return;

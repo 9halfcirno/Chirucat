@@ -1,11 +1,12 @@
 import type { MessageCreateEvent, MessageDeleteEvent } from "../../src/protocols/event/message";
 import type { BotEvents } from "../../src/protocols/events";
 import type { SessionType } from "../../src/protocols/session";
-import { blocksToText, parseMessage, stripLeadingSelfMention, type Ob11CodecDeps } from "./codec";
+import { blocksToText, parseMessage, segmentsToParsed, stripLeadingSelfMention, type Ob11CodecDeps } from "./codec";
+import { Ob11Connection } from "./connection";
 import { PLATFORM } from "./constants";
 import type { ContentFilter } from "./filters";
 import type { IdentityCache } from "./identity";
-import type { OneBotEvent, OneBotMessageEvent, OneBotNoticeEvent } from "./types";
+import type { OneBotEvent, OneBotMessageEvent, OneBotMessageGet, OneBotNoticeEvent } from "./types";
 
 /**
  * 平台事件 -> 框架事件
@@ -54,11 +55,11 @@ export interface Ob11EventOptions {
  * 把一个下行事件转换为框架事件
  * @returns 事件对象; 被过滤/不支持/字段缺失时为 `null`
  */
-export function buildOb11Event(event: OneBotEvent, ctx: Ob11EventContext): BotEvents | null {
+export async function buildOb11Event(event: OneBotEvent, ctx: Ob11EventContext, connecting: Ob11Connection): Promise<BotEvents | null> {
 	switch ((event as { post_type?: unknown }).post_type) {
 		case "message":
 		case "message_sent":
-			return buildMessageEvent(event as OneBotMessageEvent, ctx);
+			return await buildMessageEvent(event as OneBotMessageEvent, ctx, connecting);
 		case "notice":
 			return buildNoticeEvent(event as OneBotNoticeEvent, ctx);
 		default:
@@ -68,7 +69,7 @@ export function buildOb11Event(event: OneBotEvent, ctx: Ob11EventContext): BotEv
 
 // -------------------- message.create --------------------
 
-function buildMessageEvent(data: OneBotMessageEvent, ctx: Ob11EventContext): BotEvents | null {
+async function buildMessageEvent(data: OneBotMessageEvent, ctx: Ob11EventContext, connecting: Ob11Connection): Promise<BotEvents | null> {
 	const options = ctx.options;
 
 	// message_sent 是机器人自己发出的消息(部分实现会回推)
@@ -150,6 +151,23 @@ function buildMessageEvent(data: OneBotMessageEvent, ctx: Ob11EventContext): Bot
 		},
 		source: data
 	};
+
+	let quoteS = (Array.isArray(data.message) ? data.message.find(s => s.type === "reply") : null) || null;
+	if (quoteS && quoteS.data?.id) {
+		try {
+			let quoted = await connecting.callApi<OneBotMessageGet>("get_message", { message_id: quoteS.data?.id });
+			let quote: MessageCreateEvent["quote"] = {
+				messageId: String(quoted.message_id),
+				text: Array.isArray(quoted.message) ? blocksToText(segmentsToParsed(quoted.message, ctx.codec).blocks) : quoted.message,
+				richContent: Array.isArray(quoted.message) ? segmentsToParsed(quoted.message, ctx.codec).blocks : [{ type: "text", text: quoted.message }],
+				senderId: ctx.codec.resolveUserId(String(quoted.sender.user_id ?? senderPlatformId)),
+				senderName: quoted.sender.card ?? quoted.sender.nickname ?? senderName,
+			}
+			event.quote = quote;
+		} catch (e) {
+			// 没上报渠道, 静默丢失
+		}
+	}
 
 	return event;
 }

@@ -41,6 +41,16 @@ export interface OneBotMessageEvent {
 	[key: string]: unknown;
 }
 
+export interface OneBotMessageGet {
+	message_type: string;
+	message_id: number | string;
+	message: OneBotMessage;
+	group_id: number | string;
+	sender: OneBotSender;
+	time?: number;
+	[key: string]: unknown;
+}
+
 /**
  * 通知事件
  *
