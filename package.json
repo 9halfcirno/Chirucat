@@ -1,6 +1,6 @@
 {
   "name": "chirucat",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "采用Core + Adapter架构的聊天机器人框架",
   "keywords": [
     "bot",
@@ -17,7 +17,6 @@
     "webui:js": "node dist/webui/server/server.js",
     "webui:tsx": "tsx src/webui/server/server.ts",
     "build": "tsc",
-
     "check:state": "tsx scripts/check-bot-state.ts",
     "check:services": "tsx scripts/check-services.ts",
     "check:service-state": "tsx scripts/check-service-state.ts",
