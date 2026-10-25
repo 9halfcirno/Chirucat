@@ -97,6 +97,10 @@ export default {
 			if (ctx.config.get<boolean>("enabled", true) !== true) return true;
 			if (!settings(ctx).sessionTypes.includes(event.sessionType)) return true;
 
+			if (event.mentionedSelf) {
+				return true; // 放行显式@me消息
+			}
+
 			const unionId = resolveUnion(ctx, event.sessionId);
 			if (!unionId) {
 				// 没有共同标识就无法判断"另一端是不是同一个会话", 交给业务层去重
