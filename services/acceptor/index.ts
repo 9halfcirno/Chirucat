@@ -5,6 +5,7 @@ import { createAcceptorHandler } from "./api";
 import { evaluate } from "./detector";
 import type {
 	AcceptorMember,
+	AcceptorQuery,
 	AcceptorSessionView,
 	AcceptorSnapshot,
 	AcceptorState,
@@ -129,8 +130,9 @@ export default {
 				for (const [key, runtime] of runtimes ?? []) out[key] = runtime.state;
 				return out;
 			},
-			/** 某个 Bot 的完整视图(WebUI 页面用) */
-			snapshot: (botId: string): AcceptorSnapshot => readSnapshot(ctx, botId),
+			/** 某个 Bot 的当前页视图(WebUI 页面用) */
+			snapshot: (botId: string, options: AcceptorQuery = {}): AcceptorSnapshot =>
+				readSnapshot(ctx, botId, options),
 			/** 手工指定受理人(排障用): 不经过判定, 直接换人并清空证据 */
 			override: (botId: string, unionId: string, adapter: string, at = Date.now()): void =>
 				overrideAcceptor(ctx, botId, unionId, adapter, at),
@@ -156,7 +158,7 @@ export default {
 			method: "POST",
 			auth: true,
 			handler: createAcceptorHandler({
-				snapshot: (botId) => readSnapshot(ctx, botId),
+				snapshot: (botId, options) => readSnapshot(ctx, botId, options),
 				override: (botId, unionId, adapter) => overrideAcceptor(ctx, botId, unionId, adapter),
 				resetSession: (botId, unionId) => resetSession(ctx, botId, unionId),
 			}),
@@ -172,7 +174,7 @@ export default {
 		});
 
 		ctx.logger.log(
-			`受理人服务已启动 (${ctx.config.get<boolean>("dryRun", true) ? "dry-run: 只判定不拦截" : "正式模式: 每个会话只放行受理人"})`,
+			`受理人服务已启动 (${isDryRun(ctx) ? "dry-run: 只判定不拦截, 按汇总间隔输出汇总" : "正式模式: 每个会话只放行受理人, 不输出周期汇总"})`,
 		);
 	},
 
@@ -219,15 +221,23 @@ function dispatch(
 	});
 
 	runtime.state = decision.state;
+	const dryRun = isDryRun(ctx);
 
 	if (decision.transferred) {
 		runtime.stats.transfers++;
 		// 只在换人时立即落盘: 每条消息都写一次库没必要, 其余状态由 flush 周期写入
 		persist(ctx, key, decision.state);
-		ctx.logger.log(`[受理人] ${key} → ${decision.state.acceptor} (${decision.reason})`);
+
+		// 换人是低频的真实事件, 两种模式都记 —— 但演练模式要标清楚“这次只是它想切”:
+		// 否则事后看日志会把演练记录当成了真实切换。
+		const owner = splitKey(key);
+		ctx.logger.log(
+			`[受理人]${dryRun ? "[演练]" : ""} ${owner.botId} / ${short(owner.unionId)} → ` +
+			`${decision.state.acceptor} (${decision.reason})`,
+		);
 	}
 
-	if (ctx.config.get<boolean>("dryRun", true) === true) return true;
+	if (dryRun) return true;
 
 	if (!decision.allow) runtime.stats.blocked++;
 	return decision.allow;
@@ -318,6 +328,11 @@ function resetSession(ctx: ServiceContext, botId: string, unionId: string): void
 
 /* -------------------- WebUI 快照 -------------------- */
 
+/** 一页默认返回多少条会话 */
+const DEFAULT_LIMIT = 20;
+/** 前端一次最多要多少条: 再大就不叫分页了 */
+const MAX_LIMIT = 200;
+
 /** 一个逻辑会话的成员列表; 会话表不可用时给出空数组, 不让页面整个打不开 */
 function membersOf(ctx: ServiceContext, unionId: string): AcceptorMember[] {
 	try {
@@ -331,42 +346,82 @@ function membersOf(ctx: ServiceContext, unionId: string): AcceptorMember[] {
 	}
 }
 
-/** 生成某个 Bot 的完整视图 */
-function readSnapshot(ctx: ServiceContext, botId: string): AcceptorSnapshot {
+/** 分页前的一个候选行: 只带排序与过滤要用的 O(1) 信息 */
+type Candidate = {
+	unionId: string;
+	runtime: Runtime;
+	/** 最近活跃时刻: 最近一次非 @ 派发, 没有则退回受理人上任时刻 */
+	lastActive: number;
+	/** 成员列表缓存: 过滤时要看, 构造页面时也要看, 只查一次 */
+	members?: AcceptorMember[];
+};
+
+/**
+ * 生成某个 Bot 的**当前页**视图
+ *
+ * 上千个群时分页不是为了省流量, 而是为了不把上千行变成 DOM。因此这里分三步:
+ * 先只看内存里的 O(1) 信息并排序, 再过滤, 最后才为**当前页**构造完整视图 ——
+ * `members` 是一次数据库查询, 只为页内那 20 个会话付这个代价。
+ */
+function readSnapshot(
+	ctx: ServiceContext,
+	botId: string,
+	options: AcceptorQuery = {},
+): AcceptorSnapshot {
 	const at = Date.now();
 	const { params } = settings(ctx);
-	const sessions: AcceptorSessionView[] = [];
 
+	const query = (options.query ?? "").trim().toLowerCase();
+	const limit = Math.min(MAX_LIMIT, Math.max(1, Math.floor(options.limit ?? DEFAULT_LIMIT)));
+
+	// 1. 收集该 Bot 的会话并排序 (最近活跃的在前: 排障时第一个要看的就是刚出问题的那个群)
+	const candidates: Candidate[] = [];
 	for (const [key, runtime] of runtimes ?? []) {
 		const owner = splitKey(key);
 		if (owner.botId !== botId) continue;
 
-		const state = runtime.state;
-		const counts = runtime.window.counts(at, params.windowMs);
-		const mentions = runtime.window.mentions(at, params.windowMs);
-
-		sessions.push({
+		candidates.push({
 			unionId: owner.unionId,
+			runtime,
+			lastActive: lastActiveAt(runtime),
+		});
+	}
+	candidates.sort((a, b) => b.lastActive - a.lastActive || a.unionId.localeCompare(b.unionId));
+
+	// 2. 过滤: unionId / 适配器名先比, 不命中才去查成员(常见场景不必碰数据库)
+	const filtered = query
+		? candidates.filter(candidate => matchesQuery(ctx, candidate, query, params.windowMs, at))
+		: candidates;
+
+	// 3. 分页: offset 越界时夹到最后一页 —— 会话被清掉后回一个空页会让人以为“全没了”
+	const total = filtered.length;
+	const maxOffset = total === 0 ? 0 : Math.floor((total - 1) / limit) * limit;
+	const offset = Math.min(Math.max(0, Math.floor(options.offset ?? 0)), maxOffset);
+	const page = filtered.slice(offset, offset + limit);
+
+	const sessions: AcceptorSessionView[] = page.map(candidate => {
+		const { runtime, unionId } = candidate;
+		const state = runtime.state;
+
+		return {
+			unionId,
 			acceptor: state?.acceptor ?? null,
 			since: state?.since ?? null,
 			transfers: state?.transfers ?? 0,
 			cooldownRemainingMs: Math.max(0, (state?.cooldownUntil ?? 0) - at),
 			fastStreak: state?.fastStreak ?? 0,
 			scores: state?.scores ?? {},
-			counts,
-			mentions,
+			counts: runtime.window.counts(at, params.windowMs),
+			mentions: runtime.window.mentions(at, params.windowMs),
 			lastProbeAt: runtime.window.lastProbeAt(),
 			adapters: knownAdapters(runtime, params.windowMs, at),
-			members: membersOf(ctx, owner.unionId),
-		});
-	}
-
-	// 最近活跃的排前面: 排障时第一个要看的就是刚出问题的那个群
-	sessions.sort((a, b) => lastActiveOf(b) - lastActiveOf(a) || a.unionId.localeCompare(b.unionId));
+			members: candidate.members ?? (candidate.members = membersOf(ctx, unionId)),
+		};
+	});
 
 	return {
 		enabled: ctx.config.get<boolean>("enabled", true) === true,
-		dryRun: ctx.config.get<boolean>("dryRun", true) === true,
+		dryRun: isDryRun(ctx),
 		now: at,
 		windowMs: params.windowMs,
 		thresholds: {
@@ -383,14 +438,41 @@ function readSnapshot(ctx: ServiceContext, botId: string): AcceptorSnapshot {
 			consecutive: params.fastPath.consecutive,
 			silenceMs: params.fastPath.silenceMs,
 		},
+		page: { query, offset, limit, total },
 		sessions,
 	};
 }
 
-/** 视图侧的最近活跃时刻(与 lastActiveAt 同口径, 但作用在投影上) */
-function lastActiveOf(view: AcceptorSessionView): number {
-	let last = view.since ?? 0;
-	for (const at of Object.values(view.lastProbeAt)) {
+/**
+ * 一条会话是否命中关键字 (已转小写)
+ *
+ * 能搜的是用户看得见的东西: unionId、受理人/适配器名、成员的平台会话 ID。
+ * 成员查询失败时只按能看到的字段判, 不让搜索把整页弄崩。
+ */
+function matchesQuery(
+	ctx: ServiceContext,
+	candidate: Candidate,
+	query: string,
+	windowMs: number,
+	at: number,
+): boolean {
+	if (candidate.unionId.toLowerCase().includes(query)) return true;
+
+	if (knownAdapters(candidate.runtime, windowMs, at).some(adapter => adapter.toLowerCase().includes(query))) {
+		return true;
+	}
+
+	candidate.members ??= membersOf(ctx, candidate.unionId);
+	return candidate.members.some(member =>
+		member.id.toLowerCase().includes(query)
+		|| member.platform.toLowerCase().includes(query)
+		|| member.type.toLowerCase().includes(query));
+}
+
+/** runtime 的最近活跃时刻 */
+function lastActiveAt(runtime: Runtime): number {
+	let last = runtime.state?.since ?? 0;
+	for (const at of Object.values(runtime.window.lastProbeAt())) {
 		if (at > last) last = at;
 	}
 	return last;
@@ -445,6 +527,11 @@ function readFlushInterval(ctx: ServiceContext): number {
 	return positive(ctx.config.get("window.flushIntervalMs", 60000), 60000);
 }
 
+/** 是否演练模式(只判定不拦截) */
+function isDryRun(ctx: ServiceContext): boolean {
+	return ctx.config.get<boolean>("dryRun", true) === true;
+}
+
 /** 配置里被改成 0/负数/非数字时退回默认值, 而不是按 0 毫秒窗口跑 */
 function positive(value: unknown, fallback: number): number {
 	return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
@@ -471,58 +558,79 @@ function persist(ctx: ServiceContext, key: string, state: AcceptorState): void {
 	}
 }
 
-/** 输出本轮汇总, 并回收彻底空掉的窗口 */
+/**
+ * 输出本轮汇总, 并把受理人状态落盘
+ *
+ * **正式模式不输出周期汇总**。页面已经能看到每个会话的受理人与计数, 再每分钟往
+ * 日志里打一遍只是噪音 —— 尤其群多的时候。落盘与统计清零照常, 那些不是日志。
+ * 演练模式下保留汇总: 那正是“关闭 dryRun 之前该看的东西”。
+ *
+ * **不回收任何运行态**。受理人是“这个会话由谁响应”的事实, 不应该因为群里一阵
+ * 没人说话就作废 —— 一旦丢掉, 下一个派发的适配器就成了新的受理人, 这恰恰是要
+ * 避免的抖动。窗口本身在消息路径上就被裁了(`counts` / `mentions` 顺手丢掉
+ * 窗口外的时刻), 所以留着运行态不会无限增长: 每个 `(bot, union)` 只有一个窗口。
+ */
 function flush(ctx: ServiceContext): void {
 	const table = runtimes;
 	if (!table) return;
 
 	const at = Date.now();
 	const windowMs = settings(ctx).params.windowMs;
+	const verbose = isDryRun(ctx);
 	const lines: string[] = [];
+	let silent = 0;
 
-	for (const [key, runtime] of [...table]) {
+	for (const [key, runtime] of table) {
 		const { botId, unionId } = splitKey(key);
 
-		if (!runtime.window.prune(at, windowMs)) {
-			// 窗口内已经没有任何派发: 清掉运行态, 避免长期运行后无限堆积
-			table.delete(key);
-			lines.push(`  ${botId} / ${short(unionId)}  窗口内无派发, 已回收`);
+		// 累计证据也要跟着落盘, 否则重启后每条都要重新攒
+		const state = runtime.state;
+		if (state) persist(ctx, key, state);
+
+		const stats = runtime.stats;
+		runtime.stats = { messages: 0, blocked: 0, transfers: 0 };
+
+		// 正式模式: 落盘与清零做完就走, 不格式化任何东西
+		if (!verbose) continue;
+
+		// 静默会话仍保留受理人, 只是本轮不展开 —— 否则安静一会儿就满屏都是它们
+		const counts = runtime.window.counts(at, windowMs);
+		const mentions = runtime.window.mentions(at, windowMs);
+		if (Object.keys(counts).length === 0 && Object.keys(mentions).length === 0) {
+			silent++;
 			continue;
 		}
 
-		const counts = runtime.window.counts(at, windowMs);
-		const mentions = runtime.window.mentions(at, windowMs);
 		const detail = Object.keys({ ...counts, ...mentions })
 			.sort()
 			.map(adapter => `${adapter}: ${counts[adapter] ?? 0}(@${mentions[adapter] ?? 0})`)
 			.join(" | ");
 
-		const state = runtime.state;
-		const stats = runtime.stats;
-		const statsText = `消息${stats.messages} 拦截${stats.blocked} 转移${stats.transfers}`;
-
 		lines.push(
-			`  ${botId} / ${short(unionId)}  受理人=${state?.acceptor ?? "(未选举)"}  ${detail || "(无计数)"}  ${statsText}`,
+			`  ${botId} / ${short(unionId)}  受理人=${state?.acceptor ?? "(未选举)"}  ${detail}  ` +
+			`消息${stats.messages} 拦截${stats.blocked} 转移${stats.transfers}`,
 		);
-
-		// 累计证据也要跟着落盘, 否则重启后每条都要重新攒
-		if (state) persist(ctx, key, state);
-
-		runtime.stats = { messages: 0, blocked: 0, transfers: 0 };
 	}
 
-	if (noUnionCount > 0) {
-		lines.push(`  另有 ${noUnionCount} 条消息没有逻辑会话组, 未参与判定`);
-		noUnionCount = 0;
+	// 计数不能因为不输出就不清零: 否则下次演练时会带上一段正式模式期间的旧账
+	const orphans = noUnionCount;
+	noUnionCount = 0;
+
+	if (!verbose) return;
+
+	if (orphans > 0) {
+		lines.push(`  另有 ${orphans} 条消息没有逻辑会话组, 未参与判定`);
 	}
 
+	// 全部静默时就别再每分钟说一句“什么也没发生”了
 	if (lines.length === 0) return;
 
 	const shown = lines.slice(0, MAX_REPORTED);
 	const hidden = lines.length - shown.length;
-	const more = hidden > 0 ? `\n  …另有 ${hidden} 个会话未展开` : "";
+	const more = hidden > 0 ? `\n  …另有 ${hidden} 个活跃会话未展开` : "";
+	const quiet = silent > 0 ? `\n  另有 ${silent} 个会话本轮无派发, 受理人保持不变` : "";
 
-	ctx.logger.log(`[受理人] ${table.size} 个逻辑会话\n${shown.join("\n")}${more}`);
+	ctx.logger.log(`[受理人] ${table.size} 个逻辑会话\n${shown.join("\n")}${more}${quiet}`);
 }
 
 function splitKey(key: string): { botId: string; unionId: string } {

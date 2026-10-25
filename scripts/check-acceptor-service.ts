@@ -85,13 +85,23 @@ console.log("-- 滑动窗口 --");
 
 	check("lastProbeAt 取最近一次非 @ 派发", w.lastProbeAt()["a"] === 1000 && w.lastProbeAt()["b"] === 5000);
 	check("lastProbeAt 不影响计数", w.counts(5000, 60000)["a"] === 1);
+
+	// 窗口裁剪只该动计数, 不该把“最近一次”一起抹掉 —— 静默后页面还要靠它列出可切换的适配器
+	w.counts(900000, 60000);
+	check("窗口裁剪后仍记得最近派发时刻",
+		w.lastProbeAt()["a"] === 1000 && w.lastProbeAt()["b"] === 5000,
+		JSON.stringify(w.lastProbeAt()));
+	check("裁剪后窗口内计数确实归零", (w.counts(900000, 60000)["a"] ?? 0) === 0);
 }
 
 {
+	// 窗口归零 ≠ 对象作废: 静默后同一份窗口能直接从 0 重新计数
 	const w = new SlidingWindow();
 	w.record("a", 1000, false);
-	check("窗口内还有数据时 prune 返回 true", w.prune(2000, 60000) === true);
-	check("窗口空了 prune 返回 false", w.prune(600000, 60000) === false);
+	check("窗口内计数为 1", w.counts(1000, 1000)["a"] === 1, JSON.stringify(w.counts(1000, 1000)));
+	check("静默后窗口计数归零", (w.counts(600000, 1000)["a"] ?? 0) === 0);
+	w.record("a", 600001, false);
+	check("静默后继续使用同一窗口能重新计数", w.counts(600001, 1000)["a"] === 1);
 }
 
 /* ==================== 2. 判定分支 ==================== */
@@ -703,6 +713,86 @@ check("reset 只清目标会话",
 	exported2.state("bot-1", "union-1") !== null && exported2.state("bot-1", "union-2") === null);
 check("reset 后端点只剩一个会话", afterReset.sessions.length === 1, String(afterReset.sessions.length));
 
+// ---- 分页与查询 ----
+// 上千个群不可能一页画完: 服务端只回当前页, 总数单独给
+for (let i = 0; i < 45; i++) {
+	runFilter(messageEvent(`u:bulk-${String(i).padStart(2, "0")}`), bot, meta(i % 2 === 0 ? "a" : "b"));
+}
+
+const firstPage = endpoint!({ action: "state", botId: "bot-1", limit: 10 });
+check("默认带上分页信息", !!firstPage.page, JSON.stringify(firstPage.page));
+check("只回当前页的会话", firstPage.sessions.length === 10, String(firstPage.sessions.length));
+check("总数是过滤后的全部会话", firstPage.page.total === 46, String(firstPage.page.total));
+check("首页 offset 为 0", firstPage.page.offset === 0, String(firstPage.page.offset));
+
+const secondPage = endpoint!({ action: "state", botId: "bot-1", limit: 10, offset: 10 });
+check("第二页 offset 生效", secondPage.page.offset === 10, String(secondPage.page.offset));
+check("两页不重叠",
+	!secondPage.sessions.some((s: any) => firstPage.sessions.some((f: any) => f.unionId === s.unionId)));
+check("两页数量都满", secondPage.sessions.length === 10, String(secondPage.sessions.length));
+
+const lastPage = endpoint!({ action: "state", botId: "bot-1", limit: 10, offset: 40 });
+check("最后一页装剩下的", lastPage.sessions.length === 6, String(lastPage.sessions.length));
+
+// offset 越界必须夹回最后一页: 清掉会话后前端手里那个 offset 会失效
+const overflow = endpoint!({ action: "state", botId: "bot-1", limit: 10, offset: 999 });
+check("offset 越界时夹到最后一页",
+	overflow.page.offset === 40 && overflow.sessions.length === 6,
+	`offset=${overflow.page.offset} len=${overflow.sessions.length}`);
+
+const defaultLimit = endpoint!({ action: "state", botId: "bot-1" });
+check("缺省每页 20 条", defaultLimit.page.limit === 20 && defaultLimit.sessions.length === 20,
+	`limit=${defaultLimit.page.limit} len=${defaultLimit.sessions.length}`);
+
+// 查询: 能按 unionId / 成员 id / 适配器名命中
+const byUnion = endpoint!({ action: "state", botId: "bot-1", query: "bulk-07" });
+check("按 unionId 搜索",
+	byUnion.page.total === 1 && byUnion.sessions[0]?.unionId === "bulk-07",
+	`${byUnion.page.total} ${JSON.stringify(byUnion.sessions.map((s: any) => s.unionId))}`);
+
+const byMember = endpoint!({ action: "state", botId: "bot-1", query: "qq-union-1" });
+check("按成员平台会话 ID 搜索", byMember.page.total === 1, String(byMember.page.total));
+
+// mock 的成员固定带一个 onebot11 平台, 所以除了刚被 reset 的 union-2, 其余会话都能命中
+const byPlatform = endpoint!({ action: "state", botId: "bot-1", query: "ONEBOT", limit: 200 });
+check("按成员平台名搜索(大小写无关)",
+	byPlatform.page.total === 46 && byPlatform.sessions.every((s: any) =>
+		s.members.some((m: any) => m.platform === "onebot11")),
+	`${byPlatform.page.total} ${byPlatform.sessions.length}`);
+
+const noMatch = endpoint!({ action: "state", botId: "bot-1", query: "nonexistent-xyz" });
+check("搜索无命中时返回空列表与 0 总数",
+	noMatch.page.total === 0 && noMatch.sessions.length === 0, String(noMatch.page.total));
+
+// 搜索后翻页仍是搜索范围内的分页
+const queryPaged = endpoint!({ action: "state", botId: "bot-1", query: "bulk", limit: 10, offset: 10 });
+check("搜索后仍能翻页",
+	queryPaged.page.total === 45 && queryPaged.sessions.length === 10 && queryPaged.page.offset === 10,
+	`${queryPaged.page.total} ${queryPaged.sessions.length} ${queryPaged.page.offset}`);
+
+// 非法分页参数必须报错, 而不是默默当成 0
+for (const bad of [{ offset: -1 }, { limit: "10" }, { offset: 1.5 }]) {
+	let code = 0;
+	try {
+		endpoint!({ action: "state", botId: "bot-1", ...bad });
+	} catch (e: any) {
+		code = e?.code ?? 0;
+	}
+	// offset: 1.5 是非负数, 允许(向下取整); 另外两个必须被拒
+	const shouldReject = !("offset" in bad && bad.offset === 1.5);
+	check(`非法分页参数 ${JSON.stringify(bad)} ${shouldReject ? "被拒绝(400)" : "向下取整"}`,
+		shouldReject ? code === 400 : code === 0, String(code));
+}
+
+// 换人/清空也要停在当前页: 否则操作一下就被踢回第一页
+// 注: override 会刷新 `since`, 该行按“最近活跃优先”会跳到第一页 —— 这是排页语义的
+// 自然结果, 不是缺陷; 这里只验证“位置不被重置”。
+const overridePaged = endpoint!({ action: "override", botId: "bot-1", unionId: "bulk-02", adapter: "a",
+	limit: 10, offset: 10 });
+check("override 后仍停在原页",
+	overridePaged.page.offset === 10 && overridePaged.sessions.length === 10,
+	`offset=${overridePaged.page.offset} len=${overridePaged.sessions.length}`);
+
 // 落盘与恢复
 acceptorModule.unload(ctx2);
 check("卸载时输出汇总日志", logs.some(l => l.includes("[受理人]")), logs.join("\n"));
@@ -737,6 +827,93 @@ check("enabled=false 时全部放行", runFilter(messageEvent(), bot, meta("a"))
 check("enabled=false 时不建立状态", (ctx5.exports as typeof exported).state("bot-1", "union-1") === null);
 acceptorModule.unload(ctx5);
 (ctx5.kv as KVStore).close();
+
+// 静默不丢受理人: 定时回收会把受理人一起丢掉, 下一条消息就由先到者当选 —— 这正是抖动
+const wait = (ms: number) => new Promise<void>(resolve => { setTimeout(resolve, ms); });
+const ctx6 = createCtx(new KVStore(path.join(dataDir, "quiet.db")), {
+	dryRun: false,
+	"window.windowMs": 1000,
+});
+acceptorModule.init(ctx6);
+const exported6 = ctx6.exports as typeof exported;
+const endpoint6 = uiRoutes.find(route => route.path === "acceptor_state")?.handler as
+	((body: unknown) => any) | undefined;
+
+runFilter(messageEvent(), bot, meta("a")); // a 当选
+runFilter(messageEvent(), bot, meta("b")); // b 被拦, 但计入窗口
+check("静默前已知两个适配器",
+	(endpoint6!({ action: "state", botId: "bot-1" }).sessions[0]?.adapters ?? []).sort().join(",") === "a,b");
+
+exported6.override("bot-1", "union-1", "b");
+await wait(1300); // 比窗口(1s)长: 静默期满, 窗口已空
+
+check("窗口静默后受理人不变", exported6.state("bot-1", "union-1")?.acceptor === "b",
+	String(exported6.state("bot-1", "union-1")?.acceptor));
+check("静默后原受理人的派发仍被拦", runFilter(messageEvent(), bot, meta("a")) === false);
+
+const quietView = endpoint6!({ action: "state", botId: "bot-1" }).sessions[0];
+check("静默后计数从 0 重新累积",
+	(quietView?.counts?.a ?? 0) === 1 && (quietView?.counts?.b ?? 0) === 0,
+	JSON.stringify(quietView?.counts));
+check("静默后受理人仍留在页面上", quietView?.acceptor === "b");
+check("静默后仍能列出可切换的适配器",
+	(quietView?.adapters ?? []).join(",") === "a,b", JSON.stringify(quietView?.adapters));
+
+// 静默后还能手工切回去: 窗口裁了, 但“见过哪些适配器”不该跟着丢
+const switchBack = endpoint6!({ action: "override", botId: "bot-1", unionId: "union-1", adapter: "a" });
+check("静默后仍可手工切回另一个适配器", switchBack.sessions[0]?.acceptor === "a",
+	String(switchBack.sessions[0]?.acceptor));
+exported6.override("bot-1", "union-1", "b");
+runFilter(messageEvent(), bot, meta("a")); // 再给窗口塞一条, 下面好验证 flush 的静默分支
+
+await wait(1300); // 再让窗口空一次
+const beforeQuietFlush = logs.length;
+acceptorModule.unload(ctx6); // unload 会跑一次 flush
+const quietFlushLogs = logs.slice(beforeQuietFlush).join("\n");
+
+// 正式模式不刷日志: 页面能看的东西不该每分钟再打一遍
+check("正式模式 flush 不输出周期汇总", !quietFlushLogs.includes("[受理人]"), quietFlushLogs);
+check("正式模式也不报静默会话", !quietFlushLogs.includes("无派发"), quietFlushLogs);
+check("正式模式 flush 仍把状态落盘", (ctx6.kv as KVStore).count("acceptor:v1:") === 1,
+	String((ctx6.kv as KVStore).count("acceptor:v1:")));
+(ctx6.kv as KVStore).close();
+
+// 演练模式才输出汇总 —— 那是关 dryRun 之前该看的东西
+const ctx7 = createCtx(new KVStore(path.join(dataDir, "verbose.db")), {
+	dryRun: true,
+	// 把 @ 快通道调成一次就够, 这样不用攼十几条消息也能真的切换一次
+	"fastPath.consecutive": 1,
+	"fastPath.silenceMs": 1000,
+});
+acceptorModule.init(ctx7);
+runFilter(messageEvent(), bot, meta("a"));
+
+await wait(1300); // 受理人沉默超过 silenceMs
+runFilter({ ...messageEvent(), mentionedSelf: true } as any, bot, meta("b"));
+check("演练模式下也会发生转移",
+	(ctx7.exports as typeof exported).state("bot-1", "union-1")?.acceptor === "b",
+	String((ctx7.exports as typeof exported).state("bot-1", "union-1")?.acceptor));
+
+const beforeVerboseFlush = logs.length;
+acceptorModule.unload(ctx7);
+const verboseLogs = logs.slice(beforeVerboseFlush).join("\n");
+check("演练模式输出周期汇总", verboseLogs.includes("[受理人]"), verboseLogs);
+check("汇总里不会出现“已回收”", !verboseLogs.includes("已回收"), verboseLogs);
+(ctx7.kv as KVStore).close();
+
+// 转移日志: 两种模式都记(低频事件), 但不可读的 NUL 分隔不能进日志
+const transferLogs = logs.filter(line => line.includes("→"));
+check("转移日志不含 NUL 分隔符", transferLogs.every(line => !line.includes("\u0000")),
+	transferLogs.join("\n"));
+check("转移日志带可读的 bot / union",
+	transferLogs.some(line => /\[受理人\](\[演练\])? bot-\d+ \/ \S+ → \w+/.test(line)),
+	transferLogs.join("\n"));
+check("演练模式下的转移日志标了 [演练]",
+	transferLogs.some(line => line.startsWith("[受理人][演练]")),
+	transferLogs.join("\n"));
+check("正式模式下的转移日志不标 [演练]",
+	transferLogs.some(line => line.startsWith("[受理人] bot-")) || transferLogs.length === 0,
+	transferLogs.join("\n"));
 
 await fs.rm(dataDir, { recursive: true, force: true });
 

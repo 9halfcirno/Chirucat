@@ -1,5 +1,5 @@
 /**
- * 滑动窗口: 只数"谁派发了多少条", 不看内容
+ * 滑动窗口: 只数“谁派发了多少条”, 不看内容
  *
  * 这是受理人机制的唯一观测面。刻意不保留消息内容、指纹、顺序 —— 平台之间同一条
  * 真实消息的渲染结果可以毫无共同点(卡片 vs 封面图、动画表情 vs 占位文本), 任何
@@ -8,7 +8,7 @@
  *
  * 两类计数分开:
  * - **探针**: 非 @ 的普通消息。只有它参与受理人转移的判定 —— @ 消息的到达与否
- *   受"用户想找谁"影响, 不是稳定的流量信号。
+ *   受“用户想找谁”影响, 不是稳定的流量信号。
  * - **@**: 单独计数, 只供 @ 快速通道使用。
  *
  * 时间由调用方传入(不读 `Date.now()`), 因此可以被自检脚本用构造时间戳直接驱动,
@@ -19,6 +19,8 @@ export class SlidingWindow {
 	#probes = new Map<string, number[]>();
 	/** adapter -> @ 本 Bot 的消息到达时刻(升序) */
 	#mentions = new Map<string, number[]>();
+	/** adapter -> 最近一次非 @ 派发时刻; **不随窗口裁剪丢弃** */
+	#lastAt = new Map<string, number>();
 
 	/**
 	 * 记录一次派发
@@ -41,6 +43,11 @@ export class SlidingWindow {
 		const probes = this.#probes.get(adapter);
 		if (probes) probes.push(at);
 		else this.#probes.set(adapter, [at]);
+
+		// 计数会被窗口裁掉, 但“最近一次”要留住: 它既是 @ 快速通道的沉默判据,
+		// 也是“这个会话里出现过哪些适配器”的唯一来源 —— 静默后仍要能手工切回去。
+		const last = this.#lastAt.get(adapter);
+		if (last === undefined || at > last) this.#lastAt.set(adapter, at);
 	}
 
 	/**
@@ -60,37 +67,27 @@ export class SlidingWindow {
 	/**
 	 * 取每个适配器最近一次非 @ 派发的时刻
 	 *
-	 * @ 快速通道要判断"受理人是不是彻底没动静了", 用最近时刻比用计数更直接:
-	 * 计数为 0 也可能是窗口还没攒够, 而"从未派发"与"很久没派发"是同一件事。
+	 * @ 快速通道要判断“受理人是不是彻底没动静了”, 用最近时刻比用计数更直接:
+	 * 计数为 0 也可能是窗口还没攒够, 而“从未派发”与“很久没派发”是同一件事。
+	 * 这里不受窗口裁剪影响 —— 静默一整天后仍应该知道它上一次是什么时候说过话。
 	 */
 	lastProbeAt(): Record<string, number> {
-		const out: Record<string, number> = {};
-		for (const [adapter, list] of this.#probes) {
-			const last = list[list.length - 1];
-			if (last !== undefined) out[adapter] = last;
-		}
-		return out;
+		return Object.fromEntries(this.#lastAt);
 	}
 
 	/** 清空全部计数 */
 	clear(): void {
 		this.#probes.clear();
 		this.#mentions.clear();
+		this.#lastAt.clear();
 	}
 
 	/**
-	 * 丢弃窗口外的时刻
-	 * @returns 窗口内是否还有数据; `false` 说明这个窗口可以整个丢掉
+	 * 丢弃窗口外的时刻, 返回窗口内的计数
+	 *
+	 * 两个 `counts` / `mentions` 入口都会走到这里, 所以裁剪发生在**消息路径上**;
+	 * 静默期间不会有任何定时任务来动窗口 —— 窗口归零 ≠ 受理人作废。
 	 */
-	prune(at: number, windowMs: number): boolean {
-		const probes = this.#snapshot(this.#probes, at, windowMs);
-		const mentions = this.#snapshot(this.#mentions, at, windowMs);
-
-		// 两个映射里已经没有残留的键时, 窗口本身就该被回收
-		return Object.keys(probes).length > 0 || Object.keys(mentions).length > 0;
-	}
-
-	/** 丢弃窗口外的时刻, 返回窗口内的计数 */
 	#snapshot(
 		source: Map<string, number[]>,
 		at: number,

@@ -6,6 +6,7 @@ import { Ob11Connection } from "./connection";
 import { buildOb11Event } from "./events";
 import { ContentFilter } from "./filters";
 import { IdentityCache } from "./identity";
+import { readSendDelay } from "./send-delay";
 import type { Ob11Settings, OneBotEvent } from "./types";
 
 /**
@@ -66,7 +67,9 @@ class Ob11Adapter {
 			ctx,
 			connection: this.connection,
 			codec: this.codec,
-			logger
+			logger,
+			// 每次发送时重新读取, 配置变更无需重载插件
+			getSendDelay: () => readSendDelay(ctx.config)
 		};
 	}
 

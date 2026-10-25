@@ -135,6 +135,9 @@ export type AcceptorSessionView = {
  * 页面只要一份这个就能画全: 模式(正式/演练)、当前参数与各会话的运行态。
  * 参数一并返回是有意的 —— 证据进度(1/2)离开阈值就没有意义, 分开两个请求容易
  * 让两者短暂不一致。
+ *
+ * **`sessions` 只是当前页**, 不是全部: 上千个群时把每一行都发过来(前端再把它们
+ * 变成 DOM) 没有意义。总数在 `page.total`, 前端据此画分页。
  */
 export type AcceptorSnapshot = {
 	/** 判定是否开启 */
@@ -159,6 +162,32 @@ export type AcceptorSnapshot = {
 		consecutive: number;
 		silenceMs: number;
 	};
-	/** 该 Bot 下按最近活跃度排序的会话 */
+	/**
+	 * 分页与查询状态 (原样回给前端)
+	 *
+	 * `offset` 可能被服务端夹到最后一页: 会话被清掉后前端手里那个 offset 会越界,
+	 * 回一个空页会让用户以为“什么都没了”。
+	 */
+	page: AcceptorPage;
+	/** 当前页的会话, 已按最近活跃排序 */
 	sessions: AcceptorSessionView[];
+};
+
+/** 一次查询的分页参数与结果位置 */
+export type AcceptorPage = {
+	/** 服务端实际使用的关键字 (已 trim 与转小写) */
+	query: string;
+	/** 本页起点 */
+	offset: number;
+	/** 本页最大条数 */
+	limit: number;
+	/** 过滤后的总条数 */
+	total: number;
+};
+
+/** 页面发来的查询参数; 全部可缺省 */
+export type AcceptorQuery = {
+	query?: string | undefined;
+	offset?: number | undefined;
+	limit?: number | undefined;
 };

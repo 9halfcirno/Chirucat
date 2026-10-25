@@ -70,6 +70,41 @@
 		},
 		{
 			"type": "switch",
+			"id": "sendDelay",
+			"label": "发送前随机延迟",
+			"default": true,
+			"desc": "发送消息前等待一段随机时间, 模拟真人输入节奏, 降低因响应过快被风控的概率"
+		},
+		{
+			"type": "slider",
+			"id": "sendDelayMin",
+			"label": "最小延迟(ms)",
+			"min": 0,
+			"max": 10000,
+			"step": 100,
+			"default": 500,
+			"visible": {
+				"op": "equal",
+				"ref": "sendDelay",
+				"target": true
+			}
+		},
+		{
+			"type": "slider",
+			"id": "sendDelayMax",
+			"label": "最大延迟(ms)",
+			"min": 0,
+			"max": 10000,
+			"step": 100,
+			"default": 1500,
+			"visible": {
+				"op": "equal",
+				"ref": "sendDelay",
+				"target": true
+			}
+		},
+		{
+			"type": "switch",
 			"id": "contentFilter",
 			"label": "启用内容过滤",
 			"default": false,

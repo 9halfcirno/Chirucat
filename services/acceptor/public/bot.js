@@ -24,6 +24,12 @@ const ENDPOINT = "acceptor_state";
 const REFRESH_MS = 5000;
 /** 用户刚操作过时暂停刷新的时长 */
 const IDLE_MS = 3000;
+/** 输入停顿多久才去查 (逐字查会把每个按键都变成一次请求) */
+const SEARCH_DEBOUNCE_MS = 300;
+/** 可选的每页条数 */
+const PAGE_SIZES = [20, 50, 100];
+/** 首次加载的每页条数 (与后端默认值一致) */
+const DEFAULT_PAGE_SIZE = PAGE_SIZES[0];
 
 /** 会话类型的中文名 */
 const TYPE_NAMES = { private: "私聊", group: "群", channel: "频道" };
@@ -109,11 +115,79 @@ function renderAcceptorPage(div, bot) {
 	tableWrap.className = "acceptor-table-wrap";
 	tableWrap.appendChild(table);
 
+	// ---- 查询与分页 ----
+	// 群可能上千: 表格只画当前页, 其余靠 offset/limit 翻, 搜索走服务端过滤。
+	/**
+	 * 当前视图 (查询 + 分页)
+	 *
+	 * 所有请求都带上它: 换人/清空之后也要停在同一边, 否则操作一下就被踢回第一页。
+	 * 服务端会回它实际用的值(`offset` 可能被夹到最后一页), 这里再同步回来。
+	 *
+	 * 写在控件之前: 控件的 onChange 闭包引用它, 提前声明才不会撞上 TDZ。
+	 */
+	const view = { query: "", offset: 0, limit: DEFAULT_PAGE_SIZE };
+	/** 上次拿到的过滤后总数; 翻页按钮靠它判边界 */
+	let totalSessions = 0;
+
+	const searchInput = createInput("搜 unionId / 群号 / 适配器");
+	searchInput.classList.add("acceptor-search");
+	searchInput.type = "search";
+
+	const pageSizeSelect = createSelect({
+		items: PAGE_SIZES.map(size => ({ value: String(size), label: `每页 ${size} 条` })),
+		value: String(DEFAULT_PAGE_SIZE),
+		onChange: (value) => {
+			view.limit = Number(value) || DEFAULT_PAGE_SIZE;
+			view.offset = 0; // 换了条数还停在旧 offset 上会跳到“空气页”
+			void load();
+		},
+	});
+
+	const prevBtn = createButton("上一页", () => {
+		if (view.offset <= 0) return; // 已在第一页: 不白跑一次请求
+		view.offset = Math.max(0, view.offset - view.limit);
+		void load();
+	});
+
+	const nextBtn = createButton("下一页", () => {
+		// 边界由 paintPager 维护的 total 决定: 越界时不请求 (服务端会夹回去, 但白跑一趟)
+		if (view.offset + view.limit >= totalSessions) return;
+		view.offset += view.limit;
+		void load();
+	});
+
+	const pageInfo = document.createElement("span");
+	pageInfo.className = "acceptor-pageinfo muted";
+
+	const toolbar = document.createElement("div");
+	toolbar.className = "acceptor-toolbar";
+	const toolbarSpacer = document.createElement("span");
+	toolbarSpacer.className = "acceptor-spacer";
+	toolbar.append(searchInput, toolbarSpacer, pageSizeSelect.el, prevBtn, nextBtn);
+
+	const footer = document.createElement("div");
+	footer.className = "acceptor-footer";
+	footer.append(pageInfo);
+
 	const tableCard = document.createElement("section");
 	tableCard.className = "card glass acceptor-card";
-	tableCard.append(tableHeadRow, tableWrap);
+	tableCard.append(tableHeadRow, toolbar, tableWrap, footer);
 
 	div.append(headCard, tableCard);
+
+	// 搜索: 停顿 300ms 才发请求, 逐字查会把每个按键都变成一次请求
+	let searchTimer = null;
+	searchInput.addEventListener("input", () => {
+		if (searchTimer !== null) clearTimeout(searchTimer);
+		searchTimer = setTimeout(() => {
+			searchTimer = null;
+			const next = searchInput.value.trim();
+			if (next === view.query) return;
+			view.query = next;
+			view.offset = 0; // 换了关键字还停在旧页码上没有意义
+			void load();
+		}, SEARCH_DEBOUNCE_MS);
+	});
 
 	/** 首屏提示: 还没拿到数据前就说明这一页是干什么的 */
 	paintEmpty("加载中…");
@@ -132,9 +206,21 @@ function renderAcceptorPage(div, bot) {
 
 	/* -------------------- 数据 -------------------- */
 
+	/** 把当前视图带进请求体 (三种 action 共用) */
+	function payload(action, extra = {}) {
+		return {
+			action,
+			botId: bot.id,
+			query: view.query,
+			offset: view.offset,
+			limit: view.limit,
+			...extra,
+		};
+	}
+
 	async function load() {
 		try {
-			const snapshot = await callServiceAPI(SERVICE, ENDPOINT, { action: "state", botId: bot.id });
+			const snapshot = await callServiceAPI(SERVICE, ENDPOINT, payload("state"));
 			paint(snapshot);
 		} catch (e) {
 			paintError(`读取受理人状态失败: ${e.message}`);
@@ -143,9 +229,45 @@ function renderAcceptorPage(div, bot) {
 
 	/** 用一份快照刷新整页 */
 	function paint(snapshot) {
+		// 同步服务端实际用的分页位置: offset 越界时它会把我们夹回最后一页
+		if (snapshot.page) {
+			view.query = snapshot.page.query ?? view.query;
+			view.offset = snapshot.page.offset ?? view.offset;
+			view.limit = snapshot.page.limit ?? view.limit;
+			// `value` 在 DOM 桩里可能是 undefined, 取一次当前值再比
+			if ((searchInput.value ?? "").trim() !== view.query) searchInput.value = view.query;
+		}
+
 		paintHead(snapshot);
 		paintTable(snapshot);
+		paintPager(snapshot);
 		updated.textContent = `更新于 ${new Date(snapshot.now).toLocaleTimeString("zh-CN")}`;
+	}
+
+	/** 页码 / 上一页 / 下一页 / 总数 */
+	function paintPager(snapshot) {
+		const page = snapshot.page ?? { total: snapshot.sessions.length, offset: 0, limit: view.limit };
+		totalSessions = page.total;
+
+		const pages = Math.max(1, Math.ceil(page.total / page.limit));
+		const current = Math.floor(page.offset / page.limit) + 1;
+
+		// 总是显示总数: 空列表也要能区分“真的什么都没有”与“搜索没命中”
+		const parts = [`共 ${page.total} 个会话`];
+		if (page.total > 0) parts.push(`第 ${current} / ${pages} 页`);
+		if (view.query) parts.push(`筛选: “${view.query}”`);
+		pageInfo.textContent = parts.join(" · ");
+
+		// 用 class 而不是 `disabled`: `createButton` 的 onclick 在 finally 里会把
+		// `disabled` 重置成 false, 直接设属性会被它覆盖。
+		markPagerButton(prevBtn, page.offset > 0);
+		markPagerButton(nextBtn, page.offset + page.limit < page.total);
+	}
+
+	/** 给翻页按钮标可用/不可用 (视觉 + 无障碍, 不靠 `disabled` 属性) */
+	function markPagerButton(button, enabled) {
+		button.classList.toggle("acceptor-disabled", !enabled);
+		button.setAttribute("aria-disabled", enabled ? "false" : "true");
 	}
 
 	function paintHead(snapshot) {
@@ -161,7 +283,8 @@ function renderAcceptorPage(div, bot) {
 		} else {
 			modeBadge.className = "acceptor-badge live";
 			modeBadge.textContent = "正式模式";
-			modeHint.textContent = "每个逻辑会话只放行受理人的消息, 其余适配器的派发会被拦下。";
+			modeHint.textContent =
+				"每个逻辑会话只放行受理人的消息, 其余适配器的派发会被拦下。日常状态看这页就好 —— 正式模式不会往日志里刷周期汇总, 只在受理人变更时记一条。";
 		}
 
 		const t = snapshot.thresholds;
@@ -181,6 +304,12 @@ function renderAcceptorPage(div, bot) {
 		tbody.textContent = "";
 
 		if (snapshot.sessions.length === 0) {
+			// 搜索无命中与真的没有会话是两回事, 文案得说清是哪种
+			if (view.query) {
+				paintEmpty(`没有会话匹配 “${view.query}”。`);
+				return;
+			}
+
 			paintEmpty(
 				snapshot.enabled
 					? "这个 Bot 还没有参与判定的逻辑会话。需要两个适配器绑定到同一个逻辑会话(例如 /bind_session), 并且收到过消息后才会出现在这里。"
@@ -249,8 +378,21 @@ function renderAcceptorPage(div, bot) {
 		chips.className = "acceptor-adapters";
 		const adapters = Object.keys({ ...session.counts, ...session.mentions }).sort();
 		if (adapters.length === 0) {
-			chips.textContent = "窗口内无派发";
-			chips.classList.add("muted");
+			// 窗口内静默: 受理人不会因此改变, 但把“上次什么时候说过话”列出来
+			// 比一句“无派发”有用 —— 排障时常用的就是这一点。
+			const historic = Object.keys(session.lastProbeAt ?? {}).sort();
+			if (historic.length === 0) {
+				chips.textContent = "窗口内无派发";
+				chips.classList.add("muted");
+			} else {
+				for (const adapter of historic) {
+					const chip = document.createElement("span");
+					chip.className = "acceptor-chip quiet";
+					chip.textContent = `${adapter} · 上次 ${fmtAgo(session.lastProbeAt[adapter], snapshot.now)}`;
+					chip.title = "窗口内已无派发; 受理人保持不变";
+					chips.appendChild(chip);
+				}
+			}
 		} else {
 			for (const adapter of adapters) {
 				const count = session.counts[adapter] ?? 0;
@@ -340,12 +482,10 @@ function renderAcceptorPage(div, bot) {
 		if (!adapter || adapter === session.acceptor) return;
 
 		try {
-			const snapshot = await callServiceAPI(SERVICE, ENDPOINT, {
-				action: "override",
-				botId: bot.id,
+			const snapshot = await callServiceAPI(SERVICE, ENDPOINT, payload("override", {
 				unionId: session.unionId,
 				adapter,
-			});
+			}));
 			toast(`受理人已切到 ${adapter}`, { type: "info" });
 			paint(snapshot);
 		} catch (e) {
@@ -374,11 +514,9 @@ function renderAcceptorPage(div, bot) {
 
 		async function apply() {
 			try {
-				const snapshot = await callServiceAPI(SERVICE, ENDPOINT, {
-					action: "reset",
-					botId: bot.id,
+				const snapshot = await callServiceAPI(SERVICE, ENDPOINT, payload("reset", {
 					unionId: session.unionId,
-				});
+				}));
 				dlg.closeDialog();
 				toast("已清空该会话的受理人状态", { type: "info" });
 				paint(snapshot);
@@ -414,6 +552,17 @@ function renderAcceptorPage(div, bot) {
 		tr.appendChild(td);
 		tbody.appendChild(tr);
 	}
+}
+
+/** 文本输入框 */
+function createInput(placeholder) {
+	const input = document.createElement("input");
+	input.className = "input";
+	input.type = "text";
+	input.autocomplete = "off";
+	input.spellcheck = false;
+	if (placeholder) input.placeholder = placeholder;
+	return input;
 }
 
 /** 长 id 缩到可读长度, 完整值放 title */

@@ -11,18 +11,24 @@
  *
  * 依赖以参数注入, 这样自检脚本可以直接调用 handler, 不必起 HTTP 服务器。
  */
-import type { AcceptorSnapshot } from "./types";
+import type { AcceptorQuery, AcceptorSnapshot } from "./types";
 
-/** 请求体: `state` 看快照, `override` 换人, `reset` 清掉该会话 */
-export type AcceptorAPIRequest =
-	| { action: "state"; botId: string }
-	| { action: "override"; botId: string; unionId: string; adapter: string }
-	| { action: "reset"; botId: string; unionId: string };
+/**
+ * 请求体
+ *
+ * 三种 action 都可以带分页参数: `override` / `reset` 也要按用户**当前看的那一页**
+ * 返回, 否则操作完页面会跳回第一页。
+ */
+export type AcceptorAPIRequest = { botId: string } & AcceptorQuery & (
+	| { action: "state" }
+	| { action: "override"; unionId: string; adapter: string }
+	| { action: "reset"; unionId: string }
+);
 
 /** handler 需要的服务端能力 (由 index.ts 注入) */
 export type AcceptorAPIDeps = {
-	/** 取某个 Bot 的快照 */
-	snapshot(botId: string): AcceptorSnapshot;
+	/** 取某个 Bot 的当前页快照 */
+	snapshot(botId: string, options: AcceptorQuery): AcceptorSnapshot;
 	/** 手工指定受理人; 适配器不合法时应抛错 */
 	override(botId: string, unionId: string, adapter: string): void;
 	/** 清空一个会话的受理人状态 */
@@ -52,28 +58,62 @@ function requireString(body: Record<string, unknown>, key: string): string {
 	return value;
 }
 
+/** 可缺省的字符串字段 (函数型): 非字符串一律当没给, 不为此报错 */
+function optionalString(body: Record<string, unknown>, key: string): string | undefined {
+	const value = body[key];
+	return typeof value === "string" ? value : undefined;
+}
+
+/**
+ * 可缺省的非负整数字段
+ *
+ * 缺省合法(`undefined`), 但给了个字符串或负数是调用方写错了 —— 这里报 400, 而不是
+ * 默默当成 0: 分页算错只会让用户看到“莫名其妙的某一页”, 比报错难查得多。
+ */
+function optionalCount(body: Record<string, unknown>, key: string): number | undefined {
+	const value = body[key];
+	if (value === undefined || value === null) return undefined;
+	if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+		throw fail(`字段 ${key} 必须是非负数`);
+	}
+	return Math.floor(value);
+}
+
+/** 取出分页参数 (三种 action 共用) */
+function readQuery(input: Record<string, unknown>): AcceptorQuery {
+	return {
+		query: optionalString(input, "query"),
+		offset: optionalCount(input, "offset"),
+		limit: optionalCount(input, "limit"),
+	};
+}
+
 /** 把请求体解析成内部命令; 形状不对直接 400 */
 export function parseRequest(body: unknown): AcceptorAPIRequest {
 	const input = asRecord(body);
 	const action = input.action;
+	const botId = requireString(input, "botId");
+	const paging = readQuery(input);
 
 	switch (action) {
 	case "state":
-		return { action: "state", botId: requireString(input, "botId") };
+		return { action: "state", botId, ...paging };
 
 	case "override":
 		return {
 			action: "override",
-			botId: requireString(input, "botId"),
+			botId,
 			unionId: requireString(input, "unionId"),
 			adapter: requireString(input, "adapter"),
+			...paging,
 		};
 
 	case "reset":
 		return {
 			action: "reset",
-			botId: requireString(input, "botId"),
+			botId,
 			unionId: requireString(input, "unionId"),
+			...paging,
 		};
 
 	default:
@@ -84,24 +124,29 @@ export function parseRequest(body: unknown): AcceptorAPIRequest {
 /**
  * 生成端点 handler
  *
- * 任何 action 都返回操作后的快照 —— 前端只有一条数据路径, 不用为"换人之后要不要
- * 再拉一次"分情况处理。
+ * 任何 action 都返回操作后的**当前页**快照 —— 前端只有一条数据路径, 不用为
+ * “换人之后要不要再拉一次”分情况处理, 也不会因操作而跳页。
  */
 export function createAcceptorHandler(deps: AcceptorAPIDeps): (body: unknown) => AcceptorSnapshot {
 	return (body: unknown): AcceptorSnapshot => {
 		const request = parseRequest(body);
+		const options: AcceptorQuery = {
+			query: request.query,
+			offset: request.offset,
+			limit: request.limit,
+		};
 
 		switch (request.action) {
 		case "override":
 			deps.override(request.botId, request.unionId, request.adapter);
-			return deps.snapshot(request.botId);
+			return deps.snapshot(request.botId, options);
 
 		case "reset":
 			deps.resetSession(request.botId, request.unionId);
-			return deps.snapshot(request.botId);
+			return deps.snapshot(request.botId, options);
 
 		case "state":
-			return deps.snapshot(request.botId);
+			return deps.snapshot(request.botId, options);
 		}
 	};
 }

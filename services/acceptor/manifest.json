@@ -1,6 +1,6 @@
 {
 	"id": "chirucat-acceptor",
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"main": "index.ts",
 	"type": "service",
 	"name": "Chirucat 受理人服务",

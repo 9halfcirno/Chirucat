@@ -6,6 +6,7 @@ import type Logger from "../../src/utils/logger";
 import { blocksToSegments, type Ob11CodecDeps, type SendableBlock } from "./codec";
 import { PLATFORM } from "./constants";
 import type { Ob11Connection } from "./connection";
+import { waitSendDelay, type SendDelayRange } from "./send-delay";
 import type { OneBotSegment } from "./types";
 
 /**
@@ -22,6 +23,8 @@ export interface Ob11ActionDeps {
 	connection: Ob11Connection;
 	codec: Ob11CodecDeps;
 	logger: Logger;
+	/** 读取当前随机发送延迟区间; 返回 null 表示不延迟 */
+	getSendDelay: () => SendDelayRange | null;
 }
 
 /** 源事件的 extra */
@@ -161,6 +164,9 @@ const handleMessageSend: Ob11ActionHandler<"message.send"> = async (action, _ext
 			? [reply, ...message]
 			: [reply, { type: "text", data: { text: message } }];
 	}
+
+	// 发送前的随机等待: 模拟真人节奏, 避免响应过快被平台风控
+	await waitSendDelay(deps.getSendDelay(), deps.logger);
 
 	try {
 		const params = target.type === "group"

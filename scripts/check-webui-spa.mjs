@@ -806,6 +806,117 @@ const offlineHost = document.createElement("div");
 acceptorPage.render(offlineHost, { id: "bot-a" });
 await settle(8);
 ok(offlineHost.textContent.includes("读取受理人状态失败"), "接口不可用时在表里说明原因");
+
+// 静默会话: 窗口内没有计数, 但保留受理人与历史时刻
+const quietSnapshot = {
+	...acceptorSnapshot,
+	sessions: [{
+		...acceptorSnapshot.sessions[0],
+		counts: {},
+		mentions: {},
+		lastProbeAt: { qq: 700000, onebot11: 690000 },
+		fastStreak: 0,
+		scores: {},
+		cooldownRemainingMs: 0,
+	}],
+};
+globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => quietSnapshot });
+const quietHost = document.createElement("div");
+acceptorPage.render(quietHost, { id: "bot-a" });
+await settle(8);
+ok(!quietHost.textContent.includes("窗口内无派发"), "静默会话不再只说一句“无派发”");
+ok(quietHost.textContent.includes("上次 5m 前"), "静默会话显示上次派发多久前");
+ok(quietHost.querySelectorAll(".quiet").length === 2, "两个历史适配器都列了出来",
+	String(quietHost.querySelectorAll(".quiet").length));
+eq(quietHost.querySelectorAll(".acceptor-cell-actions").length, 1, "静默会话仍可手工切换");
+
+// 分页: 一次只画一页, 总数按 page.total 显示 (上千个群不能全变成 DOM)
+const manySessions = Array.from({ length: 20 }, (_, index) => ({
+	...acceptorSnapshot.sessions[0],
+	unionId: `union-page-${String(index).padStart(2, "0")}`,
+	members: [{ platform: "qq", type: "group", id: `page-${index}` }],
+}));
+const pagedSnapshot = {
+	...acceptorSnapshot,
+	page: { query: "", offset: 0, limit: 20, total: 137 },
+	sessions: manySessions,
+};
+
+let lastRequest = null;
+let requestCount = 0;
+globalThis.fetch = async (url, options) => {
+	requestCount++;
+	lastRequest = JSON.parse(options?.body ?? "{}");
+	return { ok: true, status: 200, json: async () => pagedSnapshot };
+};
+
+const pagedHost = document.createElement("div");
+acceptorPage.render(pagedHost, { id: "bot-a" });
+await settle(8);
+
+eq(lastRequest?.action, "state", "首屏拉一次状态");
+eq(lastRequest?.limit, 20, "请求带上每页条数");
+eq(lastRequest?.offset, 0, "首屏从第一页开始");
+ok(pagedHost.textContent.includes("共 137 个会话"), "显示总数");
+ok(pagedHost.textContent.includes("第 1 / 7 页"), "按 offset/limit 算出页码");
+eq(pagedHost.querySelectorAll(".acceptor-cell-actions").length, 20, "只画当前页那 20 行");
+
+// “下一页”按 limit 步进, 并把当前位置带进请求
+const nextButton = pagedHost.querySelectorAll("button").find(btn =>
+	String(btn.textContent).includes("下一页"));
+ok(!!nextButton, "有“下一页”按钮");
+await nextButton.click();
+await settle(8);
+eq(lastRequest?.offset, 20, "下一页按 limit 步进");
+
+// 搜索无命中: 文案要区分“没有会话”与“搜索没命中”
+globalThis.fetch = async (url, options) => {
+	lastRequest = JSON.parse(options?.body ?? "{}");
+	return {
+		ok: true,
+		status: 200,
+		json: async () => ({ ...pagedSnapshot, page: { query: "zzz", offset: 0, limit: 20, total: 0 }, sessions: [] }),
+	};
+};
+const emptyHost = document.createElement("div");
+acceptorPage.render(emptyHost, { id: "bot-a" });
+await settle(8);
+ok(emptyHost.textContent.includes("没有会话匹配"), "搜索无命中时给出不同文案");
+ok(!emptyHost.textContent.includes("还没有参与判定的逻辑会话"), "不会误报成“没有任何会话”");
+
+// 越界 offset: 服务端夹回最后一页, 页面跟着同步 (而不是报错或空白)
+globalThis.fetch = async (url, options) => {
+	lastRequest = JSON.parse(options?.body ?? "{}");
+	return {
+		ok: true,
+		status: 200,
+		json: async () => ({ ...pagedSnapshot, page: { query: "", offset: 120, limit: 20, total: 137 } }),
+	};
+};
+const clampedHost = document.createElement("div");
+acceptorPage.render(clampedHost, { id: "bot-a" });
+await settle(8);
+ok(clampedHost.textContent.includes("第 7 / 7 页"), "被夹到最后一页后页码跟着变");
+
+// 最末一页时“下一页”应该被禁掉
+const lastPageSnapshot = { ...pagedSnapshot, page: { query: "", offset: 120, limit: 20, total: 137 } };
+globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => lastPageSnapshot });
+const lastPageHost = document.createElement("div");
+acceptorPage.render(lastPageHost, { id: "bot-a" });
+await settle(8);
+const lastNext = lastPageHost.querySelectorAll("button").find(btn =>
+	String(btn.textContent).includes("下一页"));
+const lastPrev = lastPageHost.querySelectorAll("button").find(btn =>
+	String(btn.textContent).includes("上一页"));
+ok(lastNext?.classList?.contains("acceptor-disabled") === true, "最后一页时“下一页”被标为不可用");
+ok(lastPrev?.classList?.contains("acceptor-disabled") !== true, "最后一页时“上一页”仍可用");
+
+// 已禁用的“下一页”不会白跑一次请求
+const requestsBefore = requestCount;
+await lastNext.click();
+await settle(4);
+eq(requestCount, requestsBefore, "越界时不会发出请求");
+
 globalThis.fetch = realFetch;
 
 section("Bot 详情窗口: 服务插件页面的挂载与实时消失");

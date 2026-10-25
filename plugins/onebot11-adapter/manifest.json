@@ -1,6 +1,6 @@
 {
 	"id": "onebot11-adapter",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"name": "OneBot11 Adapter",
 	"author": "9halfcirno",
 	"description": "通过正向 WebSocket 接入 OneBot11 实现, 如Napcat, SL等",
