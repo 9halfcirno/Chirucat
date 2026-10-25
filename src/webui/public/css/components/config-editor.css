@@ -29,6 +29,7 @@
 
 .config-label {
 	font-size: var(--fs-sm);
+	font-weight: bold;
 	color: var(--fg-muted);
 }
 
