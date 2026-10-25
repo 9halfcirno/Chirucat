@@ -155,7 +155,7 @@ async function buildMessageEvent(data: OneBotMessageEvent, ctx: Ob11EventContext
 	let quoteS = (Array.isArray(data.message) ? data.message.find(s => s.type === "reply") : null) || null;
 	if (quoteS && quoteS.data?.id) {
 		try {
-			let quoted = await connecting.callApi<OneBotMessageGet>("get_message", { message_id: quoteS.data?.id });
+			let quoted = await connecting.callApi<OneBotMessageGet>("get_msg", { message_id: quoteS.data?.id });
 			let quote: MessageCreateEvent["quote"] = {
 				messageId: String(quoted.message_id),
 				text: Array.isArray(quoted.message) ? blocksToText(segmentsToParsed(quoted.message, ctx.codec).blocks) : quoted.message,
