@@ -1,31 +1,45 @@
 import Logger from "../utils/logger";
-import type { HookBeforeResult, HookCallback, Hooks } from "./types";
+import type { AfterHooks, BeforeHooks, HookBeforeResult, Hooks } from "./types";
 
 /**
  * Hook 总线
  *
- * 框架在关键流程节点(初始化/启停/消息/指令)埋点, 服务插件可在这些节点注册
- * handler 以"接地"框架流程。语义与 `ctx.event.filter` 一致: handler 返回
- * `{ cancel: true }` 表示取消该动作(见 `HookBeforeResult`), 修改数据的能力留待后续。
+ * 框架在关键流程节点(初始化/启停/消息/指令/动作)埋点, 服务插件可在这些节点注册
+ * handler 以"接地"框架流程。
  *
- * - 注册按顺序存储, 取消时立即停止调用剩余的 handler;
- * - handler 抛错按"放行"处理并记录日志 —— 埋点不应因一个出错的处理而让主流程中断;
- * - `register` 返回注销函数, 便于上下文在释放时统一清理。
+ * 钩子分两类, 分发方法也分开 —— 这是**类型上的区分**, 不只是文档约定:
+ * - **before 类**(`BeforeHooks`): 事情还没发生, 走 {@link dispatch}, 可以返回
+ *   `{ cancel: true }` 拦住; 一旦取消, 后面的 handler 不再调用;
+ * - **after 类**(`AfterHooks`): 事情已经发生, 走 {@link notify}, 返回值被忽略,
+ *   全部 handler 都会被调用(不短路)。
+ *
+ * 混用会编译失败: 把 after 钩子交给 `dispatch` 或把 before 钩子交给 `notify` 都过不了
+ * 类型检查。这样"after 不能取消"就不必靠作者记住注释。
+ *
+ * 另一条贯穿两类的规则: handler 抛错只记日志, 不中断后续 —— 埋点不该因一个出错的
+ * 处理器把主流程拖垮。
  */
 export class HookBus {
 	private readonly logger = new Logger("HookBus");
 
-	/** 存放hook的映射 name -> 处理器数组 */
-	private hooks = new Map<keyof Hooks, Array<HookCallback<unknown>>>();
+	/**
+	 * 内部存储用的统一签名
+	 *
+	 * 两类 handler 的返回值不同(before 可返回结果对象, after 只有 void), 存的时候
+	 * 按最宽的签名收; 具体约束由 `register` / `dispatch` / `notify` 的泛型负责。
+	 */
+	private hooks = new Map<keyof Hooks, Array<(data: never) => unknown>>();
 
 	/**
-	 * 分发某 hook: 按注册顺序调用全部 handler, 任一返回 `{ cancel: true }` 则
-	 * 停止调用剩余 handler 并返回 true。
+	 * 分发一个 before 类钩子
+	 *
+	 * 按注册顺序调用 handler, 任一返回 `{ cancel: true }` 则停止调用剩余 handler
+	 * 并返回 true。
 	 * @param name hook 名
 	 * @param data 该 hook 的载体参数
 	 * @returns 是否被某个 handler 取消
 	 */
-	dispatch<N extends keyof Hooks>(name: N, data: Parameters<Hooks[N]>[0]): boolean {
+	dispatch<N extends keyof BeforeHooks>(name: N, data: Parameters<BeforeHooks[N]>[0]): boolean {
 		const handlers = this.hooks.get(name);
 		if (!handlers || handlers.length === 0) return false;
 
@@ -35,7 +49,7 @@ export class HookBus {
 			// app.ts 的兜底里把整个进程拖崩。这里把同步/异步两种返回分开处理:
 			let result: unknown;
 			try {
-				result = handler(data);
+				result = handler(data as never);
 			} catch (e) {
 				this.logger.error(`Hook ${String(name)} handler error:`, e);
 				continue;
@@ -59,18 +73,55 @@ export class HookBus {
 	}
 
 	/**
+	 * 通知一个 after 类钩子
+	 *
+	 * 调用**全部** handler, 忽略返回值, 不短路。事情已经发生, 取消没有意义; 而短路
+	 * 会让后注册的插件静默收不到通知 —— 是否能收到取决于注册顺序, 排起来极难。
+	 *
+	 * 单个 handler 抛错同样只记日志, 不影响其他订阅者。
+	 */
+	notify<N extends keyof AfterHooks>(name: N, data: Parameters<AfterHooks[N]>[0]): void {
+		const handlers = this.hooks.get(name);
+		if (!handlers || handlers.length === 0) return;
+
+		for (const handler of handlers) {
+			let result: unknown;
+			try {
+				result = handler(data as never);
+			} catch (e) {
+				this.logger.error(`Hook ${String(name)} handler error:`, e);
+				continue;
+			}
+
+			// 异步 handler 的拒绝绝不能让进程崩掉; 通知类钩子不需要它的返回值
+			if (result && typeof (result as PromiseLike<unknown>).then === "function") {
+				(result as Promise<unknown>).catch((e) => {
+					this.logger.error(`Hook ${String(name)} async handler error:`, e);
+				});
+			}
+		}
+	}
+
+	/**
 	 * 注册某 hook 的 handler, 返回注销函数。
+	 *
+	 * 两类钩子共用这一个入口: 名字本身就是 `before.*` / `after.*`, 再按类拆两个
+	 * `register` 只是让调用方多记一个方法。约束在分发侧 —— 交给 `dispatch` 的名字
+	 * 必须来自 `BeforeHooks`, 交给 `notify` 的必须来自 `AfterHooks`。
 	 * @param name hook 名
 	 * @param handler 处理器
 	 */
 	register<N extends keyof Hooks>(name: N, handler: Hooks[N]): () => void {
 		const arr = this.hooks.get(name) ?? [];
 		if (arr.length === 0) this.hooks.set(name, arr);
-		arr.push(handler as HookCallback<unknown>);
+
+		const entry = handler as (data: never) => unknown;
+		arr.push(entry);
+
 		return () => {
 			const list = this.hooks.get(name);
 			if (!list) return;
-			const idx = list.indexOf(handler as HookCallback<unknown>);
+			const idx = list.indexOf(entry);
 			if (idx === -1) return;
 			list.splice(idx, 1);
 			if (list.length === 0) this.hooks.delete(name);

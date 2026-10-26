@@ -23,7 +23,10 @@ export class FileSystemAPI implements PluginFileSystemAPI {
 	read(path: string, encoding: BufferEncoding): Promise<string>;
 	read(path: string): Promise<Buffer | NonSharedBuffer>;
 	async read(filePath: string, encoding?: BufferEncoding): Promise<string | Buffer | NonSharedBuffer> {
-		return fs.readFile(this.resolve(filePath), encoding);
+		const target = this.resolve(filePath);
+		// 不能把 undefined 透传给重载: @types/node 的重载只接受 BufferEncoding, 显式
+		// undefined 不匹配。没给编码就走返回 Buffer 的那一支。
+		return encoding === undefined ? fs.readFile(target) : fs.readFile(target, encoding);
 	}
 
 	async write(filePath: string, data: string | NodeJS.ArrayBufferView): Promise<void> {

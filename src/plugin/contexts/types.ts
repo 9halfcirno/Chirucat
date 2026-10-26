@@ -388,16 +388,22 @@ export interface PluginEventObserveOptions {
  * Hook API (仅服务插件可用)
  *
  * 与 `PluginEventAPI` 的分工: `event` 作用于事件传播本身(实体构造之前),
- * `hook` 作用于框架内部更细的流程节点 —— 消息处理、指令执行与各模块启停,
- * 并可返回 `{ cancel: true }` 取消后续动作。见 `Hooks` 的 hook 名清单。
+ * `hook` 作用于框架内部更细的流程节点 —— 消息处理、指令执行、动作转发与各模块启停。
+ * 见 `Hooks` 的 hook 名清单。
  *
- * 只开放 `register`: 分发由框架在埋点处自行调用, 不外放。
+ * 钩子分两类, 区别在**埋点位置**:
+ * - `before.*`: 事情还没发生, 处理器可返回 `{ cancel: true }` 拦住;
+ * - `after.*`: 事情已经发生, 处理器是 `HookNotice` (返回值 void), 类型上就写不出取消;
+ *   分发时全部处理器都会被调用, 不短路。
+ *
+ * 只开放 `register`: 分发由框架在埋点处自行调用, 不外放 —— 所以两类钩子用同一个
+ * 注册入口, 由名字区分即可。
  */
 export interface PluginHookAPI {
 	/**
 	 * 注册某 hook 的 handler
-	 * @param name hook 名
-	 * @param handler 处理器, 返回 `{ cancel: true }` 取消该动作
+	 * @param name hook 名 (`before.*` 可取消, `after.*` 只通知)
+	 * @param handler 处理器
 	 * @returns 注销函数(随上下文释放自动注销)
 	 */
 	register<N extends keyof Hooks>(name: N, handler: Hooks[N]): () => void;

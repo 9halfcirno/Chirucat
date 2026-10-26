@@ -336,13 +336,14 @@ export default {
 
 可用的 hook 点:
 
-| Hook 名 | 触发时机 | 载体参数 | 取消后的后果 |
-| --- | --- | --- | --- |
-| `before.bot.enable` | `Bot` 启动之前 | `Bot` 实例 | 跳过该 Bot 的启动 |
-| `before.plugin.enable` | 插件启用之前 | `Plugin` 实例 | 跳过该插件的启用 |
-| `before.message.handle` | 消息处理之前 | `Message` 对象 | 整条消息不再处理: 不匹配指令、不触发任何插件的消息回调 |
-| `before.command.handle` | 指令处理之前 | `{ message, command, args }` | 不执行该指令的处理函数 |
-| `before.action.send` | 任意 Action 转发给适配器之前 | `{ action, adapter, extra }` | 该 Action 不再转发, 调用方收到 `code: "HOOK_CANCELED"` 的失败响应 |
+| Hook 名 | 类别 | 触发时机 | 载体参数 | 取消后的后果 |
+| --- | --- | --- | --- | --- |
+| `before.bot.enable` | before | `Bot` 启动之前 | `Bot` 实例 | 跳过该 Bot 的启动 |
+| `before.plugin.enable` | before | 插件启用之前 | `Plugin` 实例 | 跳过该插件的启用 |
+| `before.message.handle` | before | 消息处理之前 | `Message` 对象 | 整条消息不再处理: 不匹配指令、不触发任何插件的消息回调 |
+| `before.command.handle` | before | 指令处理之前 | `{ message, command, args }` | 不执行该指令的处理函数 |
+| `before.action.send` | before | 任意 Action 转发给适配器之前 | `{ action, bot, adapter, extra }` | 该 Action 不再转发, 调用方收到 `code: "HOOK_CANCELED"` 的失败响应 |
+| `after.action.send` | after | 适配器已返回响应之后 | `{ action, adapter, bot, response, extra }` | 无(通知类, 忽略返回值) |
 
 约定:
 
@@ -350,6 +351,30 @@ export default {
 - **顺序执行**: 同一 hook 的处理器按注册顺序调用; 前一个取消后, 后面的处理器**不会再被调用**;
 - **错误隔离**: 处理器抛错时按放行处理并记录日志 —— 不能让一个出错的埋点使主流程无声中断;
 - 处理器随上下文释放自动注销(卸载、初始化失败都会触发), 不必自己在 `unload` 里注销;
+
+### 两类钩子: before 与 after
+
+钩子按埋点位置分两类, 这不是命名习惯, 而是**类型上的区分**(`BeforeHooks` / `AfterHooks`):
+
+- **before 类**: 事情还没发生, 可以拦住。处理器返回 `{ cancel: true }` 生效;
+- **after 类**: 事情已经发生。处理器签名为 `HookNotice` —— 返回值是 `void`, 所以
+  **类型上就写不出** `{ cancel: true }`。即使绕过类型写了, 运行时也会忽略;
+
+**after 类全部处理器都会被调用**是有意为之: 否则“能不能收到通知”会取决于注册顺序,
+排起来极难。
+
+```js
+// 例: 统计自己发出去了多少条
+ctx.hook.register("after.action.send", ({ action, adapter, response }) => {
+	if (action.type === "message.send" && response.success) {
+		ctx.logger.log(`[${adapter}] 发出 ${response.id}`);
+	}
+});
+```
+
+还有一点要知道: 适配器**抛错**或 `before.action.send` **取消**时, 这个钩子都**不会**触发
+—— 前者意味着“到底发没发出去”未知, 后者说明动作根本没发生。依赖它做对账时要把
+这种情况算在“未确认”里。
 
 > `before.core.init` 未出现在列表: 只在核心初始化时会被分发, 而服务插件的生命周期短于核心, 所以永远不会被触发
 

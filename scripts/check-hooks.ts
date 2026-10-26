@@ -78,6 +78,42 @@ check("重复 unregister 安全", true);
 // 未注册的 hook 名 dispatch 不报错
 check("未注册的 hook 名安全", bus.dispatch("before.core.init", {} as never) === false);
 
+// notify: 通知类分发不短路、不取消, 专用于 after 类钩子
+{
+	const notifyBus = new HookBus();
+	const seen: string[] = [];
+
+	// `as never` 是故意的: 类型层已禁止 after 钩子返回 cancel(HookNotice 的返回值是
+	// void), 但运行时必须仍然忽略它 —— 万一有人绕过了类型, 不能因此变成短路。
+	notifyBus.register("after.action.send", (() => {
+		seen.push("first");
+		return { cancel: true };
+	}) as never);
+	notifyBus.register("after.action.send", () => { seen.push("second"); });
+	notifyBus.register("after.action.send", () => { throw new Error("notify boom"); });
+	notifyBus.register("after.action.send", () => { seen.push("last"); });
+
+	notifyBus.notify("after.action.send", {} as never);
+
+	// 同一串里既有 cancel 又有抛错: 全部 handler 都该被调完
+	check("notify 不被 cancel 短路, 抛错也不阻断后续",
+		seen.join(",") === "first,second,last", seen.join(","));
+	check("notify 返回 void", notifyBus.notify("after.action.send", {} as never) === undefined);
+
+	// 对照组: 同样的 handler 放进 before 钩子, 就会被第一个 cancel 拦住
+	const dispatchBus = new HookBus();
+	const reached: string[] = [];
+	dispatchBus.register("before.message.handle", () => {
+		reached.push("first");
+		return { cancel: true };
+	});
+	dispatchBus.register("before.message.handle", () => { reached.push("second"); });
+
+	check("对照: dispatch 会被第一个 cancel 拦住",
+		dispatchBus.dispatch("before.message.handle", {} as never) === true);
+	check("对照: 短路后后面的 handler 没被调用", reached.join(",") === "first", reached.join(","));
+}
+
 /* ── 2. before.command.handle 与 CommandManager 接线 ─────────────────────────────── */
 
 console.log("CommandManager 接线");

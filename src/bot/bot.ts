@@ -301,7 +301,7 @@ export class Bot extends EventEmitter {
 	 * @param extra 额外数据, 应从对应event.extra取
 	 */
 	async action<T extends BotActions>(action: T, adapter: string, extra?: Record<string, any>): Promise<ActionResponses[T["type"]]> {
-		if (this.core.hooks.dispatch("before.action.send", { action, adapter, extra })) return {
+		if (this.core.hooks.dispatch("before.action.send", { action, bot: this.id, adapter, extra })) return {
 			success: false,
 			error: "Hook钩子取消了该动作",
 			code: "HOOK_CANCELED"
@@ -311,7 +311,19 @@ export class Bot extends EventEmitter {
 			this._logMsgAction(action);
 			this.recordSend(action);
 		}
-		return await this.plugin.handleAction(action, adapter, extra);
+
+		const response = await this.plugin.handleAction(action, adapter, extra);
+
+		// 适配器抛错时走不到这里 —— 那意味着“到底发没发出去”是未知的。
+		this.core.hooks.notify("after.action.send", {
+			action,
+			adapter,
+			bot: this.id,
+			response,
+			extra,
+		});
+
+		return response;
 	}
 
 	private _logMsgAction(action: MessageSend) {
