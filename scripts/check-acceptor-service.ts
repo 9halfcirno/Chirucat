@@ -522,6 +522,168 @@ const BOTH_FULL: Record<string, AdapterPolicy> = { a: { full: true }, b: { full:
 	check("只有一个适配器时不会转移", result.transfers.length === 0);
 }
 
+/*
+ * 回声: 受理人的回复会被另一个适配器当成入站消息收到
+ *
+ * 这是实测出来的那个 bug: 两端差值恰好等于“bot 通过受理人发了多少条”, 是一个
+ * 单调累积的系统性偏差。下面用带回声的完整模拟对比三种情形:
+ * - 无回声(基准): 两端计数完全对称;
+ * - 有回声但不补偿: 差值逐轮递增, 最终把受理人推走;
+ * - 有回声且补偿(发送侧 credit): 差值回到 0, 受理人不变。
+ */
+console.log("-- 回声补偿 --");
+
+/**
+ * 带回声的完整模拟
+ *
+ * 与 {@link run} 的差别: 被放行的消息意味着“受理人回了一条”, 其他全量适配器会
+ * 把这条回复当成入站消息收到。回声本身也走一次判定(真实系统里它确实会进 filter),
+ * 但不递归产生二次回声 —— 那会变成无限反省, 与实测现象无关。
+ */
+function simulate(
+	messages: RealMessage[],
+	policies: Record<string, AdapterPolicy>,
+	options: { compensate?: boolean; reply?: boolean; replies?: number } = {},
+): { state: AcceptorState | null; allowed: string[]; transfers: string[]; counts: Record<string, number> } {
+	const compensate = options.compensate ?? false;
+	const reply = options.reply ?? true;
+	/** 一次回复发几条: QQ 适配器遇到“文本+媒体”会拆成多条请求 (真实存在) */
+	const replies = Math.max(1, options.replies ?? 1);
+
+	let state: AcceptorState | null = null;
+	const window = new SlidingWindow();
+	const allowed: string[] = [];
+	const transfers: string[] = [];
+	const echoQueue: Delivery[] = [];
+
+	/** 处理一个事件 (真实消息或回声) */
+	function handle(event: Delivery): boolean {
+		window.record(event.adapter, event.at, event.mentionedSelf);
+
+		const before = state?.transfers ?? 0;
+		const decision = evaluate(PARAMS, {
+			at: event.at,
+			adapter: event.adapter,
+			mentionedSelf: event.mentionedSelf,
+			counts: window.counts(event.at, PARAMS.windowMs),
+			lastProbeAt: window.lastProbeAt(),
+			state,
+		});
+
+		state = decision.state;
+		if (decision.state.transfers > before) transfers.push(`${decision.state.acceptor}: ${decision.reason}`);
+		return decision.allow;
+	}
+
+	for (const msg of messages) {
+		for (const delivery of deliver(msg, policies)) {
+			if (!handle(delivery)) continue;
+			allowed.push(delivery.adapter);
+
+			if (!reply) continue;
+
+			// 发送侧补偿: 动作只报告**一次**成功, 所以无论实际发了几条都只补 1 条。
+			// 这一如实反映实现的保守度: 多段回复只能部分抵消, 但已足够拉回抑制区。
+			if (compensate) window.credit(delivery.adapter, delivery.at + 1);
+
+			for (let i = 0; i < replies; i++) {
+				const replyAt = delivery.at + 1 + i;
+
+				// 回声: 除发送方以外、开了全量的适配器会收到这每一条回复
+				for (const [adapter, policy] of Object.entries(policies)) {
+					if (adapter === delivery.adapter || !policy.full) continue;
+					echoQueue.push({ adapter, at: replyAt, mentionedSelf: false });
+				}
+			}
+		}
+
+		// 本轮回声在下一轮真实消息之前消化完
+		while (echoQueue.length > 0) handle(echoQueue.shift()!);
+	}
+
+	const lastAt = messages[messages.length - 1]?.at ?? 0;
+	return { state, allowed, transfers, counts: window.counts(lastAt + 10, PARAMS.windowMs) };
+}
+
+const busyChat = burst(1000, 6, 1000);
+
+{
+	// 基准: 机器人从不在群里说话, 两端应当一直对称
+	const result = simulate(busyChat, BOTH_FULL, { reply: false });
+	check("不说话时两端计数对称", result.counts.a === result.counts.b, JSON.stringify(result.counts));
+	check("不说话时不转移", result.transfers.length === 0, result.transfers.join(","));
+}
+
+{
+	// 根因: 回声全落在另一端, 差值恰好等于“bot 通过受理人发了多少条”
+	const result = simulate(busyChat, BOTH_FULL, { compensate: false });
+	check("有回声且不补偿时差值随发言单调增长",
+		(result.counts.b ?? 0) - (result.counts.a ?? 0) >= 5,
+		JSON.stringify(result.counts));
+	check("差值正好等于回复条数",
+		(result.counts.b ?? 0) === 12 && (result.counts.a ?? 0) === 6,
+		JSON.stringify(result.counts));
+}
+
+{
+	// 实测现象的完整复现: 一次回复拆成两条(文本+媒体)时, 差值比例跨过 0.5,
+	// 抑制规则失效, 证据逐轮累积直到把受理人推走。
+	const result = simulate(busyChat, BOTH_FULL, { compensate: false, replies: 2 });
+	check("多段回复+不补偿时真会把受理人推走",
+		result.transfers.length > 0,
+		result.transfers.join(","));
+	check("被推走的是原本不发言的那一端",
+		result.transfers[0]?.startsWith("b:"),
+		result.transfers.join(","));
+}
+
+{
+	// 补偿 1 条就能拉回抑制区 —— 即使实际发了 2 条(只补得起 1 条)也是如此:
+	// 差值从 2n 降到 n, 比例 1/3 < relativeGap 0.5。
+	const result = simulate(busyChat, BOTH_FULL, { compensate: true, replies: 2 });
+	check("多段回复+补偿后不再转移",
+		result.transfers.length === 0,
+		result.transfers.join(","));
+	check("多段回复+补偿后受理人不变",
+		result.state?.acceptor === "a",
+		String(result.state?.acceptor));
+}
+
+{
+	// 单条回复是即将推行的常态(QQ 全 md 发送), 补偿后应当完全对称
+	const result = simulate(busyChat, BOTH_FULL, { compensate: true });
+	check("补偿后两端计数重新对称",
+		result.counts.a === result.counts.b,
+		JSON.stringify(result.counts));
+	check("补偿后受理人不变",
+		result.transfers.length === 0,
+		result.transfers.join(","));
+	check("补偿后受理人仍是首个派发者",
+		result.state?.acceptor === "a",
+		String(result.state?.acceptor));
+}
+
+{
+	// 补偿不能掩盖真实故障: 受理人死了仍应转移
+	// 前 3 条两端都收到(让 a 当选), 之后 a 收不到
+	const doomed: RealMessage[] = [
+		...burst(1000, 3, 1000),
+		...burst(4000, 8, 1000).map(msg => ({ ...msg, missing: ["a"] })),
+	];
+	const result = simulate(doomed, BOTH_FULL, { compensate: true });
+	check("补偿不影响真实故障的转移",
+		result.transfers.length > 0,
+		result.transfers.join(","));
+}
+
+{
+	// 只开 @ 的一端收不到回声, 补偿在它身上也不该凭空造出计数
+	const result = simulate(busyChat, { a: { full: true }, b: { full: false } }, { compensate: true });
+	check("只有一端全量时不会凭空造出另一端的计数",
+		(result.counts.b ?? 0) === 0,
+		JSON.stringify(result.counts));
+}
+
 /* ==================== 5. 模块契约 ==================== */
 
 console.log("-- 模块契约 --");
@@ -538,11 +700,14 @@ const logs: string[] = [];
 /** 最近一次 init 注册的 WebUI 端点与页面 (每个假上下文一份) */
 let uiRoutes: any[] = [];
 let uiPages: any[] = [];
+/** 注册的 hook: name -> handler */
+let hookHandlers: Record<string, (data: any) => unknown> = {};
 
 /** 假上下文: 只实现本服务用到的那几项 */
 function createCtx(kv: KVStore, settings: Record<string, unknown> = {}) {
 	uiRoutes = [];
 	uiPages = [];
+	hookHandlers = {};
 
 	const ctx = {
 		path: { data: dataDir, plugin: pluginDir },
@@ -558,6 +723,12 @@ function createCtx(kv: KVStore, settings: Record<string, unknown> = {}) {
 		config: {
 			get: (key: string, fallback?: unknown) => (key in settings ? settings[key] : fallback),
 			watch: () => () => { /* 测试里不改配置 */ },
+		},
+		hook: {
+			register: (name: string, handler: (data: any) => unknown) => {
+				hookHandlers[name] = handler;
+				return () => { delete hookHandlers[name]; };
+			},
 		},
 		core: {
 			session: {
@@ -828,6 +999,73 @@ check("enabled=false 时不建立状态", (ctx5.exports as typeof exported).stat
 acceptorModule.unload(ctx5);
 (ctx5.kv as KVStore).close();
 
+// ---- 回声补偿的接线 (直接调 hook, 不经模拟) ----
+const ctx8 = createCtx(new KVStore(path.join(dataDir, "echo.db")), { dryRun: false });
+acceptorModule.init(ctx8);
+
+const echoHook = hookHandlers["after.action.send"];
+check("init 注册了 after.action.send", typeof echoHook === "function");
+
+const exported8 = ctx8.exports as typeof exported;
+const endpoint8 = uiRoutes.find(route => route.path === "acceptor_state")?.handler as
+	((body: unknown) => any) | undefined;
+const view8 = () => endpoint8!({ action: "state", botId: "bot-1" });
+const counts8 = () => view8().sessions[0]?.counts ?? {};
+
+/** 构造一个发送完成事件 */
+const sent = (adapter: string, session: string, extra: Record<string, unknown> = {}) => ({
+	action: { type: "message.send", session, message: "hi" },
+	adapter,
+	bot: "bot-1",
+	response: { success: true, id: "m-new" },
+	extra: undefined,
+	...extra,
+});
+
+runFilter(messageEvent("u:echo-1"), bot, meta("a")); // a 当选
+const beforeEcho = counts8();
+echoHook!(sent("a", "u:echo-1"));
+const afterEcho = counts8();
+
+check("发送成功后给发送方 +1",
+	(afterEcho.a ?? 0) === (beforeEcho.a ?? 0) + 1,
+	`${JSON.stringify(beforeEcho)} -> ${JSON.stringify(afterEcho)}`);
+check("补偿不会记到另一端头上", (afterEcho.b ?? 0) === 0, JSON.stringify(afterEcho));
+check("补偿刷新了最近派发时刻",
+	(view8().sessions[0]?.lastProbeAt?.a ?? 0) >= (beforeEcho.a ?? 0),
+	JSON.stringify(view8().sessions[0]?.lastProbeAt));
+
+// 退回、失败、未绑定、从未参与判定: 都不该产生计数
+echoHook!({
+	action: { type: "message.delete", session: "u:echo-1", id: "m1" },
+	adapter: "a", bot: "bot-1", response: { success: true }, extra: undefined,
+});
+check("撤回不产生补偿", (counts8().a ?? 0) === (afterEcho.a ?? 0), JSON.stringify(counts8()));
+
+echoHook!({
+	action: { type: "message.send", session: "u:echo-1", message: "hi" },
+	adapter: "a", bot: "bot-1",
+	response: { success: false, error: "boom", code: "UNKNOWN_ERROR" }, extra: undefined,
+});
+check("发送失败不产生补偿", (counts8().a ?? 0) === (afterEcho.a ?? 0), JSON.stringify(counts8()));
+
+echoHook!(sent("b", "plain-session"));
+check("没有逻辑会话组时不补偿", exported8.state("bot-1", "") === null && (counts8().b ?? 0) === 0,
+	JSON.stringify(counts8()));
+
+echoHook!(sent("b", "u:never-seen"));
+check("从未参与判定的会话不会被凭空建出来",
+	view8().sessions.length === 1,
+	JSON.stringify(view8().sessions.map((s: any) => s.unionId)));
+
+echoHook!(sent("b", "u:echo-1"));
+check("另一端发送时补偿记在它自己名下",
+	(counts8().b ?? 0) === 1 && (counts8().a ?? 0) === (afterEcho.a ?? 0),
+	JSON.stringify(counts8()));
+
+acceptorModule.unload(ctx8);
+(ctx8.kv as KVStore).close();
+
 // 静默不丢受理人: 定时回收会把受理人一起丢掉, 下一条消息就由先到者当选 —— 这正是抖动
 const wait = (ms: number) => new Promise<void>(resolve => { setTimeout(resolve, ms); });
 const ctx6 = createCtx(new KVStore(path.join(dataDir, "quiet.db")), {
@@ -878,18 +1116,58 @@ check("正式模式 flush 仍把状态落盘", (ctx6.kv as KVStore).count("accep
 	String((ctx6.kv as KVStore).count("acceptor:v1:")));
 (ctx6.kv as KVStore).close();
 
-// 演练模式才输出汇总 —— 那是关 dryRun 之前该看的东西
-const ctx7 = createCtx(new KVStore(path.join(dataDir, "verbose.db")), {
-	dryRun: true,
-	// 把 @ 快通道调成一次就够, 这样不用攼十几条消息也能真的切换一次
-	"fastPath.consecutive": 1,
-	"fastPath.silenceMs": 1000,
+// ---- @ 消息: 计数与判定照做, 但一律放行 ----
+// 早先这里是提前 return, 结果 @ 消息连窗口都进不去, 快速通道的 fastStreak 永远是 0。
+const ctx9 = createCtx(new KVStore(path.join(dataDir, "mention.db")), {
+	dryRun: false,
+	"fastPath.consecutive": 2,
+	// 注意: `readParams` 对 silenceMs 用的是 positive(), 所以 0 会被回退成默认的
+	// 15000 —— 这里用 1 毫秒, 再用真实的 `wait` 跨过它。
+	"fastPath.silenceMs": 1,
 });
-acceptorModule.init(ctx7);
-runFilter(messageEvent(), bot, meta("a"));
+acceptorModule.init(ctx9);
 
-await wait(1300); // 受理人沉默超过 silenceMs
-runFilter({ ...messageEvent(), mentionedSelf: true } as any, bot, meta("b"));
+const exported9 = ctx9.exports as typeof exported;
+const endpoint9 = uiRoutes.find(route => route.path === "acceptor_state")?.handler as
+	((body: unknown) => any) | undefined;
+const view9 = () => endpoint9!({ action: "state", botId: "bot-1" }).sessions[0];
+
+const atMe = (from: string, sessionId = "u:mention-1") => runFilter(
+	{ ...messageEvent(sessionId), mentionedSelf: true } as any,
+	bot,
+	meta(from),
+);
+
+runFilter(messageEvent("u:mention-1"), bot, meta("a")); // a 当选
+check("@ 之前受理人是 a", exported9.state("bot-1", "mention-1")?.acceptor === "a");
+
+await wait(10); // 让受理人“沉默”超过 silenceMs(1ms)
+check("非受理人被 @ 时仍放行", atMe("b") === true);
+check("@ 消息不进探针计数", (view9()?.counts?.b ?? 0) === 0, JSON.stringify(view9()?.counts));
+check("@ 消息进 @ 计数", (view9()?.mentions?.b ?? 0) === 1, JSON.stringify(view9()?.mentions));
+check("第一次 @ 只计数不转移", exported9.state("bot-1", "mention-1")?.acceptor === "a");
+check("fastStreak 被记下来了", (exported9.state("bot-1", "mention-1")?.fastStreak ?? 0) === 1,
+	String(exported9.state("bot-1", "mention-1")?.fastStreak));
+
+check("第二次 @ 依然放行", atMe("b") === true);
+check("@ 快速通道真的能转移",
+	exported9.state("bot-1", "mention-1")?.acceptor === "b",
+	String(exported9.state("bot-1", "mention-1")?.acceptor));
+
+// 受理人自己被 @ 时照常放行, 并打断连击
+check("受理人被 @ 时放行", atMe("b") === true);
+check("受理人被 @ 不累积连击", (exported9.state("bot-1", "mention-1")?.fastStreak ?? 0) === 0,
+	String(exported9.state("bot-1", "mention-1")?.fastStreak));
+
+acceptorModule.unload(ctx9);
+(ctx9.kv as KVStore).close();
+
+// 演练模式才输出汇总 —— 那是关 dryRun 之前该看的东西
+const ctx7 = createCtx(new KVStore(path.join(dataDir, "verbose.db")), { dryRun: true });
+acceptorModule.init(ctx7);
+runFilter(messageEvent(), bot, meta("a")); // a 当选
+// 之后 a 不再有派发, b 持续活跃 → 差值跨过阈值, 累积证据直到转移
+for (let i = 0; i < 8; i++) runFilter(messageEvent(), bot, meta("b"));
 check("演练模式下也会发生转移",
 	(ctx7.exports as typeof exported).state("bot-1", "union-1")?.acceptor === "b",
 	String((ctx7.exports as typeof exported).state("bot-1", "union-1")?.acceptor));

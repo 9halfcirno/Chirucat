@@ -11,6 +11,10 @@
  *   受“用户想找谁”影响, 不是稳定的流量信号。
  * - **@**: 单独计数, 只供 @ 快速通道使用。
  *
+ * 除了记录入站消息, 还有一种由**出站**产生的计数: {@link credit}。自己发出的消息会
+ * 被同一群里的另一个适配器当成入站消息收到(平台不会把“自己发的”回音给它自己),
+ * 于是另一端凭空多出一条探针。详见该方法上的说明。
+ *
  * 时间由调用方传入(不读 `Date.now()`), 因此可以被自检脚本用构造时间戳直接驱动,
  * 测试不需要真的等待。
  */
@@ -46,6 +50,34 @@ export class SlidingWindow {
 
 		// 计数会被窗口裁掉, 但“最近一次”要留住: 它既是 @ 快速通道的沉默判据,
 		// 也是“这个会话里出现过哪些适配器”的唯一来源 —— 静默后仍要能手工切回去。
+		const last = this.#lastAt.get(adapter);
+		if (last === undefined || at > last) this.#lastAt.set(adapter, at);
+	}
+
+	/**
+	 * 抵扣一次“自己发出去、被对方收到”的回声
+	 *
+	 * 背景: 两条适配器同时在群里时, 受理人发一条回复, 平台会把它投给**另一个**
+	 * 适配器(自己发出的不会回音给自己)。那条消息在 B 侧是一条普通的非 @ 消息,
+	 * 于是 B 的探针计数 +1。两端差值恰好等于“bot 通过受理人发出的消息数”,
+	 * 越活跃差得越多 —— 这是一个单调累积的系统性偏差, 不是随机噪声。
+	 *
+	 * 没法在接收侧识别: 两个适配器的 id 体系不同, 也没有共同标识能把“B 收到的这条
+	 * 是 A 发的”对上号。因此只能在**发送侧**补偿 —— 框架只知道“今天我通过 A 发出了
+	 * 一条”, 于是给 A 计一条, 把差值拉回 0。
+	 *
+	 * 计入探针而不是 @: 这与 B 侧收到它的方式对称。同时刷新 `lastProbeAt` —— 发送
+	 * 成功是“这个适配器在工作”的强证据, 不刷新会让一个忙着回复的受理人被 @ 快速
+	 * 通道误判成“彻底沉默”。
+	 *
+	 * @param adapter 实际执行发送的适配器 id
+	 * @param at 发送成功的时刻(ms)
+	 */
+	credit(adapter: string, at: number): void {
+		const probes = this.#probes.get(adapter);
+		if (probes) probes.push(at);
+		else this.#probes.set(adapter, [at]);
+
 		const last = this.#lastAt.get(adapter);
 		if (last === undefined || at > last) this.#lastAt.set(adapter, at);
 	}

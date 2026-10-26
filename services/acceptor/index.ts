@@ -97,10 +97,6 @@ export default {
 			if (ctx.config.get<boolean>("enabled", true) !== true) return true;
 			if (!settings(ctx).sessionTypes.includes(event.sessionType)) return true;
 
-			if (event.mentionedSelf) {
-				return true; // 放行显式@me消息
-			}
-
 			const unionId = resolveUnion(ctx, event.sessionId);
 			if (!unionId) {
 				// 没有共同标识就无法判断"另一端是不是同一个会话", 交给业务层去重
@@ -113,12 +109,44 @@ export default {
 			table.set(key, runtime);
 
 			try {
-				return dispatch(ctx, runtime, key, event.mentionedSelf ?? null, meta.adapter);
+				const allow = dispatch(ctx, runtime, key, event.mentionedSelf ?? null, meta.adapter);
+
+				// @ 消息照常计数与判定, 但**一律放行**。
+				//
+				// 早先这里是提前 return, 代价是 @ 消息根本进不了 dispatch: 窗口收不到它,
+				// @ 快速通道的 fastStreak 永远是 0 —— 那组配置实际上从没生效过。
+				// 计数是判定必需的输入, 拦截才是可以单独决定的事, 两者不该绑在一起。
+				//
+				// 为什么放行: 用户明确 @ 了这个 bot, 就该由它回应, 不能因为“另一端更活跃”
+				// 而吞掉。@ 消息也不进探针计数(见 SlidingWindow.record), 所以它不会把
+				// 受理人推向被 @ 的那一端。
+				return event.mentionedSelf === true ? true : allow;
 			} catch (e) {
 				// 判定出错时放行: 宁可重复响应, 也不能让消息凭空消失
 				ctx.logger.error(`受理人判定失败, 本次放行: ${message(e)}`);
 				return true;
 			}
+		});
+
+		// 回声补偿: 受理人发出的回复会被**另一个**适配器当成入站消息收到(自己发的不回音
+		// 给自己), 于是对方凭空多出一条探针。两端差值恰好等于“bot 通过受理人发了多少条”,
+		// 越活跃差得越多 —— 这会稳定地把受理人推向另一端, 不是随机噪声。
+		//
+		// 接收侧没法识别: 两个适配器的 id 体系不同, 没有共同标识能把“B 收到的这条是 A 发的”
+		// 对上号。所以只能在发送侧补偿: 给**实际发送的适配器**计一条(正常情况它就是当前
+		// 受理人), 把差值拉回 0。
+		ctx.hook.register("after.action.send", (event) => {
+			if (runtimes !== table) return; // 已卸载
+			if (event.action.type !== "message.send") return; // 撤回不产生回声
+			if (!event.response.success) return; // 没发出去就没有对方收到
+
+			const unionId = resolveUnion(ctx, event.action.session);
+			if (!unionId) return; // 没绑定逻辑会话, 本就不参与判定
+
+			const runtime = table.get(keyOf(event.bot, unionId));
+			if (!runtime) return; // 这个会话从未进过判定(不在观察范围或尚未有派发), 不必凭空建一个
+
+			runtime.window.credit(event.adapter, Date.now());
 		});
 
 		timer = setInterval(() => flush(ctx), readFlushInterval(ctx));
