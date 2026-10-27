@@ -5,6 +5,7 @@ import { QQApi } from "./api";
 import { INTENTS, PLATFORM } from "./config";
 import { QQConnection } from "./connection";
 import { buildQQEvent } from "./events";
+import { parseMessageTime, PassiveReplyWindow } from "./passive-window";
 import type { QQWebSocketPayload } from "./types";
 import { MediaUploader } from "./uploader";
 
@@ -33,6 +34,8 @@ class QQAdapter {
 	private readonly router: ActionRouter;
 	private readonly actionDeps: QQActionDeps;
 	private readonly connection: QQConnection;
+	/** msg_id -> 消息发送时间, 决定回复能否走被动窗口 */
+	private readonly passiveWindow: PassiveReplyWindow;
 
 	constructor(ctx: AdapterContext) {
 		this.ctx = ctx;
@@ -42,13 +45,15 @@ class QQAdapter {
 		this.api = new QQApi(this.access, logger);
 		this.uploader = new MediaUploader(this.api, logger);
 		this.router = registerQQActions(new ActionRouter(logger));
+		this.passiveWindow = new PassiveReplyWindow();
 		this.actionDeps = {
 			ctx,
 			api: this.api,
 			uploader: this.uploader,
 			logger,
 			seq: new SeqAllocator(),
-			gate: new SessionSendGate()
+			gate: new SessionSendGate(),
+			msgWindow: this.passiveWindow
 		};
 
 		this.connection = new QQConnection({
@@ -79,6 +84,7 @@ class QQAdapter {
 	/** 卸载: 关闭连接并清理全部定时器 */
 	stop(): void {
 		this.connection.stop();
+		this.passiveWindow.destroy();
 	}
 
 	/** 平台事件 -> 框架事件 -> 派发 */
@@ -90,6 +96,12 @@ class QQAdapter {
 
 		// 未知事件类型或缺少关键字段: 不派发, 也不报错(平台会持续下发各类事件)
 		if (!event) return;
+
+		// 登记被动回复窗口: 窗口从平台的发送时间算起, 不能只从本地收到时间算
+		if (event.messageId) {
+			this.passiveWindow.remember(event.messageId, parseMessageTime(event.source?.timestamp));
+		}
+
 		this.ctx.bot.dispatch(event);
 	}
 

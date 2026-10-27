@@ -61,6 +61,15 @@ export const HEARTBEAT_ACK_TIMEOUT = 10_000;
 /** 重连指数退避的上限(ms) */
 export const MAX_RECONNECT_DELAY = 30_000;
 
+/**
+ * 被动回复窗口(ms)
+ *
+ * 平台允许被动回复 5 分钟内的消息, 这里取 4:50(290s)。
+ * 留出的 10s 用于吸收排队/网络耗时 —— 窗口边缘的 "5 分钟" 由平台判定,
+ * 我们宁可用主动消息, 也不要拿着刚过期的 msg_id 去撞一次失败。
+ */
+export const PASSIVE_REPLY_WINDOW = 290_000;
+
 /** 普通 API 请求超时(ms) */
 export const REQUEST_TIMEOUT = 15_000;
 

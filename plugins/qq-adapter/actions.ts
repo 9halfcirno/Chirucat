@@ -5,6 +5,7 @@ import type Logger from "../../src/utils/logger";
 import type { QQApi } from "./api";
 import { splitSendBlocks, stringifyContent } from "./codec";
 import { MSG_TYPE_MEDIA, MSG_TYPE_TEXT, PLATFORM } from "./config";
+import type { PassiveReplyWindow } from "./passive-window";
 import type { QQSendTarget } from "./types";
 import type { MediaUploader } from "./uploader";
 
@@ -26,6 +27,8 @@ export interface QQActionDeps {
 	seq: SeqAllocator;
 	/** 会话级发送限速门 */
 	gate: SessionSendGate;
+	/** 被动回复窗口: 决定本次发送带不带 msg_id */
+	msgWindow: PassiveReplyWindow;
 }
 
 /** 源事件的 extra(框架随动作回传的适配器私有数据, 如 msg_id) */
@@ -140,6 +143,32 @@ function errorMessage(e: unknown): string {
 	return e instanceof Error ? e.message : String(e);
 }
 
+/**
+ * 构造被动回复字段
+ *
+ * 源消息仍在窗口内才带 `msg_id`(被动回复, 不占主动消息限额);
+ * 过期或没有 msg_id 时返回空对象 —— 不带 msg_id 的请求就是主动消息。
+ * `msg_seq` 仅在被动回复时分配: 同一 msg_id 的多条回复需要互不相同的序号。
+ */
+function passiveRef(deps: QQActionDeps, extra: ActionExtra): Record<string, any> {
+	const msgId = deps.msgWindow.pick(extra);
+	if (!msgId) return {};
+	return { msg_id: msgId, msg_seq: deps.seq.next(extra) };
+}
+
+/**
+ * 主动消息失败的补充说明
+ *
+ * `40034100`(超出频控) / `40034105`(无权限) 是主动消息独有的错误码,
+ * 直接看平台原文不容易联想到"被动窗口已过期"这个前提, 这里补一句。
+ */
+function explainSendError(msg: string, passive: boolean): string {
+	if (passive) return msg;
+	if (msg.includes("40034100")) return `${msg} (主动消息发送超过频控限额, 请降低频率或等待配额恢复)`;
+	if (msg.includes("40034105")) return `${msg} (主动消息发送失败, 无权限, 请检查机器人权限设置)`;
+	return msg;
+}
+
 /** 发送一条文本(markdown)消息, msg_type=2 */
 async function sendText(
 	deps: QQActionDeps,
@@ -148,18 +177,18 @@ async function sendText(
 	extra: ActionExtra,
 	msgRef: Record<string, any>
 ): Promise<ActionResponses["message.send"]> {
+	// 被动回复: 带上源事件的 msg_id, 否则会占用主动消息限额
+	const ref = passiveRef(deps, extra);
 	try {
 		const res = await deps.api.sendMessage(target, {
 			msg_type: MSG_TYPE_TEXT,
 			markdown: { content },
-			// 被动回复: 带上源事件的 msg_id, 否则会占用主动消息频次
-			msg_id: extra?.msg_id,
-			msg_seq: deps.seq.next(extra),
+			...ref,
 			...msgRef
 		});
 		return sendSuccess(res.id, res.token);
 	} catch (e) {
-		const msg = errorMessage(e);
+		const msg = explainSendError(errorMessage(e), ref.msg_id !== undefined);
 		deps.logger.error(`发送文本消息失败: ${msg}`);
 		return { success: false, code: "UNKNOWN_ERROR", error: msg };
 	}
@@ -173,17 +202,17 @@ async function sendMedia(
 	extra: ActionExtra,
 	msgRef: Record<string, any>
 ): Promise<ActionResponses["message.send"]> {
+	const ref = passiveRef(deps, extra);
 	try {
 		const res = await deps.api.sendMessage(target, {
 			msg_type: MSG_TYPE_MEDIA,
 			media: { file_info: fileInfo },
-			msg_id: extra?.msg_id,
-			msg_seq: deps.seq.next(extra),
+			...ref,
 			...msgRef
 		});
 		return sendSuccess(res.id, res.token);
 	} catch (e) {
-		const msg = errorMessage(e);
+		const msg = explainSendError(errorMessage(e), ref.msg_id !== undefined);
 		deps.logger.error(`发送富媒体消息失败: ${msg}`);
 		return { success: false, code: "UNKNOWN_ERROR", error: msg };
 	}
