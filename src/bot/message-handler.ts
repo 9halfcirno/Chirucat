@@ -57,7 +57,7 @@ export class MessageHandler {
 
 		let str = "";
 		str += "[收]"
-		str += `[${platform} ${session.type}:${sinfo?.id || "unknown"}]\n`
+		str += `[${platform} ${session.type}:${message.session.name}(${sinfo?.id || "unknown"})]\n`
 		str += `<${user.name}(${uinfo?.id ?? user.id})> ${content}`;
 
 		this.bot.logger.log(str);
