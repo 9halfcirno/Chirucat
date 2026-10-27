@@ -1,4 +1,4 @@
-import type { SessionType } from "../../src/protocols/session";
+import type { SessionType } from "../../src/entity/session";
 import type { FilterManager } from "./filter-manager";
 import type { FilterEntry, FilterKind, FilterMode, FilterScope, FilterTargetType } from "./types";
 

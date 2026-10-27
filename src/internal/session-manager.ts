@@ -1,6 +1,6 @@
 import sqlite from "better-sqlite3"
 import { v5 as uuidv5 } from "uuid";
-import type { SessionType } from "../protocols/session";
+import type { SessionType } from "../entity/session";
 import { StateError } from "../errors/state-error";
 
 // 魔法, 作为 uuidv5 的种子, 后续不应再动

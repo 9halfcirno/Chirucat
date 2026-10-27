@@ -1,4 +1,4 @@
-import type { SessionType } from "../protocols/session";
+import type { SessionType } from "../entity/session";
 
 /**
  * 消息方向

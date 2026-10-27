@@ -2,7 +2,7 @@ import type { Bot } from "../bot/bot";
 import type { MessageCreateEvent } from "../protocols/event/message";
 import type { BotEventMeta } from "../protocols/events";
 import type { MessageBlockReceive, MessageBlockSend } from "../protocols/message-block";
-import type { Session } from "../protocols/session";
+import type { Session } from "./session";
 import type { User } from "./user";
 import { Entity } from "./entity";
 import type { MessageQuote, MessageReplyOption } from "./types";
@@ -32,12 +32,13 @@ export class Message extends Entity {
 
 		this.session = {
 			id: event.sessionId,
+			name: event.sessionName || '',
 			type: event.sessionType,
 			unionId: this.bot?.core.session?.unionOf(event.sessionId) ?? null,
 		}
 		this.sender = {
 			id: event.senderId,
-			name: event.senderName,
+			name: event.senderName || '',
 			unionId: this.bot?.core.user?.getUnion(event.senderId) ?? null,
 			permission: 0 // 默认均为0，即没有任何权限
 		}

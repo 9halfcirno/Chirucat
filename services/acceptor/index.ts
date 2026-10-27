@@ -1,6 +1,6 @@
 import type { ServiceContext } from "../../src/plugin/services/context";
 import type { ServiceModule } from "../../src/plugin/services/service";
-import type { SessionType } from "../../src/protocols/session";
+import type { SessionType } from "../../src/entity/session";
 import { createAcceptorHandler } from "./api";
 import { evaluate } from "./detector";
 import type {

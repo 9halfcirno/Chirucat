@@ -1,5 +1,5 @@
 import type { MessageBlockReceive } from "../message-block";
-import type { SessionType } from "../session";
+import type { SessionType } from "../../entity/session";
 import type { BotEvent } from "./event";
 
 /**
@@ -18,12 +18,14 @@ export interface MessageCreateEvent extends BotEvent {
 	/** 发送者框架id, 从UserManager获取 */
 	senderId: string;
 	/** 发送者昵称 */
-	senderName: string;
+	senderName?: string;
 
 	/** 会话窗口类型 */
 	sessionType: SessionType;
 	/** 会话id */
 	sessionId: string;
+	/** 会话名称, 尽量提供, 私聊直接填用户名, 频道场景可以填`guild-channel`这样格式的名字 */
+	sessionName?: string;
 
 	/** 消息纯文本内容 */
 	text: string;

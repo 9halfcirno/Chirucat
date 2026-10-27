@@ -1,6 +1,6 @@
 import type { MessageCreateEvent, MessageDeleteEvent } from "../../src/protocols/event/message";
 import type { BotEvents } from "../../src/protocols/events";
-import type { SessionType } from "../../src/protocols/session";
+import type { SessionType } from "../../src/entity/session";
 import { blocksToText, parseMessage, segmentsToParsed, stripLeadingSelfMention, type Ob11CodecDeps } from "./codec";
 import { Ob11Connection } from "./connection";
 import { PLATFORM } from "./constants";
@@ -132,6 +132,7 @@ async function buildMessageEvent(data: OneBotMessageEvent, ctx: Ob11EventContext
 		senderName,
 		sessionType,
 		sessionId: ctx.resolveSessionId(sessionType, String(rawSessionId)),
+		sessionName: data.group_name as string || "",
 		text,
 		richContent: blocks,
 		mentionedSelf,
@@ -151,6 +152,10 @@ async function buildMessageEvent(data: OneBotMessageEvent, ctx: Ob11EventContext
 		},
 		source: data
 	};
+
+	if (typeof data.group_name === "string") {
+		event.sessionName = data.group_name; // 一般的ob11扩展实现均带有该字段, 如napcat/snowluma
+	}
 
 	let quoteS = (Array.isArray(data.message) ? data.message.find(s => s.type === "reply") : null) || null;
 	if (quoteS && quoteS.data?.id) {

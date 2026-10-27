@@ -1,7 +1,7 @@
 import type { MessageCreateEvent, MessageQuote } from "../../src/protocols/event/message";
 import type { BotEvents } from "../../src/protocols/events";
 import type { MessageBlockReceive } from "../../src/protocols/message-block";
-import type { SessionType } from "../../src/protocols/session";
+import type { SessionType } from "../../src/entity/session";
 import { attachmentsToBlocks, parseContent, stripBotMention } from "./codec";
 import { PLATFORM } from "./config";
 import type { QQMessageData, QQUser, QQWebSocketPayload } from "./types";

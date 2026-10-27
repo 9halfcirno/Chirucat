@@ -1,4 +1,4 @@
-import type { SessionType } from "../session";
+import type { SessionType } from "../../entity/session";
 import type { BotEvent } from "./event";
 
 /**

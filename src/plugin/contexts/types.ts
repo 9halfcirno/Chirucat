@@ -5,7 +5,7 @@ import type { Hooks } from "../../hooks/types";
 import type { Message } from "../../entity/message";
 import type { ActionResponses, BotActions } from "../../protocols/actions";
 import type { BotEventMeta, BotEvents } from "../../protocols/events";
-import type { SessionType } from "../../protocols/session";
+import type { SessionType } from "../../entity/session";
 import type { SessionPlatformInfo } from "../../internal/session-manager";
 import type { UserPlatformInfo } from "../../internal/user-manager";
 

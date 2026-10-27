@@ -1,8 +1,3 @@
-export interface SessionExtra {
-	platform: string;
-	
-}
-
 export type SessionType = 
 	| "private"
 	| "group"
@@ -11,6 +6,8 @@ export type SessionType =
 export interface Session {
 	/** 框架会话ID */
 	id: string;
+	/** 会话显示名称, 适配器尽量提供, 无法提供时为空字符串 */
+	name?: string;
 	/** 会话类型 */
 	type: SessionType;
 	/**

@@ -1,7 +1,7 @@
 import type { AdapterContext } from "../../src/plugin/contexts/adapter-context";
 import type { ActionResponses, BotActions } from "../../src/protocols/actions";
 import type { ActionErrorCode } from "../../src/protocols/errors";
-import type { SessionType } from "../../src/protocols/session";
+import type { SessionType } from "../../src/entity/session";
 import type Logger from "../../src/utils/logger";
 import { blocksToSegments, type Ob11CodecDeps, type SendableBlock } from "./codec";
 import { PLATFORM } from "./constants";
