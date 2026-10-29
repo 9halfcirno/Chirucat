@@ -1,0 +1,15 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		// 覆盖掉 noEmit，真正产出文件
+		"noEmit": false,
+		"rootDir": "./src",
+		"outDir": "./dist",
+		"sourceMap": true,
+		"declaration": true,
+		"declarationMap": true
+	},
+	"include": [
+		"src/**/*"
+	]
+}

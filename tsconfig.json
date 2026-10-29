@@ -1,39 +1,24 @@
 {
-  // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
-    // File Layout
-    "rootDir": "./src", // ← 取消注释，显式指定源根目录
-    "outDir": "./dist",
-    // Environment Settings
-    // See also https://aka.ms/tsconfig/module
+    // 环境设置
     "module": "es2022",
     "target": "esnext",
-    // 源码按 ESM 写法省略了扩展名, npm 包又需要按 node_modules 解析:
-    // bundler 是同时满足这两点的解析策略(esbuild 打包插件时也是这么解析的)。
-    // 缺了它 check:types / check:plugins 会整片红: 内置模块要求 default 导入、
-    // 裸包(json5/uuid/esbuild)解析不到, 报的都是解析失败而不是真实类型错误。
     "moduleResolution": "bundler",
-    "types": [],
-    "paths": {},
-    // For nodejs:
-    // "lib": ["esnext"],
-    // "types": ["node"],
-    // and npm install -D @types/node
-    // Other Outputs
-    "sourceMap": true,
-    "declaration": true,
-    "declarationMap": true,
-    // Stricter Typechecking Options
+    "lib": [
+      "esnext"
+    ],
+    "types": [
+      "node"
+    ],
+    // 只做类型检查，不输出文件
+    "noEmit": true,
+    // 因为 include 包含 src 外的文件，rootDir 不能写 ./src，否则会报 TS6059
+    // 直接删掉 rootDir，或设为 "."
+    // "rootDir": ".",
+    // 严格检查（保持你原来的）
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-    // Style Options
-    // "noImplicitReturns": true,
-    // "noImplicitOverride": true,
-    // "noUnusedLocals": true,
-    // "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    // "noPropertyAccessFromIndexSignature": true,
-    // Recommended Options
     "strict": true,
     "jsx": "react-jsx",
     "verbatimModuleSyntax": true,
@@ -42,10 +27,8 @@
     "moduleDetection": "force",
     "skipLibCheck": true
   },
-  "include": [
-    "src/**/*"
-  ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "dist"
   ]
 }
