@@ -5,7 +5,7 @@
  * - 连接建立后服务器先回放最近历史, 再实时推送
  * - EventSource 断线自动重连, 页面只负责展示状态
  *
- * 过滤: 等级多选 + 按 Bot, 都在前端做 (SSE 仍收全量)
+ * 过滤: 等级多选 + 按 Tag, 都在前端做 (SSE 仍收全量)
  * - 每行把过滤要用的元数据写进 dataset, 切换筛选只翻 hidden
  * - 不重建 DOM: 既没有 2000 行重排的开销, 也保住滚动位置与历史
  *
@@ -22,7 +22,7 @@ import { createFilterSelect } from "../../spa/components/filter-select.js";
 let source = null;       // EventSource 实例, destroy 时关闭
 let listEl = null;       // 日志列表容器
 let levelFilter = null;  // 等级过滤下拉
-let botFilter = null;    // Bot 过滤下拉
+let tagFilter = null;    // Tag 过滤下拉
 let follow = true;       // 是否跟随最新日志
 let queue = [];          // 待渲染的日志条目
 let rafId = null;        // 批量渲染调度句柄
@@ -31,13 +31,12 @@ let rafId = null;        // 批量渲染调度句柄
 const LOG_LEVELS = ["debug", "info", "warn", "error"];
 
 /**
- * 没有 botId 的条目 (Core / WebUI / Service 等全局级日志) 归到这个虚拟分类下。
- * 取值不与真实 BotConfig.id 冲突即可 —— Bot id 来自目录名。
+ * 没有 tag 的条目 (Core / WebUI / Service 等全局级日志) 归到这个分类下。
  */
-const GLOBAL_BOT = "__global__";
+const GLOBAL_TAG = "global";
 
-/** 当前筛选: levels 为选中的等级集合, bot 为空串表示不限定 Bot */
-let filters = { levels: new Set(LOG_LEVELS), bot: "" };
+/** 当前筛选: levels 为选中的等级集合, tag 为空串表示不限定 tag */
+let filters = { levels: new Set(LOG_LEVELS), tag: "" };
 
 /** 日志行数上限: 长时间运行也不会累积过多 DOM */
 const MAX_LINES = 2000;
@@ -79,7 +78,7 @@ export default {
 		clearBtn.title = "清理日志";
 		clearBtn.setAttribute("aria-label", "清理日志");
 
-		// 过滤控件: 等级多选 + Bot 单选, 切换即时作用于已渲染的历史行
+		// 过滤控件: 等级多选 + Tag 单选, 切换即时作用于已渲染的历史行
 		levelFilter = createFilterSelect({
 			multiple: true,
 			allLabel: "全部等级",
@@ -91,20 +90,20 @@ export default {
 			},
 		});
 
-		botFilter = createFilterSelect({
-			items: [{ value: "", label: "全部 Bot" }],
+		tagFilter = createFilterSelect({
+			items: [{ value: "", label: "全部 Tag" }],
 			values: "",
 			onChange: (value) => {
-				filters.bot = Array.isArray(value) ? (value[0] ?? "") : value;
+				filters.tag = Array.isArray(value) ? (value[0] ?? "") : value;
 				applyFilters();
 			},
 		});
 
 		// 两个筛选控件与"已连接"、清理按钮同级同排, 不单独包卡片
-		head.append(status, createField("等级", levelFilter.el), createField("Bot", botFilter.el), clearBtn);
+		head.append(status, createField("等级", levelFilter.el), createField("分类", tagFilter.el), clearBtn);
 
-		// Bot 列表异步补进下拉: SSE 不等它, 过滤只读条目自带的 botId
-		loadBotOptions();
+		// Tag 列表异步补进下拉: SSE 不等它, 过滤只读条目自带的 tag
+		loadTagOptions();
 
 		listEl = document.createElement("div");
 		listEl.className = "log-list";
@@ -148,9 +147,9 @@ export default {
 		listEl = null;
 		// 浮层挂在 body 上, 页面切走时必须收起
 		levelFilter?.close();
-		botFilter?.close();
+		tagFilter?.close();
 		levelFilter = null;
-		botFilter = null;
+		tagFilter = null;
 		follow = true;
 		if (rafId != null) {
 			cancelAnimationFrame(rafId);
@@ -158,7 +157,7 @@ export default {
 		}
 		queue = [];
 		// 模块级筛选状态: 不重置会让下次进入页面拿着上次的条件看到空白列表
-		filters = { levels: new Set(LOG_LEVELS), bot: "" };
+		filters = { levels: new Set(LOG_LEVELS), tag: "" };
 	},
 };
 
@@ -173,18 +172,17 @@ function createField(label, control) {
 	return wrap;
 }
 
-/** 把 Bot 列表灌进下拉; 拉不到就只留"全部 Bot / 全局", 不影响等级过滤 */
-async function loadBotOptions() {
+/** 把 Tag 列表灌进下拉; 拉不到就只留"全部 / 全局", 不影响等级过滤 */
+async function loadTagOptions() {
 	try {
 		const res = await apiFetch("/api/get_bot_list");
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		const data = await res.json();
 		// 响应回来时页面可能已经切走
-		if (!botFilter) return;
-		botFilter.setItems([
-			{ value: "", label: "全部 Bot" },
-			...(data.bots ?? []).map(bot => ({ value: bot.id, label: bot.name || bot.id })),
-			{ value: GLOBAL_BOT, label: "全局" },
+		if (!tagFilter) return;
+		tagFilter.setItems([
+			{ value: "", label: "全部 Tag" }, { value: GLOBAL_TAG, label: "全局" },
+			...(data.bots ?? []).map(bot => ({ value: bot.id, label: `Bot ${bot.name || bot.id}` })),
 		]);
 	} catch {
 		// 忽略: 等级过滤与按"全局"过滤仍然可用
@@ -194,7 +192,7 @@ async function loadBotOptions() {
 /** 单行是否命中当前筛选 */
 function matchFilter(line) {
 	return filters.levels.has(line.dataset.level)
-		&& (filters.bot === "" || filters.bot === line.dataset.botId);
+		&& (filters.tag === "" || filters.tag === line.dataset.tag);
 }
 
 /** 切换筛选: 只翻可见性, 不重建 DOM */
@@ -272,7 +270,7 @@ function flush() {
 		line.className = `log-line level-${level}`;
 		// 过滤要用的元数据: 切筛选时只读 dataset, 不必回头找原始条目
 		line.dataset.level = level;
-		line.dataset.botId = entry.botId ?? GLOBAL_BOT;
+		line.dataset.tag = entry.tag ?? GLOBAL_TAG;
 		// 单行纯文本, 避免拆成多个 span
 		line.textContent = `[${entry.time}] [${level.toUpperCase()}] [${entry.name}] ${entry.message}`;
 		// 新到的日志也要守当前筛选, 否则条件会被后续输出冲掉

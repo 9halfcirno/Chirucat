@@ -61,7 +61,7 @@ export class Bot extends EventEmitter {
 
 	constructor(config: BotConfig, readonly core: Core) {
 		super();
-		this.logger = new Logger(`Bot ${config.id}`, { botId: config.id })
+		this.logger = new Logger(`Bot ${config.id}`, { tag: config.id })
 		this.path = config.path;
 		this.id = config.id;
 		this.name = config.name || null;
