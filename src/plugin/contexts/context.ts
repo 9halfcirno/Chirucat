@@ -5,7 +5,7 @@ import { Message } from "../../entity/message";
 import type { BotActions } from "../../protocols/actions";
 import type { PluginManifest } from "../types";
 import { MessageAPI } from "./apis/message";
-import type { MessageCallbackEntry, PluginBotAPI, PluginCommandAPI, PluginConfigAPI, PluginFileSystemAPI, PluginKVAPI, PluginMessageAPI, PluginSessionAPI, PluginUserAPI, ReadonlyFsAPI } from "./types";
+import type { MessageCallbackEntry, PluginBotAPI, PluginCommandAPI, PluginConfigAPI, PluginCronAPI, PluginFileSystemAPI, PluginKVAPI, PluginMessageAPI, PluginSessionAPI, PluginUserAPI, ReadonlyFsAPI } from "./types";
 import { FileSystemAPI } from "./apis/fs";
 import { KVStore } from "./apis/kv";
 import { PluginConfig } from "./apis/config";
@@ -15,6 +15,7 @@ import type { PluginExports } from "../exports";
 import { StateError } from "../../errors/state-error";
 import type { Plugin } from "../plugin";
 import Logger from "../../utils/logger";
+import { CronScope } from "./apis/cron";
 
 export class PluginContext {
 	protected _bot: Bot;
@@ -59,7 +60,7 @@ export class PluginContext {
 		this._bot = plugin.bot;
 		this._manifest = plugin.manifest;
 
-		this.logger = new Logger(`Plugin ${this._manifest.id}`, { botId: this._bot.id });
+		this.logger = new Logger(`Plugin ${this._manifest.id}`, { tag: this._bot.id });
 		this.message = new MessageAPI((entry) => {
 			this._onMessageCallback.push(entry);
 		});
@@ -105,6 +106,14 @@ export class PluginContext {
 			return message instanceof Message ? this._bot.command.exec(message) : this._bot.command.exec(message, args || []);
 		}
 	}
+
+	/** 定时任务实现: 持有登记表与等待逻辑, 对外只暴露 PluginCronAPI */
+	private readonly _cronScope = new CronScope(
+		(action) => this.assertAlive(action),
+		() => this._bot.core.cron,
+	);
+
+	cron: PluginCronAPI = this._cronScope;
 
 	/** 用户标识: 只查不建, 账号落账由适配器负责 */
 	user: PluginUserAPI = {
@@ -217,7 +226,7 @@ export class PluginContext {
 	 * 幂等: enable 失败 / 卸载 / 注册表丢弃都会调用它。
 	 * 释放导出放在最前, 后续清理即便失败也不会让导出残留在注册表里。
 	 */
-	dispose() {
+	async dispose() {
 		if (this._disposed) return;
 		this._disposed = true;
 
@@ -230,6 +239,10 @@ export class PluginContext {
 			this._bot.command.unregister(com)
 		}
 		this._commands.clear();
+
+		// 停止本上下文创建的调度, 并等待运行中的 handler 收尾
+		await this._cronScope.stopAll(this.logger);
+
 		// 注销配置变更监听
 		this._config.dispose();
 		// 关闭 KV 连接(插件可能从未使用 KV, 未初始化时不应视为异常);

@@ -88,7 +88,7 @@ export class Service {
 			} catch (e) {
 				this.logger.error(`服务插件载入时错误清理失败`, e)
 			}
-			this.context?.dispose?.();
+			await this.context?.dispose();
 			this.context = null; // 上下文已释放, 断开引用避免后续误用
 			throw e; // 终态由调用方恢复: 加载失败对外就是"没开起来", 不留第三种状态
 		}
@@ -115,7 +115,7 @@ export class Service {
 				this.logger.error(`服务插件卸载时错误清理失败`, e)
 			}
 		}
-		this.context?.dispose();
+		await this.context?.dispose();
 		this.context = null; // 上下文已释放, 断开引用避免后续误用
 		destroy && (this.module = null);
 		this.configSchema = null; // 同时卸载配置项

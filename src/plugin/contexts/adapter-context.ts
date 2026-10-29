@@ -98,8 +98,8 @@ export class AdapterContext extends PluginContext {
 		} as ActionResponses[T["type"]];
 	}
 
-	override dispose(): void {
-		super.dispose();
+	override async dispose() {
+		await super.dispose();
 		this.actionHandlers = [];
 	}
 }

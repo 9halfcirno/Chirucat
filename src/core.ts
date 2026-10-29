@@ -42,6 +42,7 @@ import {
 	loggingSettings,
 	type LoggingSettings,
 } from "./config/settings/domains/logging";
+import { CronManager } from "./utils/cron-manager";
 
 const logger = new Logger("Core")
 
@@ -56,6 +57,10 @@ export class Core {
 	services = new ServiceHost(this);
 	/** 设置域注册表: 框架各模块的可变配置挂在这里, 由 WebUI 设置页统一读写 */
 	settings = new SettingsManager();
+
+	/** Cron调度: 框架Cron调度器, 管理Cron对象 */
+	cron: CronManager | null = null;
+
 	/** Hook 总线: 框架埋点, 服务插件通过 ctx.hook 注册 handler 干涉流程 */
 	readonly hooks = new HookBus();
 
@@ -82,13 +87,20 @@ export class Core {
 	}
 
 	async init() {
-		// Hook 埋点: 核心初始化之前, 可被服务插件(仅在热重启时)取消
+		// Hook 埋点: 核心初始化之前
 		if (this.hooks.dispatch("before.core.init", this)) {
 			throw new StateError("Core 初始化被 Hook 取消");
 		}
 
 		// 验证目录
 		await dirCheck(path.join(root, "data"));
+
+		// 创建Cron调度器
+		this.cron = new CronManager();
+		// 任务异常必须有出口: 插件里的 handler 抛错不应无声消失
+		this.cron.onError((error, job) => {
+			logger.error(`Cron任务 "${job.name ?? "<unnamed>"}" 执行出错:`, error);
+		});
 
 		// 设置域先就绪: 后面创建的模块都从它取值
 		await this.initSettings();
@@ -295,12 +307,18 @@ export class Core {
 			this.internalDB?.close(); // 关闭数据库连接
 			await this.bot.dispose(); // 停止所有Bot, 并释放状态文件监听
 			await this.services.dispose(); // 卸载服务插件(基础设施最后倒, 与启动顺序相反)
+
+			logger.log(`正在停止所有Cron任务, 并等待运行中任务完成`)
+			this.cron?.stopAll(); // 停止所有调度
+			await this.cron?.waitIdle(15_000); // 等待15s内所有任务完成
+
 			await this.webui?.close() // 停止webui
 			this.settings.close(); // 释放设置域(含值文件监听)
 			this.statistics?.close(); // 冲刷统计缓冲并关闭数据库
 		} catch (e) {
 			logger.error("关闭 Core 时出错:", e);
 		} finally {
+			this.cron = null;  // 不再暴露Cron
 			this.webui = null; // 释放后不再把已停止的服务器给出去
 			this.statistics = null; // 置空后 ctx.core.statistics 才如实返回 null, 而不是已关闭的实例
 			this.session = null;

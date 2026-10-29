@@ -17,6 +17,8 @@
   - [文件系统存储](#fs对象)
     - [只读FS对象](#只读fs对象)
   - [插件目录访问](#plugin对象)
+- [定时任务](#定时任务)
+  - [cron对象](#cron对象)
 - [其他](#其他)
   - [日志记录](#logger对象)
   - [动作发送](#action方法)
@@ -206,6 +208,85 @@ interface KVInitOptions {
 提供与 `fs` 相同的读取类方法, 为[**只读FS对象**](#只读fs对象)
 
 所有路径均基于插件代码目录
+
+## 定时任务
+
+### cron对象
+
+该对象用于注册周期或一次性任务, 由框架的 Cron 调度器统一托管。
+
+- `schedule(expression: string | Date, handler: () => void, options?: CronOptions): CronJob`: 注册一个任务, 返回任务句柄
+- `jobs(): CronJob[]`: 列出**本上下文**注册的任务
+
+`expression` 用 croner 的表达式语法, 支持 5 / 6 / 7 段(含秒时第 0 段为秒, 7 段时第 6 段为年)。常用写法:
+
+- `"* * * * *"`: 每分钟一次
+- `"0 */5 * * * *"`: 每 5 分钟一次
+- `"0 0 9 * * *"`: 每天 9:00
+- `"@daily"` / `"@hourly"` 等别名同样可用
+- 传入 `Date` 则该任务只在对应时刻执行一次; 时刻已经过去时不会执行(不补跑)
+
+```ts
+interface PluginCronAPI {
+	schedule(expression: string | Date, handler: () => void, options?: CronOptions): CronJob
+	jobs(): CronJob[]
+}
+
+interface CronJob {
+	name: string                          // 任务名, 全局唯一
+	pause(): void                         // 暂停触发: 定时器仍在, 到点会被跳过
+	resume(): void                        // 恢复触发
+	stop(): void                          // 停止并出表, 之后同名任务可重新注册
+	trigger(): Promise<void>              // 立即手动触发一次
+	nextRun(): Date | null                // 下次运行时刻; 已停止或没有下次时为 null
+	isBusy(): boolean                     // handler 当前是否仍在执行
+	isStopped(): boolean                  // 是否已停止
+}
+```
+
+示例:
+
+```ts
+export default {
+	init(ctx) {
+		ctx.cron.schedule("0 */10 * * * *", () => {
+			ctx.logger.log("每 10 分钟执行一次")
+		}, { name: "myPLugin-heartbeat" })
+
+		// 一次性任务: 10 分钟后执行
+		ctx.cron.schedule(new Date(Date.now() + 600_000), () => {
+			ctx.logger.log("一次性任务")
+		}, { name: "myPlugin-remind" })
+	}
+}
+```
+
+`options` 为 croner 的 `CronOptions`, 框架会在其基础上强制补上 `name` 与统一的错误出口。常用字段:
+
+```ts
+type CronOptions = {
+	name?: string          // 任务名; 缺省时框架生成 8 位随机名
+	protect?: boolean      // 默认 true: 上一次还在跑时跳过本次, 不并发
+	paused?: boolean       // 默认 false: 是否创建后先暂停
+	maxRuns?: number       // 最多执行次数; 用尽后不再触发(名字仍被占用, 需 stop() 才释放)
+	startAt?: Date | string
+	stopAt?: Date | string
+	timezone?: string      // 如 "Asia/Shanghai", 缺省为服务器本地时区
+}
+```
+
+约定:
+
+- **任务名全局唯一**: 普通插件与服务插件共用同一个调度器, 固定 `name` 时建议带上自己的插件 id, 否则重名会直接抛异常
+- 未传 `name` 时框架生成随机名, 但此时无法预测名称, 需要后续操作句柄请显式指定
+- `protect` 默认为 `true`: 当一次执行还没结束、下一次已到点时, 本次会被**跳过**(不排队)。任务执行时间可能超过周期时, 请自行调小周期或显式关闭 `protect`
+- handler 抛出的异常由框架统一记录到日志, **不会中断后续调度**, 也不会让进程崩溃
+- handler 支持返回 Promise, 框架会等它完成(因此 `isBusy()` 与并发保护才有效)
+- 表达式非法、`name` 重复或 Core 已关闭时, `schedule` 直接抛异常, 建议在 `init` 中注册以便失败时被发现
+- 任务随上下文释放自动停止: 插件卸载 / 初始化失败 / 从注册表移除时, 框架停止本上下文的全部任务, 并最多等待 5 秒让运行中的 handler 收尾(超时只记警告, 不阻断卸载)
+- **不要缓存 `CronJob`**: 上下文释放后句柄失效, 重新启用插件会得到新的任务实例
+- 不要在 handler 里依赖已释放的资源: 卸载期间任务可能仍在跑最后一段, 此时 `ctx.kv` / `ctx.fs` 等已关闭
+- 不要在单次调度任务中运行耗时代码, 避免阻塞事件循环和资源冲突
 
 ## 其他
 

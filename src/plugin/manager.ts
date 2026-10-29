@@ -10,7 +10,7 @@ import { readConfigDefine } from "../config/define";
 import type { Bot } from "../bot/bot";
 import type { Message } from "../entity/message";
 import type { ActionResponses, BotActions } from "../protocols/actions";
-import type { AdapterContext } from "./contexts/adapter-context";
+import { AdapterContext } from "./contexts/adapter-context";
 import Logger from "../utils/logger";
 import { dfs } from "../utils/dfs";
 import { PluginExports } from "./exports";
@@ -115,7 +115,7 @@ export class PluginManager {
 				)
 			) {
 				// 实例即将被丢弃, 先释放其运行时资源(含对外导出)
-				existing?.context?.dispose();
+				await existing?.context?.dispose();
 				const plugin = new Plugin({ manifest, scope, bot: this.bot });
 				await this.setupConfig(plugin);
 				registry.set(id, plugin);
@@ -128,7 +128,7 @@ export class PluginManager {
 		for (const [id, plugin] of [...registry]) {
 			if (!collected.has(id) && !ACTIVE.includes(plugin.status)) {
 				// 丢弃前释放运行时资源(含对外导出); dispose 幂等
-				plugin.context?.dispose();
+				await plugin.context?.dispose();
 				registry.delete(id);
 			}
 		}
@@ -222,7 +222,7 @@ export class PluginManager {
 
 			// Hook 埋点: 插件启用之前, 可被服务插件取消
 			if (this.bot.core.hooks.dispatch("before.plugin.enable", plugin)) {
-				context.dispose();
+				await context.dispose();
 				throw new StateError(`插件 ${plugin.id} 启用被 Hook 取消`);
 			}
 
@@ -230,7 +230,7 @@ export class PluginManager {
 				await plugin.enable(context);
 			} catch (e) {
 				// enable 可能在其内部释放之前就报错, 这里兜底(dispose 幂等)
-				context.dispose();
+				await context.dispose();
 				throw e;
 			}
 
@@ -330,6 +330,19 @@ export class PluginManager {
 			this.bot.logger.error(`已启用插件中找不到id为 ${adapter} 的适配器插件!`);
 			return { success: false, error: "No adapter on this bot.", code: "ADAPTER_NOT_FOUND" };
 		}
-		return await (adapterPlugin.context as AdapterContext).handleAction(action, extra);
+
+		const context = adapterPlugin.context;
+		// 本方法的契约是"总能给出响应对象": 上下文缺失说明适配器已被卸载,
+		// 这里必须显式返回失败响应, 而不是用 `?.` 让 undefined 漏给调用方
+		if (!(context instanceof AdapterContext)) {
+			this.bot.logger.error(`适配器插件 ${adapter} 没有可用的运行上下文, 无法处理动作 ${action.type}`);
+			return {
+				success: false,
+				error: "Adapter context is not available.",
+				code: "ADAPTER_NOT_FOUND",
+			} as ActionResponses[T["type"]];
+		}
+
+		return await context.handleAction(action, extra);
 	}
 }

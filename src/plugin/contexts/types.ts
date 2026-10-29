@@ -8,6 +8,8 @@ import type { BotEventMeta, BotEvents } from "../../protocols/events";
 import type { SessionType } from "../../entity/session";
 import type { SessionPlatformInfo } from "../../internal/session-manager";
 import type { UserPlatformInfo } from "../../internal/user-manager";
+import type { CronJob } from "../../utils/cron-manager";
+import type { CronOptions } from "croner";
 
 export type PluginMessageCallback = (message: Message) => unknown;
 
@@ -66,6 +68,12 @@ export interface PluginCommandAPI {
 
 export type CommandRegisterOptions = {
 	permission?: number;
+}
+
+export interface PluginCronAPI {
+	schedule(expression: string | Date, handler: () => void, options?: CronOptions): CronJob;
+
+	jobs(): CronJob[];
 }
 
 export interface PluginFileSystemAPI {

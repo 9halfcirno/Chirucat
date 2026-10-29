@@ -168,7 +168,7 @@ export class ServiceHost {
 				continue;
 			}
 			// 实例即将被丢弃, 先释放其运行时资源(含对外导出)
-			existing?.context?.dispose();
+			await existing?.context?.dispose();
 			const service = new Service({ manifest, core: this.core });
 			await this.setupConfig(service);
 			this.registry.set(id, service);
@@ -177,7 +177,7 @@ export class ServiceHost {
 		// 清理悬空条目: 目录中已消失且不在活跃态的服务
 		for (const [id, service] of [...this.registry]) {
 			if (!collected.has(id) && !ACTIVE.includes(service.status)) {
-				service.context?.dispose();
+				await service.context?.dispose();
 				this.registry.delete(id);
 			}
 		}
@@ -306,7 +306,7 @@ export class ServiceHost {
 				await service.enable(context);
 			} catch (e) {
 				// enable 可能在其内部释放之前就报错, 这里兜底(dispose 幂等)
-				context.dispose();
+				await context.dispose();
 				throw e;
 			}
 

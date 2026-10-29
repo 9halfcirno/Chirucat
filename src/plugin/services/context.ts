@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Bot } from "../../bot/bot";
+import type { Core } from "../../core";
 import type { CommandManager } from "../../command/manager";
 import type { Command } from "../../command/types";
 import { Message } from "../../entity/message";
@@ -19,6 +20,7 @@ import type {
 	MessageCallbackEntry,
 	PluginCommandAPI,
 	PluginConfigAPI,
+	PluginCronAPI,
 	PluginEventAPI,
 	PluginEventFilter,
 	PluginEventObserver,
@@ -28,6 +30,7 @@ import type {
 	PluginMessageAPI,
 	ReadonlyFsAPI,
 } from "../contexts/types";
+import { CronScope } from "../contexts/apis/cron";
 import type { PluginManifest } from "../types";
 import { CoreAPI } from "./apis/core";
 import type { Service } from "./service";
@@ -68,6 +71,10 @@ export class ServiceContext {
 	kv: PluginKVAPI;
 	/** 插件配置(只读), 未声明 manifest.config 时为空配置 */
 	config: PluginConfigAPI;
+	/** 定时任务: 与其他上下文共用同一套登记与释放规则 */
+	cron: PluginCronAPI;
+	/** 定时任务实现, 供 dispose 停止并等待 */
+	private readonly _cronScope: CronScope;
 	/** 插件相关路径 */
 	path: {
 		/** 插件代码根目录 */
@@ -80,6 +87,8 @@ export class ServiceContext {
 	private _config: PluginConfig;
 	/** 内部持有的 KV 存储实例, 供 dispose 关闭连接 */
 	private _kv: KVStore;
+	/** 框架核心实例, 取 Cron 调度器用; 对外只暴露收窄后的 CoreAPI */
+	private readonly _core: Core;
 
 	private _onMessageCallback: MessageCallbackEntry[] = [];
 
@@ -115,6 +124,7 @@ export class ServiceContext {
 			this._webuiDisposers.push(dispose);
 		});
 		this._manifest = service.manifest;
+		this._core = service.core;
 
 		this.logger = new Logger(`Service ${this._manifest.id}`);
 		this.message = new MessageAPI((entry) => {
@@ -136,6 +146,11 @@ export class ServiceContext {
 		this.kv = this._kv;
 		this._config = new PluginConfig(service.config);
 		this.config = this._config;
+		this._cronScope = new CronScope(
+			(action) => this.assertAlive(action),
+			() => this._core.cron,
+		);
+		this.cron = this._cronScope;
 
 		this.path = {
 			plugin: this._manifest.path,
@@ -332,7 +347,7 @@ export class ServiceContext {
 	 * 幂等: enable 失败 / 卸载 / 注册表丢弃都会调用它。
 	 * 释放导出放在最前, 后续清理即便失败也不会让导出残留在注册表里。
 	 */
-	dispose() {
+	async dispose() {
 		if (this._disposed) return;
 		this._disposed = true;
 
@@ -359,6 +374,8 @@ export class ServiceContext {
 			this._commandManager.unregister(com)
 		}
 		this._commands.clear();
+		// 停止本上下文创建的调度, 并等待运行中的 handler 收尾
+		await this._cronScope.stopAll(this.logger);
 		// 注销本上下文注册的 WebUI 路由与页面: 之后该路径返回 503(服务未启用)而不是 404,
 		// 页面则从导航清单里消失(前端下一次对账就会摘掉它)
 		for (const disposeWebUI of this._webuiDisposers) {

@@ -433,6 +433,13 @@ export default {
 
 插件代码目录的只读文件系统, 供读取自带的模板/资源。方法见[普通上下文的 `plugin` 对象](./normal.md#plugin对象)。
 
+
+## 定时任务
+
+### cron对象
+
+用法与普通插件上下文一样, 请见[普通上下文的 `cron` 对象](./normal.md#cron对象)
+
 ## 其他
 
 ### logger对象

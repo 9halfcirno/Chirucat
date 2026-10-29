@@ -31,7 +31,8 @@
     "check:settings": "tsx scripts/check-settings.ts && tsx scripts/check-settings-api.ts",
     "check:webui-spa": "node scripts/check-webui-spa.mjs",
     "check:types": "tsc -p tsconfig.check.json --noEmit",
-    "check:plugins": "tsc -p tsconfig.plugins.json --noEmit"
+    "check:plugin-imports": "tsx scripts/check-plugin-imports.ts",
+    "check:plugins": "tsc -p tsconfig.plugins.json --noEmit && tsx scripts/check-plugin-imports.ts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
@@ -42,6 +43,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
+    "croner": "^11.0.0",
     "esbuild": "^0.28.2",
     "express": "^5.2.1",
     "json5": "^2.2.3",
