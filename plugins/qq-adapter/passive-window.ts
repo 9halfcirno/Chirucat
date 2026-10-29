@@ -1,4 +1,4 @@
-import { TTLMap } from "../../src/utils/ttl-map";
+import { TTLMap } from "./ttl-map";
 import { PASSIVE_REPLY_WINDOW } from "./config";
 
 /**
