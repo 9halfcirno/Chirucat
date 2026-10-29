@@ -7,18 +7,27 @@
 	//
 	// 用法: tsc -p tsconfig.plugins.json --noEmit  (或 npm run check:plugins)
 	//
-	// 两点与主配置的差异:
-	// 1. include 带上 src/: 插件靠 import 引用框架类型, 一起纳入才能被当作 root file;
-	//    rootDir 相应改成 "." —— 沿用主配置的 "src" 会让所有插件文件报 TS6059,
+	// 与主配置的差异:
+	// 1. include 只含插件自身目录 —— 编译边界与 PluginLoader 的加载边界对齐:
+	//    插件是独立单元, src/ 不作为 root file 参与检查(它由 check:types 负责),
+	//    只在被 import 时作为类型来源拉进 program。
+	// 2. rootDir 改成 "." —— 主配置的 "src" 会让被引用的 src 文件报 TS6059,
 	//    那样这个检查等于永远失败、什么也没查。
-	// 2. 不包含 bots/*/plugins/**: 那是每个 Bot 实例的私有插件目录, 各自对应安装时的
+	// 3. 不包含 bots/*/plugins/**: 那是每个 Bot 实例的私有插件目录, 各自对应安装时的
 	//    协议版本, 把仓库检查绑在它们身上会让 check:plugins 永久变红。要检查自己的
 	//    Bot 插件, 临时把它加进 include 即可。
+	//
+	// 导入边界的限制方式:
+	// 插件只能引用自身目录下的代码、npm 包与 Node 内置模块, 与 PluginLoader 运行时的
+	// resolver 一致。TS 无法区分"类型导入"与"值导入"来限制路径, 而 `import type` 在打包时
+	// 被 esbuild 擦除、不参与解析, 所以这里允许类型导入从 src 取类型;
+	// 真正会进入产物、越界引用外部目录的值导入由 scripts/check-plugin-imports.ts 强制
+	// (它复用同一个 resolver, 结果与真实加载行为一致)。
 	"extends": "./tsconfig.json",
 	"compilerOptions": {
 		"noEmit": true,
 		"types": ["node"],
 		"rootDir": "."
 	},
-	"include": ["src/**/*.ts", "plugins/**/*.ts", "services/**/*.ts"]
+	"include": ["plugins/**/*.ts", "services/**/*.ts"]
 }

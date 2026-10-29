@@ -36,6 +36,24 @@ export class PluginLoader {
 
 	async load<M = PluginModule>(fileURL: string): Promise<{ default: M; }> {
 		// 插件根目录：入口文件所在目录，也是 prequire 的解析基准目录
+		const prequire = module.createRequire(path.join(path.dirname(fileURL), "package.json"))
+
+		const code = await this.build(fileURL);
+		return new Function("require", `${code};return ${PLUGIN_MODULE_VAR};`)(prequire) as { default: M };
+	}
+
+	/**
+	 * 仅按加载时相同的规则解析并打包, 不执行产物
+	 *
+	 * 用于静态检查插件是否导入了自身目录之外的代码(见 scripts/check-plugin-imports.ts):
+	 * 复用同一个 resolver, 检查结果才与真实加载行为一致。
+	 */
+	async verify(fileURL: string): Promise<void> {
+		await this.build(fileURL);
+	}
+
+	private async build(fileURL: string): Promise<string> {
+		// 插件根目录：入口文件所在目录，也是 prequire 的解析基准目录
 		const pluginRoot = path.dirname(fileURL);
 		const prequire = module.createRequire(path.join(pluginRoot, "package.json"))
 
@@ -56,7 +74,7 @@ export class PluginLoader {
 
 		const code = output.outputFiles?.[0]?.text;
 		if (!code) throw new Error(`构建产物为空`)
-		return new Function("require", `${code};return ${PLUGIN_MODULE_VAR};`)(prequire) as { default: M };
+		return code;
 	}
 
 	/**
