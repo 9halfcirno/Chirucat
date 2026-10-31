@@ -143,17 +143,23 @@ function errorMessage(e: unknown): string {
 	return e instanceof Error ? e.message : String(e);
 }
 
+/** 同一 msg_id 允许的被动回复条数, 超出后平台不再接受, 只能退回主动消息 */
+const PASSIVE_SEQ_LIMIT = 5;
+
 /**
  * 构造被动回复字段
  *
  * 源消息仍在窗口内才带 `msg_id`(被动回复, 不占主动消息限额);
- * 过期或没有 msg_id 时返回空对象 —— 不带 msg_id 的请求就是主动消息。
- * `msg_seq` 仅在被动回复时分配: 同一 msg_id 的多条回复需要互不相同的序号。
+ * 过期、没有 msg_id 或序号已超过 {@link PASSIVE_SEQ_LIMIT} 时返回空对象 ——
+ * 不带 msg_id 的请求就是主动消息。
+ * `msg_seq` 仅在真正被动回复时分配: 同一 msg_id 的多条回复需要互不相同的序号。
  */
 function passiveRef(deps: QQActionDeps, extra: ActionExtra): Record<string, any> {
 	const msgId = deps.msgWindow.pick(extra);
 	if (!msgId) return {};
-	return { msg_id: msgId, msg_seq: deps.seq.next(extra) };
+	const seq = deps.seq.next(extra);
+	if (seq === undefined || seq > PASSIVE_SEQ_LIMIT) return {};
+	return { msg_id: msgId, msg_seq: seq };
 }
 
 /**
