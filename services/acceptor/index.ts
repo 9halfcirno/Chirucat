@@ -82,6 +82,18 @@ export default {
 		// 改配置后下一条消息重新解析参数(不需要重启服务)
 		ctx.config.watch(() => { cached = null; });
 
+		ctx.command.register("assign", (msg) => {
+			if (!msg) return;
+
+			if (!settings(ctx).sessionTypes.includes(msg.session.type)) return;
+			if (msg.mentionedSelf && msg.session.unionId) {
+				// 手动切换受理人
+				overrideAcceptor(ctx, msg.meta.bot, resolveUnion(ctx, msg.session.id) ?? "", msg.meta.adapter);
+
+				msg.reply(`当前会话内响应账号已切换为本账号`);
+			}
+		});
+
 		try {
 			ctx.kv.init();
 			restore(ctx, table);
