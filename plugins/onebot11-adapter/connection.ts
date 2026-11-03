@@ -19,6 +19,30 @@ type PendingCall = {
 	timer: NodeJS.Timeout;
 };
 
+/**
+ * API 调用超时
+ *
+ * 与普通失败的区别: 请求**已经发出**, 只是没等到回包。协议端很可能仍在处理
+ * (典型如视频上传), 稍后照样会送达。调用方不应把这种错误当成“没发出去”
+ * 去重试 —— 那会造成重复发送。
+ */
+export class Ob11ApiTimeoutError extends Error {
+	readonly code = "REQUEST_TIMEOUT" as const;
+	/** 请求已发出, 结果未知 */
+	readonly sent = true;
+
+	constructor(action: string, timeoutMs: number) {
+		super(`OneBot API 超时(${timeoutMs}ms 未响应): ${action}`);
+		this.name = "Ob11ApiTimeoutError";
+	}
+}
+
+/** 判断是否为 API 调用超时 */
+export function isTimeoutError(e: unknown): e is Ob11ApiTimeoutError {
+	return e instanceof Ob11ApiTimeoutError
+		|| (typeof e === "object" && e !== null && (e as { code?: unknown }).code === "REQUEST_TIMEOUT");
+}
+
 export interface Ob11ConnectionOptions {
 	logger: Logger;
 	/** 读取连接参数; 每次连接时调用, 使配置改动能在下一次连接生效 */
@@ -95,8 +119,10 @@ export class Ob11Connection {
 	 * 通过 `echo` 与响应配对; 超时或连接关闭时 reject。
 	 * @param action API 名, 如 `send_group_msg`
 	 * @param params 调用参数
+	 * @param timeoutMs 本次调用超时(ms), 缺省为 {@link API_TIMEOUT};
+	 *   发送类动作应传入更长的值(见 constants.ts 的 DEFAULT_SEND_TIMEOUT)
 	 */
-	callApi<T = any>(action: string, params: Record<string, unknown>): Promise<T> {
+	callApi<T = any>(action: string, params: Record<string, unknown>, timeoutMs: number = API_TIMEOUT): Promise<T> {
 		return new Promise<T>((resolve, reject) => {
 			const socket = this.socket;
 			if (!socket || socket.readyState !== WebSocket.OPEN) {
@@ -104,11 +130,15 @@ export class Ob11Connection {
 				return;
 			}
 
+			// 配置值可能是 NaN/负数, 兜底回默认值, 避免定时器立即触发
+			const wait = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : API_TIMEOUT;
+
 			const echo = `chirucat-${Date.now()}-${++this.echoSeq}`;
 			const timer = setTimeout(() => {
 				this.pending.delete(echo);
-				reject(new Error(`OneBot API 超时: ${action}`));
-			}, API_TIMEOUT);
+				// 请求已发出: 用专用错误类型标记“结果未知”, 交由调用方区分处理
+				reject(new Ob11ApiTimeoutError(action, wait));
+			}, wait);
 
 			this.pending.set(echo, { resolve, reject, timer });
 

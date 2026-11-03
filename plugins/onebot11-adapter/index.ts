@@ -1,7 +1,7 @@
 import type { AdapterContext } from "../../src/plugin/contexts/adapter-context";
 import { ActionRouter, registerOb11Actions, type Ob11ActionDeps } from "./actions";
 import type { Ob11CodecDeps } from "./codec";
-import { DEFAULT_RECONNECT_INTERVAL, PLATFORM } from "./constants";
+import { DEFAULT_RECONNECT_INTERVAL, DEFAULT_SEND_TIMEOUT, MAX_SEND_TIMEOUT, PLATFORM } from "./constants";
 import { Ob11Connection } from "./connection";
 import { buildOb11Event } from "./events";
 import { ContentFilter } from "./filters";
@@ -32,6 +32,17 @@ function readString(ctx: AdapterContext, key: string, fallback = ""): string {
 function readBoolean(ctx: AdapterContext, key: string, fallback: boolean): boolean {
 	const value = ctx.config.get(key, fallback);
 	return typeof value === "boolean" ? value : fallback;
+}
+
+/**
+ * 从配置读发送超时(ms)
+ *
+ * 非法值回落到默认值, 并夹在硬上限内: 配置只是便利, 不该让一条发送无限挂着。
+ */
+function readSendTimeout(ctx: AdapterContext): number {
+	const value = Number(ctx.config.get("sendTimeout", DEFAULT_SEND_TIMEOUT));
+	if (!Number.isFinite(value) || value <= 0) return DEFAULT_SEND_TIMEOUT;
+	return Math.min(value, MAX_SEND_TIMEOUT);
 }
 
 class Ob11Adapter {
@@ -69,7 +80,9 @@ class Ob11Adapter {
 			codec: this.codec,
 			logger,
 			// 每次发送时重新读取, 配置变更无需重载插件
-			getSendDelay: () => readSendDelay(ctx.config)
+			getSendDelay: () => readSendDelay(ctx.config),
+			// 发送超时也每次重读: 视频类大包需要更长的等待
+			getSendTimeout: () => readSendTimeout(ctx)
 		};
 	}
 

@@ -104,6 +104,16 @@
 			}
 		},
 		{
+			"type": "slider",
+			"id": "sendTimeout",
+			"label": "发送超时(ms)",
+			"min": 10000,
+			"max": 600000,
+			"step": 10000,
+			"default": 300000,
+			"desc": "等待协议端确认发送结果的上限。视频/音频等大文件由协议端下载上传, 可能远超普通消息的 15s; 超时只代表结果未知, 不等于没发出去"
+		},
+		{
 			"type": "switch",
 			"id": "contentFilter",
 			"label": "启用内容过滤",

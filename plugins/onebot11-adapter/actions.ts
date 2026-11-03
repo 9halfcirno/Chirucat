@@ -6,6 +6,7 @@ import type Logger from "../../src/utils/logger";
 import { blocksToSegments, type Ob11CodecDeps, type SendableBlock } from "./codec";
 import { PLATFORM } from "./constants";
 import type { Ob11Connection } from "./connection";
+import { isTimeoutError } from "./connection";
 import { waitSendDelay, type SendDelayRange } from "./send-delay";
 import type { OneBotSegment } from "./types";
 
@@ -25,6 +26,13 @@ export interface Ob11ActionDeps {
 	logger: Logger;
 	/** 读取当前随机发送延迟区间; 返回 null 表示不延迟 */
 	getSendDelay: () => SendDelayRange | null;
+	/**
+	 * 读取发送动作的超时(ms)
+	 *
+	 * 每次发送时重新读取, 配置改动无需重载插件。视频等大包由协议端下载上传,
+	 * 耗时可能远超普通 API 调用的默认超时。
+	 */
+	getSendTimeout: () => number;
 }
 
 /** 源事件的 extra */
@@ -174,10 +182,22 @@ const handleMessageSend: Ob11ActionHandler<"message.send"> = async (action, _ext
 			: { user_id: target.numericId, message };
 
 		const actionName = target.type === "group" ? "send_group_msg" : "send_private_msg";
-		const res = await deps.connection.callApi(actionName, params);
+		const res = await deps.connection.callApi(actionName, params, deps.getSendTimeout());
 		return sendResult(res, deps.logger);
 	} catch (e) {
 		const msg = errorMessage(e);
+
+		// 超时 ≠ 没发出去: 请求已经到达协议端, 它可能仍在下载/上传,
+		// 稍后照样送达。这里不能报成“发送失败”让调用方重试 —— 那会重复发一条。
+		if (isTimeoutError(e)) {
+			deps.logger.warn(`发送消息超时(请求已发出, 协议端可能仍在处理): ${msg}`);
+			return {
+				success: false,
+				code: "REQUEST_TIMEOUT",
+				error: `请求已发出但未在限定时间内收到响应, 协议端可能仍会送达; 结果未知, 请勿直接重发 (${msg})`
+			};
+		}
+
 		deps.logger.error(`发送消息失败: ${msg}`);
 		return { success: false, code: "PLATFORM_ERROR", error: msg };
 	}
