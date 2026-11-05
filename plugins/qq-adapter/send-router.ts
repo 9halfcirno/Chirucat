@@ -1,7 +1,5 @@
 import type { OutboundMedia } from "./codec";
 import type { ImageSize } from "./img-size";
-import type { MediaSource } from "./types";
-import { resolveFileName } from "./media";
 
 /**
  * 发送侧消息的自动路由
@@ -18,20 +16,17 @@ import { resolveFileName } from "./media";
  * 频繁裂图, 应改回由业务侧提供 Buffer 走素材通道。
  */
 
-/** 可进素材通道的图片: 本地 Buffer 的 image 块 */
-export type BufferImageMedia = OutboundMedia & { source: Extract<MediaSource, { kind: "buffer" }> };
-
 /** 可参与图文混排的 image 块(Buffer 或 http(s) 链接) */
 export type MixedImageMedia = OutboundMedia & { type: "image" };
 
-export function isBufferImage(item: OutboundMedia): item is BufferImageMedia {
-	return item.type === "image" && item.source.kind === "buffer";
+/** 仅放行 http(s): 其他 scheme(javascript: 等)不得进入 markdown 链接语法 */
+export function isHttpUrl(url: string): boolean {
+	return /^https?:\/\//i.test(url);
 }
 
-/** 仅放行 http(s): 其他 scheme(javascript: 等)不得进入 markdown 链接语法 */
 export function isMixedImage(item: OutboundMedia): item is MixedImageMedia {
 	if (item.type !== "image") return false;
-	return item.source.kind === "buffer" || /^https?:\/\//i.test(item.source.url);
+	return item.source.kind === "buffer" || isHttpUrl(item.source.url);
 }
 
 /** 路由判定结果 */
@@ -61,39 +56,52 @@ export function planSend(content: string, media: OutboundMedia[], mergeMixedMark
 /** markdown 正文长度上限: 平台约 5000, 留余量防超长素材 URL 撑爆 */
 const MAX_MARKDOWN_LENGTH = 4500;
 
-/** markdown 里的一张内嵌图: 素材 URL + 可选的原图尺寸 */
-export type MixedMarkdownImage = { url: string; size?: ImageSize | undefined };
-
 /**
- * 拼装图文混排的 markdown
+ * 有序混排片段: 按原始消息块顺序给到的文本段与已解析图片段
  *
- * 尺寸标签来自图片自身头部解析(img-size): 不带 `#宽px #高px` 时 QQ 客户端
- * 会把图拉伸到统一框, 表情包会变形得很明显。解析不到就不写尺寸(文档中尺寸可选)。
- *
- * @returns 超长时返回 null, 由调用方回退"先文本后媒体"的逐条发送
+ * 文本段之间直接拼接(保持 "你好, 世界" 这类跨段连续性), 图片独立成行;
+ * 空白文本段丢弃(图片前后的排版空格没有信息量, 反而会把行距拉乱)。
  */
-export function buildMixedMarkdown(text: string, images: MixedMarkdownImage[]): string | null {
-	const rendered = images
-		.map((img) => {
-			// 空格会截断 markdown 链接; 素材 URL 是 base64url 无此问题, 公网 URL 常见含空格
-			const url = img.url.replaceAll(" ", "%20");
-			return img.size
-				? `![图片 #${img.size.width}px #${img.size.height}px](${url})`
-				: `![图片 #0px #0px](${url})`;
-		})
-		.join("\n");
-	const body = `${text}\n\n${rendered}`;
-	if (body.length > MAX_MARKDOWN_LENGTH) return null;
-	// 文本以 [ 开头会被 markdown 当作链接语法的一部分, 转义首字符即可
-	return body.startsWith("[") ? `\\${body}` : body;
+export type MixedSegment =
+	| { kind: "text"; value: string }
+	| { kind: "image"; url: string; size?: ImageSize | undefined };
+
+function imageTag(url: string, size: ImageSize | undefined): string {
+	// 空格会截断 markdown 链接; 素材 URL 是 base64url 无此问题, 公网 URL 常见含空格
+	const safe = url.replaceAll(" ", "%20");
+	return size
+		? `![图片 #${size.width}px #${size.height}px](${safe})`
+		: `![图片 #0px #0px](${safe})`;
 }
 
 /**
- * 素材通道上传时申报的文件名
+ * 按片段顺序拼装图文混排的 markdown
  *
- * 扩展名由文件头(magic bytes)推断, 与 uploader 同一套规则 —— 避免"名字说 png 实际 webp"
- * 导致 prepare 申报的 content_type 与字节不符。
+ * 尺寸标签来自图片自身头部解析(img-size): 不带 `#宽px #高px` 时 QQ 客户端
+ * 会把图拉伸到统一框, 表情包会变形得很明显。解析不到按 `#0px #0px` 交给平台自适应。
+ *
+ * @returns 无有效内容或超长时返回 null, 由调用方回退"先文本后媒体"的逐条发送
  */
-export function materialFileName(item: BufferImageMedia): string {
-	return resolveFileName(item.source.buffer, item.fileType);
+export function renderMixedSegments(segments: MixedSegment[]): string | null {
+	const parts: string[] = [];
+	let textBuf = "";
+	const flush = () => {
+		const chunk = textBuf.trim();
+		if (chunk) parts.push(chunk);
+		textBuf = "";
+	};
+	for (const seg of segments) {
+		if (seg.kind === "text") {
+			textBuf += seg.value;
+			continue;
+		}
+		flush();
+		parts.push(imageTag(seg.url, seg.size));
+	}
+	flush();
+
+	if (parts.length === 0) return null;
+	const body = parts.join("\n\n");
+	// 首字符 [ 的转义不在这里做: 所有 msg_type=2 出口在 actions.sendText 统一收口
+	return body.length > MAX_MARKDOWN_LENGTH ? null : body;
 }

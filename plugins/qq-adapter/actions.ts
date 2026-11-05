@@ -1,16 +1,17 @@
 import type { AdapterContext } from "../../src/plugin/contexts/adapter-context";
 import type { ActionResponses, BotActions } from "../../src/protocols/actions";
 import type { ActionErrorCode } from "../../src/protocols/errors";
+import type { MessageBlockSend } from "../../src/protocols/message-block";
 import type Logger from "../../src/utils/logger";
 import type { QQApi } from "./api";
 import { splitSendBlocks, stringifyContent } from "./codec";
 import type { ImageMaterialCache } from "./image-cache";
-import { MSG_TYPE_MEDIA, MSG_TYPE_TEXT, PLATFORM } from "./config";
-import { toBuffer } from "./media";
-import type { PassiveReplyWindow } from "./passive-window";
+import { MSG_TYPE_MEDIA, MSG_TYPE_TEXT, PLATFORM, QQ_FILE_TYPE } from "./config";
 import { getImageSize, imageScaleFromBytes } from "./img-size";
-import type { MixedImageMedia, MixedMarkdownImage } from "./send-router";
-import { buildMixedMarkdown, isBufferImage, materialFileName, planSend } from "./send-router";
+import { resolveFileName, toBuffer } from "./media";
+import type { PassiveReplyWindow } from "./passive-window";
+import type { MixedSegment } from "./send-router";
+import { isHttpUrl, planSend, renderMixedSegments } from "./send-router";
 import type { QQSendTarget } from "./types";
 import type { MediaUploader } from "./uploader";
 
@@ -192,10 +193,12 @@ async function sendText(
 ): Promise<ActionResponses["message.send"]> {
 	// 被动回复: 带上源事件的 msg_id, 否则会占用主动消息限额
 	const ref = passiveRef(deps, extra);
+	// markdown 链接语法在行首会吞掉紧随的括号, 所有 msg_type=2 发送统一收口转义
+	const safeContent = content.startsWith("[") ? `\\${content}` : content;
 	try {
 		const res = await deps.api.sendMessage(target, {
 			msg_type: MSG_TYPE_TEXT,
-			markdown: { content },
+			markdown: { content: safeContent },
 			...ref,
 			...msgRef
 		});
@@ -232,43 +235,55 @@ async function sendMedia(
 }
 
 /**
- * 图文混合走单条 markdown:
+ * 图文混合走单条 markdown: 按原始消息块顺序渲染(文本/提及/图片各自归位),
+ * 不再固定"文前图后"。图片解析:
  * - Buffer 图片经素材缓存换 qqbot-media:// URL(去重、可复用);
- * - http(s) 图片直接外链内嵌, 尺寸用 Range 探测(探测失败不阻塞, 省尺寸标签即可)。
+ * - http(s) 图片直接外链内嵌, 尺寸用 Range 探测(探测失败按 #0px 自适应)。
  *
- * 返回 null 表示"未发出任何消息、应回退到逐条通道": 素材上传失败、markdown 超长、
+ * 返回 null 表示"未发出任何消息、应回退到逐条通道": 素材上传失败、markdown 超长/为空、
  * markdown 发送被拒都在这个前提下, 回退不会产生重复消息。
  */
 async function trySendMixedMarkdown(
 	deps: QQActionDeps,
 	target: QQSendTarget,
-	content: string,
-	planImages: MixedImageMedia[],
+	blocks: MessageBlockSend[],
+	resolveMention: (uuid: string) => string | null,
 	extra: ActionExtra,
 	msgRef: Record<string, any>
 ): Promise<ActionResponses["message.send"] | null> {
 	let markdown: string | null;
 	try {
-		const images: MixedMarkdownImage[] = [];
-		for (const item of planImages) {
-			if (isBufferImage(item)) {
-				const bytes = toBuffer(item.source.buffer);
-				const url = await deps.imageCache.getImageUrl({ buffer: bytes, fileName: materialFileName(item) });
-				images.push({ url, size: imageScaleFromBytes(bytes) ?? undefined });
+		const segments: MixedSegment[] = [];
+		for (const block of blocks) {
+			if (block.type === "text") {
+				segments.push({ kind: "text", value: block.text });
 				continue;
 			}
-			// planSend 只放行 http(s), 这里再收窄一次供类型检查
-			if (item.source.kind !== "url") continue;
-			const size = await getImageSize(item.source.url);
-			images.push({ url: item.source.url, size: size ?? undefined });
+			if (block.type === "mention") {
+				// 与逐条路径同一个渲染器: 解析不到退化为 @昵称或丢弃, 行为保持一致
+				const rendered = stringifyContent([block], resolveMention, true);
+				if (rendered) segments.push({ kind: "text", value: rendered });
+				continue;
+			}
+			if (block.type !== "image") continue;
+			if (block.buffer) {
+				const bytes = toBuffer(block.buffer);
+				const name = resolveFileName(bytes, QQ_FILE_TYPE.image);
+				const url = await deps.imageCache.getImageUrl({ buffer: bytes, fileName: name });
+				segments.push({ kind: "image", url, size: imageScaleFromBytes(bytes) ?? undefined });
+			} else if (block.url && isHttpUrl(block.url)) {
+				const size = await getImageSize(block.url);
+				segments.push({ kind: "image", url: block.url, size: size ?? undefined });
+			}
+			// 无可用来源的 image 块与 splitSendBlocks 的丢弃行为对齐
 		}
-		markdown = buildMixedMarkdown(content, images);
+		markdown = renderMixedSegments(segments);
 	} catch (e) {
 		deps.logger.warn(`素材图片上传失败, 图文合并回退为逐条发送: ${errorMessage(e)}`);
 		return null;
 	}
 	if (!markdown) {
-		deps.logger.warn("图文 markdown 超出长度上限, 回退为逐条发送");
+		deps.logger.warn("图文 markdown 为空或超出长度上限, 回退为逐条发送");
 		return null;
 	}
 
@@ -306,14 +321,11 @@ const handleMessageSend: QQActionHandler<"message.send"> = async (action, extra,
 	const { texts, media } = splitSendBlocks(action.message);
 
 	// 提及段要换成平台 openid; 仅群聊支持 @
-	const content = stringifyContent(
-		texts,
-		(uuid) => {
-			const info = deps.ctx.user.query(uuid);
-			return info?.platform === PLATFORM ? info.id : null;
-		},
-		target.type === "group"
-	);
+	const resolveMention = (uuid: string): string | null => {
+		const info = deps.ctx.user.query(uuid);
+		return info?.platform === PLATFORM ? info.id : null;
+	};
+	const content = stringifyContent(texts, resolveMention, target.type === "group");
 
 	// 每次发送现读, 保证 config.watch 改完即时生效
 	const mergeMixed = deps.ctx.config.get<string>("material.mixed_markdown", "merge") !== "split";
@@ -327,7 +339,7 @@ const handleMessageSend: QQActionHandler<"message.send"> = async (action, extra,
 	}
 
 	if (plan.kind === "markdown-mixed") {
-		const mixed = await trySendMixedMarkdown(deps, target, content, plan.images, extra, msgRef);
+		const mixed = await trySendMixedMarkdown(deps, target, action.message, resolveMention, extra, msgRef);
 		if (mixed) return mixed;
 		// 回退: 继续走下方"先文本后媒体"的逐条路径
 	}
