@@ -8,6 +8,7 @@ import { buildQQEvent } from "./events";
 import { parseMessageTime, PassiveReplyWindow } from "./passive-window";
 import type { QQWebSocketPayload } from "./types";
 import { MediaUploader } from "./uploader";
+import { ImageMaterialCache } from "./image-cache";
 
 /**
  * QQ 适配器
@@ -26,11 +27,18 @@ function readString(ctx: AdapterContext, key: string): string {
 	return typeof value === "string" ? value.trim() : "";
 }
 
+/** 从配置读一个整数项, 非法值取 default */
+function readInt(ctx: AdapterContext, key: string, fallback: number): number {
+	const value = ctx.config.get<number>(key, fallback);
+	return typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : fallback;
+}
+
 class QQAdapter {
 	private readonly ctx: AdapterContext;
 	private readonly access: AccessTokenManager;
 	private readonly api: QQApi;
 	private readonly uploader: MediaUploader;
+	private readonly imageCache: ImageMaterialCache;
 	private readonly router: ActionRouter;
 	private readonly actionDeps: QQActionDeps;
 	private readonly connection: QQConnection;
@@ -44,6 +52,14 @@ class QQAdapter {
 		this.access = new AccessTokenManager(logger, readString(ctx, "app_id"), readString(ctx, "secret"));
 		this.api = new QQApi(this.access, logger);
 		this.uploader = new MediaUploader(this.api, logger);
+		// 图片素材缓存: 请求与 KV 复用适配器现有通道; init 幂等, acceptor 等插件也这么调
+		this.ctx.kv.init();
+		this.imageCache = new ImageMaterialCache({
+			request: (method, path, body, timeout) => this.api.request(method, path, body, timeout),
+			kv: this.ctx.kv,
+			logger,
+			maxEntries: readInt(ctx, "material.max_entries", 100)
+		});
 		this.router = registerQQActions(new ActionRouter(logger));
 		this.passiveWindow = new PassiveReplyWindow();
 		this.actionDeps = {
@@ -53,7 +69,8 @@ class QQAdapter {
 			logger,
 			seq: new SeqAllocator(),
 			gate: new SessionSendGate(),
-			msgWindow: this.passiveWindow
+			msgWindow: this.passiveWindow,
+			imageCache: this.imageCache
 		};
 
 		this.connection = new QQConnection({
@@ -77,6 +94,9 @@ class QQAdapter {
 			this.ctx.logger.error("QQ适配器未配置 AppID / Secret, 配置后会自动连接");
 			return;
 		}
+
+		// 冷启动重建素材 LRU: 失败只降级为按需上传(internal 已记日志), 不阻塞连接
+		void this.imageCache.warmUp();
 
 		this.connection.start();
 	}
@@ -106,11 +126,17 @@ class QQAdapter {
 	}
 
 	/**
-	 * 凭据变更后重建连接
+	 * 配置变更响应
 	 *
-	 * 必须走 restart 而不是普通重连: 旧 session 属于旧 Bot, 继续 RESUME 会一直被拒。
+	 * - app_id/secret: 必须重建连接(旧 session 属于旧 Bot, 继续 RESUME 会一直被拒);
+	 * - material.max_entries: 热更新素材上限(只影响后续淘汰, 不立即删素材);
+	 * - material.mixed_markdown: 发送时现读, 无需接通知。
 	 */
 	private async onConfigChange(key: string): Promise<void> {
+		if (key === "material.max_entries") {
+			this.imageCache.setMaxEntries(readInt(this.ctx, "material.max_entries", 100));
+			return;
+		}
 		if (key !== "app_id" && key !== "secret") return;
 
 		const appId = readString(this.ctx, "app_id");

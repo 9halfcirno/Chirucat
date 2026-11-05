@@ -4,8 +4,13 @@ import type { ActionErrorCode } from "../../src/protocols/errors";
 import type Logger from "../../src/utils/logger";
 import type { QQApi } from "./api";
 import { splitSendBlocks, stringifyContent } from "./codec";
+import type { ImageMaterialCache } from "./image-cache";
 import { MSG_TYPE_MEDIA, MSG_TYPE_TEXT, PLATFORM } from "./config";
+import { toBuffer } from "./media";
 import type { PassiveReplyWindow } from "./passive-window";
+import { getImageSize, imageScaleFromBytes } from "./img-size";
+import type { MixedImageMedia, MixedMarkdownImage } from "./send-router";
+import { buildMixedMarkdown, isBufferImage, materialFileName, planSend } from "./send-router";
 import type { QQSendTarget } from "./types";
 import type { MediaUploader } from "./uploader";
 
@@ -29,6 +34,8 @@ export interface QQActionDeps {
 	gate: SessionSendGate;
 	/** 被动回复窗口: 决定本次发送带不带 msg_id */
 	msgWindow: PassiveReplyWindow;
+	/** 图片素材缓存: 图文混合消息的 markdown 内嵌走这条通道 */
+	imageCache: ImageMaterialCache;
 }
 
 /** 源事件的 extra(框架随动作回传的适配器私有数据, 如 msg_id) */
@@ -225,10 +232,58 @@ async function sendMedia(
 }
 
 /**
+ * 图文混合走单条 markdown:
+ * - Buffer 图片经素材缓存换 qqbot-media:// URL(去重、可复用);
+ * - http(s) 图片直接外链内嵌, 尺寸用 Range 探测(探测失败不阻塞, 省尺寸标签即可)。
+ *
+ * 返回 null 表示"未发出任何消息、应回退到逐条通道": 素材上传失败、markdown 超长、
+ * markdown 发送被拒都在这个前提下, 回退不会产生重复消息。
+ */
+async function trySendMixedMarkdown(
+	deps: QQActionDeps,
+	target: QQSendTarget,
+	content: string,
+	planImages: MixedImageMedia[],
+	extra: ActionExtra,
+	msgRef: Record<string, any>
+): Promise<ActionResponses["message.send"] | null> {
+	let markdown: string | null;
+	try {
+		const images: MixedMarkdownImage[] = [];
+		for (const item of planImages) {
+			if (isBufferImage(item)) {
+				const bytes = toBuffer(item.source.buffer);
+				const url = await deps.imageCache.getImageUrl({ buffer: bytes, fileName: materialFileName(item) });
+				images.push({ url, size: imageScaleFromBytes(bytes) ?? undefined });
+				continue;
+			}
+			// planSend 只放行 http(s), 这里再收窄一次供类型检查
+			if (item.source.kind !== "url") continue;
+			const size = await getImageSize(item.source.url);
+			images.push({ url: item.source.url, size: size ?? undefined });
+		}
+		markdown = buildMixedMarkdown(content, images);
+	} catch (e) {
+		deps.logger.warn(`素材图片上传失败, 图文合并回退为逐条发送: ${errorMessage(e)}`);
+		return null;
+	}
+	if (!markdown) {
+		deps.logger.warn("图文 markdown 超出长度上限, 回退为逐条发送");
+		return null;
+	}
+
+	const result = await sendText(deps, target, markdown, extra, msgRef);
+	if (result.success) return result;
+	deps.logger.warn("图文 markdown 发送失败, 回退为逐条发送");
+	return null;
+}
+
+/**
  * message.send
  *
- * 字符串内容直接发送; 消息块数组拆成"文本 + 媒体"两部分 ——
- * QQ 一次请求只能带一个 media.file_info, 所以媒体需要逐条上传并发送。
+ * 字符串内容直接发送; 消息块数组拆成"文本 + 媒体"两组后交由 planSend 路由:
+ * 图文混合合并为一条 markdown, 其余保持"文本一条 + 媒体逐条"(QQ 的 file_info
+ * 通道一次请求只能带一个媒体)。markdown 合并失败时回退逐条, 不会重复发送。
  */
 const handleMessageSend: QQActionHandler<"message.send"> = async (action, extra, deps) => {
 	const resolved = resolveTarget(deps.ctx, action.session);
@@ -259,6 +314,23 @@ const handleMessageSend: QQActionHandler<"message.send"> = async (action, extra,
 		},
 		target.type === "group"
 	);
+
+	// 每次发送现读, 保证 config.watch 改完即时生效
+	const mergeMixed = deps.ctx.config.get<string>("material.mixed_markdown", "merge") !== "split";
+	const plan = planSend(content, media, mergeMixed);
+
+	if (plan.kind === "text") {
+		if (!content.trim()) {
+			return { success: false, code: "PARAMS_INVALID", error: "Empty message body" };
+		}
+		return await sendText(deps, target, content, extra, msgRef);
+	}
+
+	if (plan.kind === "markdown-mixed") {
+		const mixed = await trySendMixedMarkdown(deps, target, content, plan.images, extra, msgRef);
+		if (mixed) return mixed;
+		// 回退: 继续走下方"先文本后媒体"的逐条路径
+	}
 
 	// 首条成功发送的消息 id 作为本次动作的返回值(后续撤回/引用以其为准)
 	let primaryId: string | undefined;
