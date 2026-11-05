@@ -85,7 +85,10 @@ export class CommandManager {
 					continue;
 				}
 				try {
-					com.handler(msgArg, params);
+					let r = com.handler(msgArg, params);
+					if (r instanceof Promise) r.catch(e => {
+						logger.error(`Command execute error:`, e);
+					});
 				} catch (e) {
 					logger.error(`Command execute error:`, e);
 				}
