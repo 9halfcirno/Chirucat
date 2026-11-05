@@ -52,6 +52,25 @@ export interface Ob11EventOptions {
 }
 
 /**
+ * 判断一个下行事件是否"未被建模" —— 逃生舱转发边的判据。
+ *
+ * 已建模的类型(`message` / `message_sent` / 撤回类 notice)只有一条路: 框架事件。
+ * 它们被过滤或缺字段丢弃时**不应**从逃生舱里漏出来二次现身, 否则同一份数据
+ * 有了两条到达消费者的路, 订阅方无法区分"平台没推"和"Bot 选择不看"。
+ * 未建模的部分(`request` 类、成员增减等其余 notice)原样交给 `dispatchPlatformEvent`。
+ * `meta_event`(心跳/生命周期)是传输层簿记, 连接层就已经掐掉, 不会走到这里。
+ */
+export function isUnmodelledEvent(event: OneBotEvent): boolean {
+	const postType = (event as { post_type?: unknown }).post_type;
+	if (postType === "message" || postType === "message_sent") return false;
+	if (postType === "notice") {
+		const noticeType = (event as { notice_type?: unknown }).notice_type;
+		return typeof noticeType === "string" && RECALL_ROUTES[noticeType] === undefined;
+	}
+	return true;
+}
+
+/**
  * 把一个下行事件转换为框架事件
  * @returns 事件对象; 被过滤/不支持/字段缺失时为 `null`
  */

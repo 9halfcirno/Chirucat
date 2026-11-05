@@ -3,7 +3,7 @@ import { ActionRouter, registerOb11Actions, type Ob11ActionDeps } from "./action
 import type { Ob11CodecDeps } from "./codec";
 import { DEFAULT_RECONNECT_INTERVAL, DEFAULT_SEND_TIMEOUT, MAX_SEND_TIMEOUT, PLATFORM } from "./constants";
 import { Ob11Connection } from "./connection";
-import { buildOb11Event } from "./events";
+import { buildOb11Event, isUnmodelledEvent } from "./events";
 import { ContentFilter } from "./filters";
 import { IdentityCache } from "./identity";
 import { readSendDelay } from "./send-delay";
@@ -47,7 +47,8 @@ function readSendTimeout(ctx: AdapterContext): number {
 
 class Ob11Adapter {
 	private readonly ctx: AdapterContext;
-	private readonly connection: Ob11Connection;
+	/** 逃生舱的 callApi 通道要用; 仅在本文件内消费, 不外传实例 */
+	readonly connection: Ob11Connection;
 	private readonly contentFilter: ContentFilter;
 	private readonly identities = new IdentityCache();
 	private readonly codec: Ob11CodecDeps;
@@ -132,7 +133,7 @@ class Ob11Adapter {
 		return Array.isArray(value) ? value.map(String) : ["private", "group"];
 	}
 
-	/** 平台事件 -> 框架事件 -> 派发 */
+	/** 平台事件 -> 框架事件 -> 派发; 未建模的事件类型原样转发给逃生舱订阅者 */
 	private async handleEvent(event: OneBotEvent): Promise<void> {
 		const built = await buildOb11Event(event, {
 			codec: this.codec,
@@ -149,7 +150,13 @@ class Ob11Adapter {
 			}
 		}, this.connection);
 
-		// 被过滤/不支持/字段缺失: 不派发, 也不报错(实现端会持续下发各类事件)
+		// 未建模类型(含未建模的 notice): 交给逃生舱订阅者;
+		// 已建模但被过滤/缺字段的属于残缺或被裁掉的事件, 不转发 ——
+		// 已建模的事件只有一条路(框架事件), 被丢弃的消息不该从逃生舱里漏出来二次现身
+		if (!built && isUnmodelledEvent(event)) {
+			this.ctx.bot.dispatchPlatformEvent(event);
+			return;
+		}
 		if (!built) return;
 		this.ctx.bot.dispatch(built);
 	}
@@ -161,6 +168,19 @@ let adapter: Ob11Adapter | null = null;
 export default {
 	init(ctx: AdapterContext) {
 		adapter = new Ob11Adapter(ctx);
+
+		// 逃生舱: 发布适配器私有能力面(未建模事件的原始流在 handleEvent 转发)。
+		// 未连接时 callApi 由连接层自身报错, 这里不另造状态判断。
+		ctx.exports = {
+			/** 原始调用通道: 任意 OneBot11 动作, 走连接层的 echo 配对与超时 */
+			callApi: <T = any>(action: string, params: Record<string, unknown>): Promise<T> =>
+				adapter!.connection.callApi<T>(action, params),
+			/** 本 Bot 的平台 id(self_id); 尚未登录时为空 */
+			get selfPlatformId(): string | null {
+				return adapter?.connection.selfPlatformId ?? null;
+			}
+		};
+
 		adapter.start();
 	},
 

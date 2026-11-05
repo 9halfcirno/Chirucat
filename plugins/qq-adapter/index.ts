@@ -4,7 +4,7 @@ import { ActionRouter, registerQQActions, SeqAllocator, SessionSendGate, type QQ
 import { QQApi } from "./api";
 import { INTENTS, PLATFORM } from "./config";
 import { QQConnection } from "./connection";
-import { buildQQEvent } from "./events";
+import { buildQQEvent, MESSAGE_ROUTES } from "./events";
 import { parseMessageTime, PassiveReplyWindow } from "./passive-window";
 import type { QQWebSocketPayload } from "./types";
 import { MediaUploader } from "./uploader";
@@ -36,7 +36,8 @@ function readInt(ctx: AdapterContext, key: string, fallback: number): number {
 class QQAdapter {
 	private readonly ctx: AdapterContext;
 	private readonly access: AccessTokenManager;
-	private readonly api: QQApi;
+	/** 逃生舱的 request 通道要用; 仅在本文件内消费, 不外传实例 */
+	readonly api: QQApi;
 	private readonly uploader: MediaUploader;
 	private readonly imageCache: ImageMaterialCache;
 	private readonly router: ActionRouter;
@@ -107,15 +108,21 @@ class QQAdapter {
 		this.passiveWindow.destroy();
 	}
 
-	/** 平台事件 -> 框架事件 -> 派发 */
+	/** 平台事件 -> 框架事件 -> 派发; 未建模的事件类型原样转发给逃生舱订阅者 */
 	private handleEvent(payload: QQWebSocketPayload): void {
 		const event = buildQQEvent(payload, {
 			resolveUserId: (platformId) => this.ctx.user.get(PLATFORM, platformId),
 			resolveSessionId: (type, platformId) => this.ctx.session.get(PLATFORM, type, platformId)
 		});
 
-		// 未知事件类型或缺少关键字段: 不派发, 也不报错(平台会持续下发各类事件)
-		if (!event) return;
+		// 未知事件类型: 交给逃生舱(平台会持续下发各类事件, 好友/群组变更等不在框架协议内);
+		// 已建模但缺关键字段的属于残缺事件, 按协议约定丢弃, 不转发
+		if (!event) {
+			if (payload.t && !MESSAGE_ROUTES[payload.t]) {
+				this.ctx.bot.dispatchPlatformEvent(payload);
+			}
+			return;
+		}
 
 		// 登记被动回复窗口: 窗口从平台的发送时间算起, 不能只从本地收到时间算
 		if (event.messageId) {
@@ -160,6 +167,22 @@ let adapter: QQAdapter | null = null;
 export default {
 	async init(ctx: AdapterContext) {
 		adapter = new QQAdapter(ctx);
+
+		// 逃生舱: 发布适配器私有能力面(未建模事件的原始流在 handleEvent 转发)。
+		// 在 start 之前发布 —— 缺凭据时 start 会早退不连接, 但 HTTP 通道与事件字段
+		// 解析不依赖连接, 消费端应能照常取用。
+		ctx.exports = {
+			/** 原始 REST 通道: 任意 QQ 开放平台接口, 返回值由 QQApi 解析(失败抛 QQApiError) */
+			request: <T = unknown>(
+				method: "GET" | "POST" | "PUT" | "DELETE",
+				path: string,
+				body?: unknown,
+				timeoutMs?: number
+			): Promise<T> => adapter!.api.request<T>(method, path, body, timeoutMs),
+			/** 本 Bot 的 QQ 平台 id(app_id), 供消费端换算框架账号 */
+			selfPlatformId: (): string => readString(ctx, "app_id")
+		};
+
 		adapter.start();
 	},
 
