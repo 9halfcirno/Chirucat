@@ -52,6 +52,16 @@
 					"max": 100,
 					"step": 5,
 					"default": 100
+				},
+				{
+					"type": "slider",
+					"id": "max_image_height",
+					"label": "混排图片最大高度 (px)",
+					"desc": "图文混排 markdown 中图片的显示高度上限, 超出时按原宽高比等比缩小宽和高; 0 表示不限制。防止长图占满聊天窗口",
+					"min": 0,
+					"max": 1500,
+					"step": 50,
+					"default": 600
 				}
 			]
 		}

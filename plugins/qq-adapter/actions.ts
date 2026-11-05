@@ -248,6 +248,7 @@ async function trySendMixedMarkdown(
 	target: QQSendTarget,
 	blocks: MessageBlockSend[],
 	resolveMention: (uuid: string) => string | null,
+	maxImageHeight: number,
 	extra: ActionExtra,
 	msgRef: Record<string, any>
 ): Promise<ActionResponses["message.send"] | null> {
@@ -277,7 +278,7 @@ async function trySendMixedMarkdown(
 			}
 			// 无可用来源的 image 块与 splitSendBlocks 的丢弃行为对齐
 		}
-		markdown = renderMixedSegments(segments);
+		markdown = renderMixedSegments(segments, maxImageHeight);
 	} catch (e) {
 		deps.logger.warn(`素材图片上传失败, 图文合并回退为逐条发送: ${errorMessage(e)}`);
 		return null;
@@ -329,6 +330,7 @@ const handleMessageSend: QQActionHandler<"message.send"> = async (action, extra,
 
 	// 每次发送现读, 保证 config.watch 改完即时生效
 	const mergeMixed = deps.ctx.config.get<string>("material.mixed_markdown", "merge") !== "split";
+	const maxImageHeight = deps.ctx.config.get<number>("material.max_image_height", 600);
 	const plan = planSend(content, media, mergeMixed);
 
 	if (plan.kind === "text") {
@@ -339,7 +341,7 @@ const handleMessageSend: QQActionHandler<"message.send"> = async (action, extra,
 	}
 
 	if (plan.kind === "markdown-mixed") {
-		const mixed = await trySendMixedMarkdown(deps, target, action.message, resolveMention, extra, msgRef);
+		const mixed = await trySendMixedMarkdown(deps, target, action.message, resolveMention, maxImageHeight, extra, msgRef);
 		if (mixed) return mixed;
 		// 回退: 继续走下方"先文本后媒体"的逐条路径
 	}

@@ -66,6 +66,21 @@ export type MixedSegment =
 	| { kind: "text"; value: string }
 	| { kind: "image"; url: string; size?: ImageSize | undefined };
 
+/**
+ * 按最大高度等比缩放显示尺寸
+ *
+ * maxH <= 0 或图未超高时原样返回; 宽高用同一比例换算并至少 1px,
+ * 保证显示宽高比与源图一致(只压高不缩宽会被平台拉伸变形)。
+ */
+export function clampDisplaySize(size: ImageSize, maxH: number): ImageSize {
+	if (maxH <= 0 || size.height <= maxH) return size;
+	const ratio = maxH / size.height;
+	return {
+		width: Math.max(1, Math.round(size.width * ratio)),
+		height: Math.max(1, Math.round(size.height * ratio))
+	};
+}
+
 function imageTag(url: string, size: ImageSize | undefined): string {
 	// 空格会截断 markdown 链接; 素材 URL 是 base64url 无此问题, 公网 URL 常见含空格
 	const safe = url.replaceAll(" ", "%20");
@@ -80,9 +95,11 @@ function imageTag(url: string, size: ImageSize | undefined): string {
  * 尺寸标签来自图片自身头部解析(img-size): 不带 `#宽px #高px` 时 QQ 客户端
  * 会把图拉伸到统一框, 表情包会变形得很明显。解析不到按 `#0px #0px` 交给平台自适应。
  *
+ * @param maxImageHeight 显示高度上限(px, 0=不限制, 来自 material.max_image_height),
+ *   超高图片等比缩放
  * @returns 无有效内容或超长时返回 null, 由调用方回退"先文本后媒体"的逐条发送
  */
-export function renderMixedSegments(segments: MixedSegment[]): string | null {
+export function renderMixedSegments(segments: MixedSegment[], maxImageHeight = 0): string | null {
 	const parts: string[] = [];
 	let textBuf = "";
 	const flush = () => {
@@ -96,7 +113,7 @@ export function renderMixedSegments(segments: MixedSegment[]): string | null {
 			continue;
 		}
 		flush();
-		parts.push(imageTag(seg.url, seg.size));
+		parts.push(imageTag(seg.url, seg.size ? clampDisplaySize(seg.size, maxImageHeight) : undefined));
 	}
 	flush();
 
