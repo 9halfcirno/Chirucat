@@ -5,17 +5,18 @@ import { Message } from "../../entity/message";
 import type { BotActions } from "../../protocols/actions";
 import type { PluginManifest } from "../types";
 import { MessageAPI } from "./apis/message";
-import type { MessageCallbackEntry, PluginBotAPI, PluginCommandAPI, PluginConfigAPI, PluginCronAPI, PluginFileSystemAPI, PluginKVAPI, PluginMessageAPI, PluginSessionAPI, PluginUserAPI, ReadonlyFsAPI } from "./types";
+import type { MessageCallbackEntry, MessageMatcher, PlatformEventCallback, PluginBotAPI, PluginCommandAPI, PluginConfigAPI, PluginCronAPI, PluginFileSystemAPI, PluginKVAPI, PluginMessageAPI, PluginSessionAPI, PluginUserAPI, ReadonlyFsAPI } from "./types";
 import { FileSystemAPI } from "./apis/fs";
 import { KVStore } from "./apis/kv";
 import { PluginConfig } from "./apis/config";
 import path from "node:path";
 import { root } from "../../utils/root";
-import type { PluginExports } from "../exports";
+import { PluginExports } from "../exports";
 import { StateError } from "../../errors/state-error";
 import type { Plugin } from "../plugin";
 import Logger from "../../utils/logger";
 import { CronScope } from "./apis/cron";
+import type { BotEventMeta } from "../../protocols/events";
 
 export class PluginContext {
 	protected _bot: Bot;
@@ -46,6 +47,9 @@ export class PluginContext {
 
 	private _onMessageCallback: MessageCallbackEntry[] = [];
 
+	/** 平台原生事件订阅: 适配器插件id -> 回调; 派发时只投递给订阅了该来源的上下文 */
+	private _platformEventSubs = new Map<string, PlatformEventCallback[]>();
+
 	private _commands = new Set<Command>();
 
 	/** dispose 幂等标记: enable失败/卸载/注册表丢弃都可能重复触发释放 */
@@ -56,6 +60,8 @@ export class PluginContext {
 		protected _pluginExports: PluginExports,
 		/** 服务插件提供的功能 */
 		private _serviceExports: PluginExports | null = null,
+		/** 适配器逃生舱注册表; 普通插件不发布, 但可经 onPlatformEvent 订阅后按来源取用 */
+		protected _adapterExports: PluginExports = new PluginExports(),
 	) {
 		this._bot = plugin.bot;
 		this._manifest = plugin.manifest;
@@ -161,11 +167,33 @@ export class PluginContext {
 			return this._pluginExports.getExports(pluginId) as T;
 		}
 
+		// 适配器的导出不进 require 注册表: 它发布在逃生舱注册表, 按事件来源取用
+		const target = this._bot.plugin.enabledPlugins
+			.find(p => p.id === pluginId && p.manifest.type === "adapter");
+		if (target) {
+			throw new StateError(
+				`插件 ${this._manifest.id} 导入失败: 插件 ${pluginId} 是适配器, ` +
+				`其导出走逃生舱注册表, 请经 Entity.escape() / ctx.adapterEscape("${pluginId}") 取用, 或订阅 ctx.onPlatformEvent("${pluginId}", ...)`
+			);
+		}
+
 		const available = [...this._pluginExports.ids()];
 		throw new StateError(
 			`插件 ${this._manifest.id} 导入失败: 插件 ${pluginId} 当前没有导出` +
 			(available.length ? `(当前可导入: ${available.join(", ")})` : "(当前没有任何插件提供导出)")
 		);
+	}
+
+	/**
+	 * 取适配器发布的逃生舱导出(与 `Entity.escape` 同一注册表, 不要求手头有实体)
+	 *
+	 * 纯平台事件通路(见 `onPlatformEvent`)里消费者只有 `event + meta`,
+	 * 用 `ctx.adapterEscape(meta.adapter)` 闭环。每次调用实时查询, 不要缓存返回值 ——
+	 * 适配器卸载后条目即被释放。未发布逃生舱时返回 null, 调用方自行降级。
+	 * @param adapterId 适配器插件id
+	 */
+	adapterEscape<T = any>(adapterId: string): T | null {
+		return this._adapterExports.getExports(adapterId) ?? null;
 	}
 
 	/**
@@ -212,6 +240,46 @@ export class PluginContext {
 	}
 
 	/**
+	 * 订阅某适配器派发的平台原生事件(逃生舱)
+	 *
+	 * 只收 `adapterId` 派发的原生事件; 同一上下文重复登记同一处理器会被忽略,
+	 * 避免"适配器重启后重新订阅"造成重复收流。随上下文释放自动注销 ——
+	 * 订阅表归框架持有, 适配器卸载/重载不影响订阅者。
+	 * @param adapterId 来源适配器插件id
+	 * @param handler 事件回调, 返回值不被等待
+	 */
+	onPlatformEvent(adapterId: string, handler: PlatformEventCallback) {
+		this.assertAlive("订阅平台原生事件");
+		const entries = this._platformEventSubs.get(adapterId) ?? [];
+		if (!entries.includes(handler)) {
+			entries.push(handler);
+			this._platformEventSubs.set(adapterId, entries);
+		}
+	}
+
+	/**
+	 * 处理平台原生事件(逃生舱通路)
+	 * @param event 平台原生事件
+	 * @param meta 事件元信息, 如适配器/Bot id
+	 */
+	handlePlatformEvent(event: Record<string, any>, meta: BotEventMeta) {
+		if (this._disposed) return;
+
+		// 只投递给订阅了该来源的上下文; 错误隔离与消息回调一致: 不阻断后续, 期约不等待
+		for (const entry of this._platformEventSubs.get(meta.adapter) ?? []) {
+			try {
+				const result = entry(event, meta);
+				if (result instanceof Promise) {
+					// 期约同步抛出, 不等待; 仅吞掉 rejection 防止 unhandledRejection
+					result.catch((e) => this.logger.error("Plugin platform event callback error:", e));
+				}
+			} catch (e) {
+				this.logger.error("Plugin platform event callback error:", e);
+			}
+		}
+	}
+
+	/**
 	 * 断言上下文仍可用
 	 * @param action 被拒绝的操作名, 用于报错
 	 * @throws 上下文已释放时抛出 StateError
@@ -232,8 +300,11 @@ export class PluginContext {
 
 		// 释放本插件导出(归属校验为当前上下文, 不会误删重新加载后的新条目)
 		this._pluginExports.releaseExports(this._manifest.id, this);
+		// 逃生舱发布走独立注册表(适配器上下文重定向), 普通插件此处通常为空条目, 一并释放不留残余
+		this._adapterExports.releaseExports(this._manifest.id, this);
 
 		this._onMessageCallback = []; // 置空;
+		this._platformEventSubs.clear(); // 平台事件订阅随上下文释放
 		// 清理指令
 		for (const com of this._commands.values()) {
 			this._bot.command.unregister(com)

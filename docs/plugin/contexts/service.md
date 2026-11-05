@@ -26,6 +26,7 @@
   - [config对象](#config对象)
   - [path对象](#path对象)
   - [插件间导入导出](#插件间导入导出exportsrequire)
+  - [适配器逃生舱](#适配器逃生舱adapterescapeonplatformevent)
 - [不提供的能力](#不提供的能力)
 - [禁忌!!除非你知道你在做什么](#绝对不应触碰的禁忌)
 
@@ -502,6 +503,29 @@ ctx.logger.log(hello?.world());
 
 依赖关系仍然写在清单的 `dependencies` 里: 依赖先于本插件加载, 存在依赖环或依赖缺失时本插件拒绝加载。与普通上下文一样, **不要缓存 `require` 的返回值** —— 目标插件卸载后导出即被释放。
 
+### 适配器逃生舱(adapterEscape/onPlatformEvent)
+
+服务插件也可以消费适配器发布的逃生舱能力(语义见[逃生舱](../adapter.md#逃生舱))。与普通上下文的差别只在**跨Bot**:
+
+- `ctx.adapterEscape<T>(botId, adapterId)`: 取指定 Bot 上该适配器发布的导出, Bot 未注册/未发布时为 `null`
+- `ctx.onPlatformEvent(adapterId, handler)`: 订阅该适配器派发的平台原生事件; 订阅是全局的, **任何 Bot** 上该适配器派发的事件都会回调, 用 `meta.bot` 区分来源
+
+与 `ctx.event.observe` 能拿到 `Bot` 实例不同, 逃生舱取用只交出发布值本身, 不会经这条路漏出 Bot 或它的插件管理器。
+
+约定与普通上下文一致: 不写死 `dependencies`, 不缓存取用结果, 取不到时(`null`/收不到流)应能降级; 订阅由框架持有, 适配器重载后自动恢复收流。
+
+```ts
+// 服务插件: 收到某适配器在任何 Bot 上的原生事件, 反查该 Bot 的导出做处理
+export default {
+	init(ctx) {
+		ctx.onPlatformEvent("my-adapter", (event, meta) => {
+			const adapter = ctx.adapterEscape<{ handle(raw: unknown): void }>(meta.bot, meta.adapter);
+			adapter?.handle(event);
+		})
+	}
+};
+```
+
 ## 不提供的能力
 
 服务插件不属于任何 Bot, 也不掌管框架的生命周期, 因此以下能力**不存在**(不是"未文档化", 是拿不到):
@@ -528,6 +552,10 @@ ctx.logger.log(hello?.world());
 ### handleMessage方法
 
 该方法用于框架向服务插件分发消息。
+
+### handlePlatformEvent方法
+
+该方法用于框架向服务插件分发平台原生事件(逃生舱), 由事件派发链调用; 插件要收事件请走 `ctx.onPlatformEvent`。
 
 ### dispose方法
 

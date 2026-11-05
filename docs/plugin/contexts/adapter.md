@@ -5,7 +5,8 @@
 该上下文提供以下能力
 
 - [Bot双向通信](#bot双向通信)
-- [信息转换](#用户和会话信息转换)
+- [逃生舱发布](#逃生舱发布escapexports)
+- [用户和会话信息转换](#用户和会话信息转换)
 
 ## Bot双向通信
 
@@ -22,6 +23,21 @@
   处理器**必须返回一个响应对象**(`{ success: true, ... }` 或 `{ success: false, error, code }`)。
   动作已由框架按事件来源的适配器路由到本上下文, 所以返回 `undefined` 会被当作"未处理"
   (`ADAPTER_UNHANDLED`), 调用方只会看到一个没有原因的失败。
+
+- `dispatchPlatformEvent(event: Record<string, any>)`: 派发平台原生事件(逃生舱), 见[发布与取用](../adapter.md#逃生舱)
+
+  只投递给订阅了本适配器的插件(含服务插件); 派发的是平台原始包, 框架不解析其形状。
+  已被协议建模的事件请走`dispatch`, 不要让同一份数据有两条到达消费者的路。
+
+## 逃生舱发布(escape/exports)
+
+- `ctx.escape = value` / `ctx.exports = value`: 两个名字等价的别名, 把一份对象发布到**本Bot范围的逃生舱注册表**
+
+与[普通插件的exports](./normal.md#插件间导入导出exportsrequire)不同, 适配器的导出**不进`require`注册表**:
+它绑定在事件来源上, 消费者只能经`entity.escape()` / `ctx.adapterEscape()`取用(见[逃生舱](../adapter.md#逃生舱))。
+这是刻意的 —— 避免插件为了拿逃生舱在`dependencies`里写死某个适配器, 把软耦合变成硬依赖。
+
+发布随上下文生命周期释放: 适配器卸载即失效, 重载后新发布的导出自动接替, 订阅者无感。
 
 ## 用户和会话信息转换
 

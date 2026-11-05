@@ -18,6 +18,7 @@ import { KVStore } from "../contexts/apis/kv";
 import { MessageAPI } from "../contexts/apis/message";
 import type {
 	MessageCallbackEntry,
+	PlatformEventCallback,
 	PluginCommandAPI,
 	PluginConfigAPI,
 	PluginCronAPI,
@@ -91,6 +92,9 @@ export class ServiceContext {
 	private readonly _core: Core;
 
 	private _onMessageCallback: MessageCallbackEntry[] = [];
+
+	/** 平台原生事件订阅: 适配器插件id -> 回调 (dispose 时清空) */
+	private _platformEventSubs = new Map<string, PlatformEventCallback[]>();
 
 	/** 事件过滤器与观察回调 (dispose 时清空) */
 	private _filters: PluginEventFilter[] = [];
@@ -333,6 +337,59 @@ export class ServiceContext {
 	}
 
 	/**
+	 * 订阅某适配器派发的平台原生事件(逃生舱), 语义与 `PluginContext.onPlatformEvent` 一致
+	 *
+	 * 服务插件是全局的: 任何 Bot 上该适配器派发的原生事件都会回调, 用 `meta.bot`
+	 * 区分来源。只收 `adapterId` 派发的事件; 重复登记同一处理器会被忽略;
+	 * 随上下文释放自动注销 —— 适配器卸载/重载不影响订阅者。
+	 * @param adapterId 来源适配器插件id
+	 * @param handler 事件回调, 返回值不被等待
+	 */
+	onPlatformEvent(adapterId: string, handler: PlatformEventCallback) {
+		this.assertAlive("订阅平台原生事件");
+		const entries = this._platformEventSubs.get(adapterId) ?? [];
+		if (!entries.includes(handler)) {
+			entries.push(handler);
+			this._platformEventSubs.set(adapterId, entries);
+		}
+	}
+
+	/**
+	 * 取指定 Bot 上某适配器发布的逃生舱导出(与 `Entity.escape` 同一注册表)
+	 *
+	 * 服务插件拿不到 Bot 实例(见 `core.bot` 视图边界), 这里只交出发布值本身。
+	 * 每次调用实时查询, **不要缓存返回值**; Bot/适配器不存在或未发布返回 null。
+	 * @param botId 目标 Bot id(平台原生事件的 `meta.bot`)
+	 * @param adapterId 适配器插件id(平台原生事件的 `meta.adapter`)
+	 */
+	adapterEscape<T = any>(botId: string, adapterId: string): T | null {
+		const bot = this._core.bot.bots.get(botId);
+		if (!bot) return null;
+		return bot.adapterExports.getExports(adapterId) ?? null;
+	}
+
+	/**
+	 * 将平台原生事件投递给订阅了该来源的服务回调: 错误不阻断后续, 期约不等待
+	 * @param event 平台原生事件
+	 * @param meta 事件元信息, 携带来源适配器与 Bot id
+	 */
+	handlePlatformEvent(event: Record<string, any>, meta: BotEventMeta) {
+		if (this._disposed) return;
+
+		for (const handler of this._platformEventSubs.get(meta.adapter) ?? []) {
+			try {
+				const result = handler(event, meta);
+				if (result instanceof Promise) {
+					// 期约同步抛出, 不等待; 仅吞掉 rejection 防止 unhandledRejection
+					result.catch((e) => this.logger.error("Service platform event callback error:", e));
+				}
+			} catch (e) {
+				this.logger.error("Service platform event callback error:", e);
+			}
+		}
+	}
+
+	/**
 	 * 断言上下文仍可用
 	 * @param action 被拒绝的操作名, 用于报错
 	 * @throws 上下文已释放时抛出 StateError
@@ -358,6 +415,7 @@ export class ServiceContext {
 		}
 
 		this._onMessageCallback = []; // 置空;
+		this._platformEventSubs.clear(); // 平台事件订阅随上下文释放
 		this._filters = [];
 		this._observers = [];
 		// 注销本上下文注册的 Hook: 不注销会让已卸载的服务继续干涉框架流程

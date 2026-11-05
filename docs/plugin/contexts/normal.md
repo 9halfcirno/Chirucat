@@ -23,6 +23,7 @@
   - [日志记录](#logger对象)
   - [动作发送](#action方法)
   - [插件间导入导出](#插件间导入导出exportsrequire)
+  - [适配器逃生舱](#适配器逃生舱escapeadapterescapeonplatformevent)
 - [禁忌!!除非你知道你在做什么](#绝对不应触碰的禁忌)
 
 ## 信息获取
@@ -357,11 +358,43 @@ export default {
 }
 ```
 
+### 适配器逃生舱(escape/adapterEscape/onPlatformEvent)
+
+适配器会发布平台专属的能力与事件(发布侧见[适配器上下文](./adapter.md#逃生舱发布escapexports)), 本上下文提供三个取用入口:
+
+- `entity.escape<T>()`: 取**事件来源**适配器发布的导出, 未发布时为 `null`。按 `meta.adapter` 定位, 不需要在清单里声明适配器
+- `ctx.adapterEscape<T>(adapterId)`: 手头没有实体时(例如在下面的原生事件回调里)按适配器id取用, 未发布时为 `null`
+- `ctx.onPlatformEvent(adapterId, handler)`: 订阅该适配器派发的平台原生事件。`handler(event, meta)` 收到的是适配器原样转发的平台包, 框架不解析其形状; 返回值不被等待, 抛错只记日志
+
+约定:
+
+- 逃生舱是**软耦合**能力: 不要为它在 `dependencies` 里写死适配器, 取不到(`null`/收不到流)是正常状态, 消费者应能降级运行
+- 与 `require` 一样**不要缓存取用结果**: 适配器卸载后其导出即被释放; 订阅由框架持有, 适配器重载后自动恢复收流, 无需重新订阅
+- 对适配器id调用 `ctx.require` 会抛出 `StateError` 并指向逃生舱入口
+
+示例:
+
+```ts
+export default {
+	init(ctx) {
+		// 订阅原生事件, 顺路反查来源适配器的导出
+		ctx.onPlatformEvent("my-adapter", (event, meta) => {
+			const adapter = ctx.adapterEscape<{ handle(raw: unknown): void }>(meta.adapter)
+			adapter?.handle(event)
+		})
+	}
+}
+```
+
 ## 绝对不应触碰的禁忌
 
 ### handleMessage方法
 
 该方法用于框架向插件分发消息
+
+### handlePlatformEvent方法
+
+该方法用于框架向插件分发平台原生事件(逃生舱), 由事件派发链调用; 插件要收事件请走 `ctx.onPlatformEvent`
 
 ### dispose方法
 

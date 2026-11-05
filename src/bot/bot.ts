@@ -294,6 +294,16 @@ export class Bot extends EventEmitter {
 		}
 	}
 
+	dispatchPlatformEvent(event: Record<string, any>, meta: BotEventMeta) {
+		this.plugin.handlePlatformEvent(event, meta);
+		this.core.services.handlePlatformEvent(event, meta);
+	}
+
+	/** 本 Bot 的适配器逃生舱注册表: Entity.escape 按事件来源查询 */
+	get adapterExports() {
+		return this.plugin.adapterExports;
+	}
+
 	/**
 	 * 将Action转发给对应的适配器插件
 	 * @param action Action对象

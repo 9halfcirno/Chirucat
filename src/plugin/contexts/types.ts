@@ -22,6 +22,16 @@ export type MessageCallbackEntry = {
 	handler: PluginMessageCallback;
 };
 
+/**
+ * 平台原生事件回调 (逃生舱)
+ *
+ * `event` 是适配器原样派发的平台包, 框架不解析、不保证形状;
+ * `meta` 携带来源适配器与 Bot id。返回值不被等待。
+ * 需要回调里反查适配器能力时用 `ctx.adapterEscape(meta.adapter)`,
+ * 异步回调里到用时条目可能已随适配器卸载而释放, 拿到 null 要能降级。
+ */
+export type PlatformEventCallback = (event: Record<string, any>, meta: BotEventMeta) => unknown;
+
 export interface PluginMessageAPI {
 	/** 全量接收 */
 	all(handler: PluginMessageCallback): void;
@@ -297,6 +307,8 @@ export interface AdapterBotAPI extends PluginBotAPI {
 	dispatch(event: BotEvents): void;
 	/** 注册一个动作处理器 */
 	onAction(handler: ActionHandler): void;
+	/** 派发平台原生事件(逃生舱): 只投递给订阅了本适配器的插件 */
+	dispatchPlatformEvent(event: Record<string, any>): void;
 }
 
 /**

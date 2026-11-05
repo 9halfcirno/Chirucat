@@ -1,7 +1,7 @@
 import type { ActionResponses, BotActions } from "../../protocols/actions";
 import type { ActionErrorCode } from "../../protocols/errors";
 import type { BotEvents } from "../../protocols/events";
-import type { PluginExports } from "../exports";
+import { PluginExports } from "../exports";
 import { PluginContext } from "./context";
 import type { ActionHandler, AdapterBotAPI, AdapterSessionAPI, AdapterUserAPI } from "./types";
 import type { Plugin } from "../plugin";
@@ -34,9 +34,14 @@ export class AdapterContext extends PluginContext {
 		get: (platform, type, id) => this._bot.core.session!.get(platform, type, id),
 	};
 
-	constructor(plugin: Plugin, exports: PluginExports, serviceExports: PluginExports | null = null) {
+	constructor(
+		plugin: Plugin,
+		exports: PluginExports,
+		serviceExports: PluginExports | null = null,
+		adapterExports: PluginExports = new PluginExports(),
+	) {
 		if (plugin.manifest.type !== "adapter") throw new Error(`Plugin Context: AdapterContext仅 type: adapter 的插件可创建`)
-		super(plugin, exports, serviceExports);
+		super(plugin, exports, serviceExports, adapterExports);
 
 		this.bot = {
 			id: this._bot.id,
@@ -58,8 +63,42 @@ export class AdapterContext extends PluginContext {
 			 */
 			onAction: (handler) => {
 				this.actionHandlers.push(handler);
+			},
+			/** 派发平台原生事件 */
+			dispatchPlatformEvent: (event: Record<string, any>) => {
+				this.assertAlive("派发平台原生事件");
+				this._bot.dispatchPlatformEvent(event, {
+					adapter: this._manifest.id,
+					bot: this._bot.id
+				})
 			}
 		}
+	}
+
+	/**
+	 * 适配器逃生舱导出: `exports` 的重载别名
+	 *
+	 * 适配器的导出不是普通插件那种"可被 require 的能力", 而是绑定在事件来源上的
+	 * 私有面(原始接口、平台专属能力)。因此它走独立的 bot 级注册表,
+	 * 消费者只能经 `Entity.escape` 按事件来源取用。
+	 * @see AdapterContext.exports
+	 */
+	set escape(escape: unknown) {
+		this.assertAlive("设置适配器逃生舱");
+		this._adapterExports.setExports(this._manifest.id, escape, this);
+	}
+
+	get escape(): unknown {
+		return this._adapterExports.getExports(this._manifest.id);
+	}
+
+	/** 发布/读取适配器逃生舱导出, 语义等同 `escape` */
+	override set exports(escape: unknown) {
+		this.escape = escape;
+	}
+
+	override get exports(): unknown {
+		return this.escape;
 	}
 
 	async handleAction<T extends BotActions>(

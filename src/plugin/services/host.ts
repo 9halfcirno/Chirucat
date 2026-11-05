@@ -600,6 +600,20 @@ export class ServiceHost {
 	}
 
 	/**
+	 * 将平台原生事件派发给所有已启用服务插件 (逃生舱通路)
+	 *
+	 * 与 `observeEvent` 的区别: 原生事件没有"过滤/放行"概念, 是否投递只取决于
+	 * 服务插件有没有订阅该来源(见 `ServiceContext.onPlatformEvent`)。
+	 * @param event 平台原生事件
+	 * @param meta 事件元数据(适配器 id / Bot id)
+	 */
+	handlePlatformEvent(event: Record<string, any>, meta: BotEventMeta) {
+		for (const service of this.enabledServices) {
+			service.context?.handlePlatformEvent(event, meta);
+		}
+	}
+
+	/**
 	 * 将消息派发给所有已启用服务插件的全局消息回调 (按注册顺序)
 	 * @param msg 框架消息
 	 */

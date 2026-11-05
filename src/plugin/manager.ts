@@ -1,7 +1,7 @@
 import path from "path";
 import { Plugin } from "./plugin";
 import { PluginLoader } from "./loader";
-import type { PluginManifest, PluginScope, PluginStatus } from "./types";
+import type { PluginScope, PluginStatus } from "./types";
 import { readManifests } from "./manifest";
 import { StateError } from "../errors/state-error";
 import { PluginContextFactory } from "./contexts/factory";
@@ -11,10 +11,10 @@ import type { Bot } from "../bot/bot";
 import type { Message } from "../entity/message";
 import type { ActionResponses, BotActions } from "../protocols/actions";
 import { AdapterContext } from "./contexts/adapter-context";
-import Logger from "../utils/logger";
 import { dfs } from "../utils/dfs";
 import { PluginExports } from "./exports";
 import { deepEqual } from "../utils/deepEqual";
+import type { BotEventMeta } from "../protocols/events";
 
 export class PluginManager {
 	loader = new PluginLoader();
@@ -26,6 +26,8 @@ export class PluginManager {
 	botPlugins = new Map<string, Plugin>();
 
 	private pluginExports = new PluginExports();
+	/** 适配器逃生舱注册表(本 Bot): AdapterContext.exports/escape 发布, Entity.escape 按事件来源取用 */
+	#adapterExports = new PluginExports();
 
 	constructor(private bot: Bot) {
 	}
@@ -218,7 +220,8 @@ export class PluginManager {
 			}
 
 			// 启用插件
-			const context = PluginContextFactory.create(plugin, this.pluginExports, this.bot.core.services.exports);
+			const context = PluginContextFactory.create(
+				plugin, this.pluginExports, this.bot.core.services.exports, this.#adapterExports);
 
 			// Hook 埋点: 插件启用之前, 可被服务插件取消
 			if (this.bot.core.hooks.dispatch("before.plugin.enable", plugin)) {
@@ -266,6 +269,7 @@ export class PluginManager {
 		await plugin.disable(true);
 		// 兜底: 导出正常已由 context.dispose() 释放, 这里覆盖上下文缺失等异常情况
 		this.pluginExports.releaseExports(plugin.id);
+		this.#adapterExports.releaseExports(plugin.id);
 
 		this.bot.logger.log(`已卸载插件: ${plugin.id}`);
 	}
@@ -321,6 +325,25 @@ export class PluginManager {
 	handleMessage(msg: Message) {
 		for (const plugin of this.enabledPlugins) {
 			plugin.context?.handleMessage(msg);
+		}
+	}
+
+	/** 适配器逃生舱注册表(本 Bot): 发布端在 AdapterContext.exports/escape, 消费端是 Entity.escape / ctx.adapterEscape */
+	get adapterExports(): PluginExports {
+		return this.#adapterExports;
+	}
+
+	/**
+	 * 将平台原生事件派发给订阅了该来源的插件上下文 (逃生舱)
+	 *
+	 * 按 `meta.adapter` 过滤在上下文侧完成: 只投递给登记过 `onPlatformEvent(该适配器)`
+	 * 的插件, 不广播给无关插件。
+	 * @param event 平台原生事件
+	 * @param meta 事件元信息, 携带来源适配器与 Bot id
+	 */
+	handlePlatformEvent(event: Record<string, any>, meta: BotEventMeta) {
+		for (const plugin of this.enabledPlugins) {
+			plugin.context?.handlePlatformEvent(event, meta);
 		}
 	}
 
