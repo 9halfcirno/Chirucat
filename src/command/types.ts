@@ -5,7 +5,7 @@ export type Command = {
 	/** 指令名 */
 	name: string;
 	/** 指令处理 */
-	handler: (message: Message | null, args: CommandArgs) => Promise<void> | void;
+	handler: (message: Message | null, args: CommandArgs) => Promise<any> | any;
 
 	/** 最低权限等级, 默认所有人可调用（0级） */
 	permission?: number;
