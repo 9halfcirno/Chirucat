@@ -56,9 +56,12 @@ export default {
 		tip.className = "muted";
 		tip.textContent = "实时日志流 (SSE)";
 
-		const status = document.createElement("div");
-		status.className = "logs-status connecting";
+		const statusDot = document.createElement("span");
+		statusDot.className = "dot off";
+
+		const status = document.createElement("span");
 		status.textContent = "连接中";
+
 
 		// 顶行: 连接状态 + 过滤控件, 清理按钮贴右
 		const head = document.createElement("div");
@@ -100,7 +103,7 @@ export default {
 		});
 
 		// 两个筛选控件与"已连接"、清理按钮同级同排, 不单独包卡片
-		head.append(status, createField("等级", levelFilter.el), createField("分类", tagFilter.el), clearBtn);
+		head.append(statusDot, status, createField("等级", levelFilter.el), createField("分类", tagFilter.el), clearBtn);
 
 		// Tag 列表异步补进下拉: SSE 不等它, 过滤只读条目自带的 tag
 		loadTagOptions();
@@ -124,14 +127,14 @@ export default {
 		});
 
 		const setStatus = (state, text) => {
-			status.className = `logs-status ${state}`;
+			statusDot.className = `dot ${state}`;
 			status.textContent = text;
 		};
 
 
 		source = new EventSource("/api/get_log_stream");
 		source.addEventListener("open", () => setStatus("on", "已连接"));
-		source.addEventListener("error", () => setStatus("connecting", "重连中…"));
+		source.addEventListener("error", () => setStatus("off", "重连中…"));
 		source.addEventListener("log", (e) => {
 			try {
 				enqueue(JSON.parse(e.data));

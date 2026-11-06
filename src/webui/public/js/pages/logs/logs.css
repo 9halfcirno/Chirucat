@@ -8,15 +8,6 @@
 	height: 100%;
 }
 
-/* 连接状态: 圆点用伪元素, 不用额外 span */
-.logs-status {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	font-size: var(--fs-sm);
-	color: var(--fg-muted);
-}
-
 /* 顶行: 连接状态 + 过滤控件依次排开, 清理按钮靠最右 */
 .logs-head {
 	display: flex;
@@ -61,12 +52,6 @@
 		row-gap: var(--sp-2);
 	}
 
-	/* 显式定行: 不写 grid-row 的话自动-placement 会把按钮排到字段之后 */
-	.logs-status {
-		grid-column: 1;
-		grid-row: 1;
-	}
-
 	.logs-head .icon-btn {
 		grid-column: 2;
 		grid-row: 1;
@@ -89,22 +74,6 @@
 		width: 100%;
 		max-width: none;
 	}
-}
-
-.logs-status::before {
-	content: "";
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	background: var(--warn); /* 连接中/重连中 */
-}
-
-.logs-status.on::before {
-	background: var(--ok); /* 已连接 */
-}
-
-.logs-status.off::before {
-	background: var(--danger); /* 已断开 */
 }
 
 /* 日志列表: 深色终端风格, 内部滚动 */

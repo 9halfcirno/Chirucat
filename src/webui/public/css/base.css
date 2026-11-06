@@ -19,6 +19,39 @@
  *
  * 用法: <span class="icon" style="--icon: url('/img/icons/bot.svg')"></span>
  */
+
+.dot {
+	width: 0.7em;
+	height: 0.7em;
+	border-radius: 50%;
+	align-self: center;
+	justify-self: center;
+}
+
+.dot.on {
+	background-color: var(--ok);
+}
+
+.dot.ok {
+	background-color: var(--ok);
+}
+
+.dot.off {
+	background-color: var(--warn);
+}
+
+.dot.warn {
+	background-color: var(--warn);
+}
+
+.dot.danger {
+	background-color: var(--danger);
+}
+
+.dot.error {
+	background-color: var(--danger);
+}
+
 .icon {
 	display: inline-block;
 	flex: 0 0 auto;
