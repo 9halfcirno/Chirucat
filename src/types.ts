@@ -1,15 +1,14 @@
-import type { WebUIServerOptions } from "./webui/server/server";
-import type { StatisticsOptions } from "./statistics/types";
-
+/**
+ * 启动期显式覆盖, 仅用于测试与嵌入式注入
+ *
+ * 正常启动的配置全部来自设置域(`configs/*.json`), 不通过这里传。这里给了的字段
+ * 优先级最高, 检查脚本靠它关掉 WebUI / 统计, 或把状态文件指到临时目录。
+ */
 export type CoreOption = {
-	/** 是否启用WebUI, 默认true */
+	/** 覆盖 core 设置域的 webui 开关 */
 	webui?: boolean;
-	/** WebUI配置 */
-	webuiOption?: WebUIServerOptions;
-	/** 是否启用业务数据统计, 默认true */
+	/** 覆盖 core 设置域的 statistics 开关 */
 	statistics?: boolean;
-	/** 统计配置 */
-	statisticsOption?: StatisticsOptions;
 	/**
 	 * 服务插件状态文件路径
 	 *

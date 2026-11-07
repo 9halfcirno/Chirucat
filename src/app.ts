@@ -2,15 +2,8 @@ import path from "path";
 import { Core } from "./core";
 import Logger from "./utils/logger";
 import { root } from "./utils/root";
-import { readJSON, readJSONOrCreate } from "./utils/readJSON";
+import { readJSON } from "./utils/readJSON";
 import type { CoreOption } from "./types";
-import type { WebUIServerOptions } from "./webui/server/server";
-import { CORE_SETTINGS_FILE, initialCoreSettings } from "./config/settings/domains/core";
-import { WEBUI_SETTINGS_FILE, initialWebUISettings } from "./config/settings/domains/webui";
-import {
-	STATISTICS_SETTINGS_FILE,
-	initialStatisticsSettings,
-} from "./config/settings/domains/statistics";
 import { buildWarning } from "./node-check";
 import { ArgParseError, createParser, type ParseResult, type ValuesOf } from "./utils/cli";
 import { features } from "./node-features";
@@ -19,12 +12,6 @@ const logger = new Logger("App");
 
 /** 关闭核心的超时时间(ms):超过后视为关闭失败,强制退出 */
 const CLOSE_TIMEOUT = 10_000;
-
-/** 绝对路径转成相对仓库根的显示路径, 日志里给人看的 */
-function displayPath(file: string): string {
-	const rel = path.relative(root, file);
-	return process.platform === "win32" ? rel.replaceAll("\\", "/") : rel;
-}
 
 let core: Core | null = null;
 let exiting = false;
@@ -41,43 +28,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
 }
 
 /**
- * 加载并组装核心配置选项
- *
- * 各值文件"首次生成什么"都取自对应设置域导出的 initial* 工厂 —— 定义与首次
- * 默认值只有一处真相源, 不会出现 app.ts 与设置域各写一份、漂移后"谁先跑
- * 文件就长成谁的样子"(webui.json 的密码就曾因此一边随机、一边为空)。
- */
-export async function loadOptions(): Promise<CoreOption> {
-	const coreRes = await readJSONOrCreate<CoreOption>(CORE_SETTINGS_FILE, initialCoreSettings());
-	if (coreRes.created) logger.log(`配置文件缺失, 已生成默认配置: ${displayPath(CORE_SETTINGS_FILE)}`);
-	const coreOption = coreRes.config;
-
-	if (coreOption.webui !== false) {
-		// webui 未显式关闭时, 把 webui.json 作为 WebUI 子配置一并传入
-		const webuiRes = await readJSONOrCreate<WebUIServerOptions>(WEBUI_SETTINGS_FILE, initialWebUISettings());
-		if (webuiRes.created) {
-			logger.log(`WebUI配置文件缺失, 已生成默认配置: ${displayPath(WEBUI_SETTINGS_FILE)}`);
-			logger.log(`=======================`);
-			logger.log(`已生成初始密码: ${webuiRes.config.password}`);
-			logger.log(`=======================`);
-		}
-		coreOption.webuiOption = webuiRes.config;
-	}
-
-	if (coreOption.statistics !== false) {
-		// statistics 未显式关闭时, 把 statistics.json 作为子配置一并传入
-		const statsRes = await readJSONOrCreate(STATISTICS_SETTINGS_FILE, initialStatisticsSettings());
-		if (statsRes.created) logger.log(`配置文件缺失, 已生成默认配置: ${displayPath(STATISTICS_SETTINGS_FILE)}`);
-		coreOption.statisticsOption = statsRes.config;
-	}
-
-	logger.log(`已加载配置: ${displayPath(CORE_SETTINGS_FILE)}${coreOption.webuiOption ? `, ${displayPath(WEBUI_SETTINGS_FILE)}` : ""}`);
-	return coreOption;
-}
-
-/**
  * 启动或重启 Chirucat 核心
- * @param options 可选传入配置，若未传入则重新读取配置文件
+ *
+ * 配置由 Core 在 init 时统一从设置域读取; options 只用于测试/嵌入式注入的
+ * 显式覆盖(关掉 WebUI、统计或改服务状态文件路径), 正常启动不传。
  */
 export async function startCore(options?: CoreOption): Promise<Core> {
 	if (core && !core.disposed) {
@@ -87,8 +41,7 @@ export async function startCore(options?: CoreOption): Promise<Core> {
 
 	logger.log("正在启动 Chirucat 核心...");
 	try {
-		const coreOption = options ?? (await loadOptions());
-		core = new Core(coreOption);
+		core = new Core(options);
 		await core.init();
 		logger.log("Chirucat 核心启动成功！");
 		return core;

@@ -48,9 +48,13 @@ const logger = new Logger("Core")
 
 export class Core {
 	private _disposed: boolean = false;
-	config: CoreOption = {
-		webui: true,
-	};
+	/**
+	 * 启动期显式覆盖, 仅用于测试与嵌入式注入
+	 *
+	 * 正常启动不给任何覆盖: 值一律来自 `configs/*.json` 的设置域(见 initSettings)。
+	 * 这里给了的字段优先级最高, 检查脚本靠它关掉 WebUI / 统计, 避免占端口或联网。
+	 */
+	config: CoreOption = {};
 	bot = new BotManager(this);
 	botHelper = new BotHelper(this);
 	/** 服务插件宿主: services/ 下的框架级插件, 全局单例, 生命周期由 Core 管理 */
@@ -124,12 +128,15 @@ export class Core {
 		this.session.init()
 		this.profile.init()
 
-		if (this.config.webui) {
+		// 启动参数统一从设置域取: 它与运行期读写、WebUI 设置页共用同一份值文件
+		const startup = this.resolveStartupSettings();
+
+		if (startup.webui) {
 			await import("./webui/server/server").then(module => {
 				const server = module.WebUIServer;
 				const webui = new server({
 					core: this,
-					...this.config.webuiOption
+					...(startup.webuiOption ?? {})
 				})
 				this.webui = webui;
 			}).catch(e => {
@@ -138,7 +145,7 @@ export class Core {
 		}
 		await this.webui?.start();
 
-		if (this.config.statistics !== false) {
+		if (startup.statistics) {
 			await this.createStatistics();
 		}
 
@@ -155,14 +162,34 @@ export class Core {
 	}
 
 	/**
-	 * 装配框架自身的设置域并载入
+	 * 解析启动期配置: 显式注入 > 设置域 > 定义默认值
 	 *
-	 * 值文件与 app.ts 启动时读的是同一份: 域负责**运行期**的读写、校验与变更通知,
-	 * 启动参数仍由 app.ts 组装。两边的"首次生成什么"共用各域导出的 initial*
-	 * 工厂(见下面的 onCreate), 因此无论谁先建文件内容都一致 —— 尤其保证
+	 * 只在 `init()` 里、设置域载入完成之后调用。单独成方法是为了让检查脚本能在
+	 * 不启动 WebUI / 数据库的情况下验证"启动参数确实来自设置域"。
+	 */
+	resolveStartupSettings(): {
+		webui: boolean;
+		statistics: boolean;
+		webuiOption: WebUISettings | undefined;
+	} {
+		const coreValues = this.settings.domain<CoreSettings>(CORE_DOMAIN_ID)?.get();
+		return {
+			webui: this.config.webui ?? coreValues?.webui ?? true,
+			statistics: this.config.statistics ?? coreValues?.statistics ?? true,
+			webuiOption: this.settings.domain<WebUISettings>(WEBUI_DOMAIN_ID)?.get(),
+		};
+	}
+
+	/**
+	 * 装配框架自身的设置域并载入 —— 启动参数与运行期配置的唯一入口
+	 *
+	 * 值文件只有一处真相源: 启动参数从这里读(见 resolveStartupSettings), 运行期的
+	 * 读写、校验与热应用也走这里, app.ts 不再自己读一遍配置文件。
+	 * "首次生成什么"由各域导出的 initial* 工厂(见 onCreate)决定 —— 尤其保证
 	 * webui.json 永远不会以"空密码"的形态被创建出来。
 	 *
-	 * 单独成方法是为了能在不起 Bot 的情况下被检查脚本直接调用。
+	 * 载入结果里的 created / recovered 在这里统一转成日志: 域定义文件只描述数据,
+	 * 不掺日志逻辑。单独成方法也是为了能被检查脚本直接调用。
 	 */
 	async initSettings(): Promise<void> {
 		// Core 自身的开关
@@ -174,18 +201,17 @@ export class Core {
 			onLoad: (values) => this.applyCoreSettings(values, []),
 		});
 
-		if (this.config.webui) {
-			this.settings.register<WebUISettings>(WEBUI_DOMAIN_ID, {
-				definition: webuiSettings,
-				file: WEBUI_SETTINGS_FILE,
-				// 定义里 password 的默认值是空串(运行期语义 = 不鉴权),
-				// 直接由它生成文件会得到裸奔的管理后台 —— 首次内容必须走随机密码
-				onCreate: initialWebUISettings,
-				apply: (values, changed) => this.applyWebUISettings(values, changed),
-				// 载入时什么都无需热应用: 服务器就是用这份配置构造出来的
-				onLoad: (values) => this.applyWebUISettings(values, []),
-			});
-		}
+		// webui 域始终注册, 不随启动开关走: 模块被关掉时, 更需要能从设置页把它打开
+		this.settings.register<WebUISettings>(WEBUI_DOMAIN_ID, {
+			definition: webuiSettings,
+			file: WEBUI_SETTINGS_FILE,
+			// 定义里 password 的默认值是空串(运行期语义 = 不鉴权),
+			// 直接由它生成文件会得到裸奔的管理后台 —— 首次内容必须走随机密码
+			onCreate: initialWebUISettings,
+			apply: (values, changed) => this.applyWebUISettings(values, changed),
+			// 载入时什么都无需热应用: 服务器就是用这份配置构造出来的
+			onLoad: (values) => this.applyWebUISettings(values, []),
+		});
 
 		// 统计域不随模块启停而注册: 模块被关掉时, 更需要能从设置页把它打开
 		this.settings.register<StatisticsSettings>(STATISTICS_DOMAIN_ID, {
@@ -204,8 +230,26 @@ export class Core {
 			onLoad: (values) => { setLogLevel(values.level); },
 		});
 
-		// 单个域的文件损坏不阻断启动: loadAll 内部已逐域记录日志
-		await this.settings.loadAll();
+		// 损坏的值文件在载入时备份并重建, 真正失败(如备份写不了)仍不阻断其它域
+		const { loaded, failures } = await this.settings.loadAll();
+
+		for (const { id, result } of loaded) {
+			if (result.recovered) {
+				logger.warn(`设置域 ${id} 的值文件已损坏并重建, 原文件备份在: ${result.backupFile ?? "(未知)"}`);
+			}
+		}
+		if (failures.length > 0) {
+			logger.warn(`${failures.length} 个设置域载入失败, 已使用定义默认值继续启动`);
+		}
+
+		// 首次生成 WebUI 配置时把随机密码打到终端。以前靠 app.ts 读文件的 created
+		// 标志, 现在改由域载入结果提供 —— 域定义文件里一行日志都不用加
+		const webui = loaded.find(({ id }) => id === WEBUI_DOMAIN_ID)?.result;
+		if (webui?.created) {
+			logger.log("=======================");
+			logger.log(`已生成初始密码: ${(webui.values as WebUISettings).password}`);
+			logger.log("=======================");
+		}
 	}
 
 	/**
@@ -274,11 +318,10 @@ export class Core {
 	 * 创建统计模块
 	 *
 	 * 统计是可选模块(整个目录可被删除), 因此走动态 import, 失败只记日志;
-	 * 参数以设置域为准 —— 它才是运行期的真相源。
+	 * 参数以设置域为准 —— 它既是运行期、也是启动期的真相源。
 	 */
 	private async createStatistics(): Promise<void> {
-		const options = this.settings.domain<StatisticsSettings>(STATISTICS_DOMAIN_ID)?.get()
-			?? this.config.statisticsOption;
+		const options = this.settings.domain<StatisticsSettings>(STATISTICS_DOMAIN_ID)?.get();
 
 		try {
 			const module = await import("./statistics/manager");
