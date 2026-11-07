@@ -1,4 +1,4 @@
-import { JsonFileStore } from "../config/store";
+import { DesiredStateStore, type DesiredStateStrategy } from "../config/desired-state-store";
 import type { BotState } from "./types";
 
 /** 状态文件缺失/损坏时使用的默认状态 */
@@ -46,48 +46,27 @@ function normalize(raw: unknown): BotState {
 }
 
 /**
+ * Bot 状态的存储策略: 形状、旧格式兼容与等价判定都在这里, 与服务的
+ * opt-out 黑名单策略显式分开。
+ */
+export const botStateStrategy: DesiredStateStrategy<BotState> = {
+	defaults: () => copyState(DEFAULT_BOT_STATE),
+	normalize,
+	equals: isSameState,
+};
+
+/**
  * Bot 持久化启停状态管理器: 以 `<Bot目录>/state.json` 为后端。
  *
- * 文件结构 `{ enable: boolean, enabledPlugins: string[] }`, 表达**期望态**:
- * - `enable`: 是否期望该 Bot 运行
- * - `enabledPlugins`: 期望启用的插件 id 列表
- *
- * 读写、串行化、原子写与外部改动监听全部复用 `JsonFileStore` —— 本类只描述
- * Bot 状态的形状与各 setter 语义。三条契约见 `JsonFileStore`:
- * 1. 写入一律经过本类 —— 原子写 + 串行化, 一次改动只落一次盘
- * 2. 所有 setter 返回的期约在**落盘完成后**才 resolve (失败则 reject)
- * 3. 文件可被外部修改, `startWatching()` 后自动重读并通知监听者,
- *    由调用方决定如何把运行态收敛过来
+ * 文件结构 `{ enable: boolean, enabledPlugins: string[] }`, 表达**期望态**且是
+ * opt-in 白名单: 只有登记过的插件才会被启用。读写/原子写/外部监听由基类
+ * `DesiredStateStore` 承担, 本类只保留白名单的三种 setter 语义。
  *
  * 状态文件是每 Bot 一个: 删除 Bot 目录即清理干净, 不需要额外维护索引。
  */
-export class BotStateManager {
-	private readonly store: JsonFileStore<BotState>;
-
-	constructor(readonly file: string) {
-		this.store = new JsonFileStore<BotState>(file, {
-			defaults: () => copyState(DEFAULT_BOT_STATE),
-			normalize,
-			onError: "fallback",
-			// 缺失只表示"从未写过状态", 不反过来给 Bot 目录添文件
-			createIfMissing: false,
-		});
-	}
-
-	/** 当前状态的一份副本: 外部持有它不会被后续变更影响 */
-	get(): BotState {
-		return this.store.get();
-	}
-
-	/**
-	 * 从文件重新读取并替换内存态
-	 *
-	 * @returns 内容是否发生了变化
-	 */
-	async load(): Promise<boolean> {
-		const before = this.store.get();
-		await this.store.load();
-		return !isSameState(before, this.store.get());
+export class BotStateManager extends DesiredStateStore<BotState> {
+	constructor(file: string) {
+		super(file, botStateStrategy);
 	}
 
 	/**
@@ -95,8 +74,8 @@ export class BotStateManager {
 	 * @param enable 是否期望该 Bot 运行
 	 */
 	async setEnable(enable: boolean): Promise<void> {
-		const current = this.store.get();
-		await this.store.commit({ enable, enabledPlugins: [...current.enabledPlugins] });
+		const current = this.get();
+		await this.commit({ enable, enabledPlugins: [...current.enabledPlugins] });
 	}
 
 	/**
@@ -105,10 +84,10 @@ export class BotStateManager {
 	 * @param enabled 是否期望启用; false 时从列表中移除
 	 */
 	async setPluginEnabled(id: string, enabled: boolean): Promise<void> {
-		const current = this.store.get();
+		const current = this.get();
 		const ids = new Set(current.enabledPlugins);
 		enabled ? ids.add(id) : ids.delete(id);
-		await this.store.commit({ enable: current.enable, enabledPlugins: [...ids] });
+		await this.commit({ enable: current.enable, enabledPlugins: [...ids] });
 	}
 
 	/**
@@ -123,38 +102,11 @@ export class BotStateManager {
 		const drop = new Set(ids);
 		if (drop.size === 0) return false;
 
-		const current = this.store.get();
+		const current = this.get();
 		const kept = current.enabledPlugins.filter((id) => !drop.has(id));
 		if (kept.length === current.enabledPlugins.length) return false;
 
-		await this.store.commit({ enable: current.enable, enabledPlugins: kept });
+		await this.commit({ enable: current.enable, enabledPlugins: kept });
 		return true;
-	}
-
-	/**
-	 * 用一份完整期望态覆盖(列表整体替换, 顺序以传入为准)
-	 * @param next 期望状态
-	 */
-	async setState(next: BotState): Promise<void> {
-		await this.store.commit(normalize(next));
-	}
-
-	/** 监听状态文件的外部改动; 本类自身的写入不触发 */
-	startWatching(): void {
-		this.store.startWatching();
-	}
-
-	/**
-	 * 注册状态变更监听(仅外部改动触发, 本类自身的写入不触发)
-	 * @param listener 变更回调
-	 * @returns 取消监听
-	 */
-	watch(listener: BotStateListener): () => void {
-		return this.store.watch((state) => listener(state));
-	}
-
-	/** 停止监听并释放; 幂等 */
-	close(): void {
-		this.store.close();
 	}
 }

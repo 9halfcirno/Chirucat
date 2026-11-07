@@ -1,4 +1,4 @@
-import { JsonFileStore } from "../../config/store";
+import { DesiredStateStore, type DesiredStateStrategy } from "../../config/desired-state-store";
 
 /**
  * 服务插件的持久化状态(期望态)
@@ -50,43 +50,33 @@ function normalize(raw: unknown): ServiceState {
 }
 
 /**
+ * 服务状态的存储策略: 黑名单形状与等价判定都在这里, 与 Bot 的 opt-in
+ * 白名单策略显式分开。
+ */
+export const serviceStateStrategy: DesiredStateStrategy<ServiceState> = {
+	defaults: () => copyState(DEFAULT_SERVICE_STATE),
+	normalize,
+	equals: isSameState,
+};
+
+/**
  * 服务插件持久化启停状态管理器: 以 `configs/services/state.json` 为后端。
  *
- * 文件结构 `{ disabledServices: string[] }`, 表达**期望态**:
- * - `disabledServices`: 期望停用的服务插件 id 列表
- *
- * 读写、串行化、原子写与外部改动监听全部复用 `JsonFileStore` —— 本类只描述
- * 服务状态的形状与各 setter 语义(与 `BotStateManager` 同构, 只是名单语义相反)。
- * 契约见 `JsonFileStore`:
- * 1. 写入一律经过本类 —— 原子写 + 串行化, 一次改动只落一次盘
- * 2. 所有 setter 返回的期约在**落盘完成后**才 resolve (失败则 reject)
- * 3. 文件可被外部修改, `startWatching()` 后自动重读并通知监听者,
- *    由调用方决定如何把运行态收敛过来
+ * 文件结构 `{ disabledServices: string[] }`, 表达**期望态**且是 opt-out 黑名单。
+ * 读写/原子写/外部监听由基类 `DesiredStateStore` 承担, 本类只保留黑名单
+ * 的查询、求解与批量 setter 语义(含依赖连带)。
  *
  * 状态文件是全局唯一的一份(服务插件不归属任何 Bot), 路径可在构造时注入,
  * 便于测试与嵌入式场景把它指到临时目录。
  */
-export class ServiceStateManager {
-	private readonly store: JsonFileStore<ServiceState>;
-
-	constructor(readonly file: string) {
-		this.store = new JsonFileStore<ServiceState>(file, {
-			defaults: () => copyState(DEFAULT_SERVICE_STATE),
-			normalize,
-			onError: "fallback",
-			// 缺失只表示"从未停用过任何服务", 不反过来创建文件
-			createIfMissing: false,
-		});
-	}
-
-	/** 当前状态的一份副本: 外部持有它不会被后续变更影响 */
-	get(): ServiceState {
-		return this.store.get();
+export class ServiceStateManager extends DesiredStateStore<ServiceState> {
+	constructor(file: string) {
+		super(file, serviceStateStrategy);
 	}
 
 	/** 某个服务是否被显式停用 */
 	isDisabled(id: string): boolean {
-		return this.store.get().disabledServices.includes(id);
+		return this.get().disabledServices.includes(id);
 	}
 
 	/**
@@ -94,19 +84,8 @@ export class ServiceStateManager {
 	 * @param all 候选服务插件 id(通常是注册表的全部键)
 	 */
 	resolve(all: readonly string[]): string[] {
-		const disabled = new Set(this.store.get().disabledServices);
+		const disabled = new Set(this.get().disabledServices);
 		return all.filter((id) => !disabled.has(id));
-	}
-
-	/**
-	 * 从文件重新读取并替换内存态
-	 *
-	 * @returns 内容是否发生了变化
-	 */
-	async load(): Promise<boolean> {
-		const before = this.store.get();
-		await this.store.load();
-		return !isSameState(before, this.store.get());
 	}
 
 	/**
@@ -129,7 +108,7 @@ export class ServiceStateManager {
 	 * @returns 是否真的发生了改动
 	 */
 	async setEnabledMany(ids: readonly string[], enabled: boolean): Promise<boolean> {
-		const current = this.store.get();
+		const current = this.get();
 		const next = new Set(current.disabledServices);
 		let changed = false;
 
@@ -145,34 +124,7 @@ export class ServiceStateManager {
 
 		if (!changed) return false;
 
-		await this.store.commit({ disabledServices: [...next] });
+		await this.commit({ disabledServices: [...next] });
 		return true;
-	}
-
-	/**
-	 * 用一份完整期望态覆盖(名单整体替换, 顺序以传入为准)
-	 * @param next 期望状态
-	 */
-	async setState(next: ServiceState): Promise<void> {
-		await this.store.commit(normalize(next));
-	}
-
-	/** 监听状态文件的外部改动; 本类自身的写入不触发 */
-	startWatching(): void {
-		this.store.startWatching();
-	}
-
-	/**
-	 * 注册状态变更监听(仅外部改动触发, 本类自身的写入不触发)
-	 * @param listener 变更回调
-	 * @returns 取消监听
-	 */
-	watch(listener: ServiceStateListener): () => void {
-		return this.store.watch((state) => listener(state));
-	}
-
-	/** 停止监听并释放; 幂等 */
-	close(): void {
-		this.store.close();
 	}
 }
