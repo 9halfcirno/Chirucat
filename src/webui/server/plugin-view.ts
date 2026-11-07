@@ -1,6 +1,6 @@
 import type { Bot } from "../../bot/bot";
 import type { Plugin } from "../../plugin/plugin";
-import type { PluginScope, PluginStatus } from "../../plugin/types";
+import type { PluginManifest, PluginScope, PluginStatus } from "../../plugin/types";
 
 /**
  * 插件运行状态在 WebUI 中的表述
@@ -18,23 +18,53 @@ export function toViewStatus(status: PluginStatus): PluginViewStatus {
 }
 
 /**
- * 插件在 WebUI 中的视图数据: 清单里的展示字段 + 运行状态
+ * 插件与服务插件共通的视图字段
  *
- * 不直接返回 Plugin/manifest: manifest.path 是服务器本地绝对路径, 对前端无用;
- * 前端真正关心的"有没有配置""现在是启用还是停用"也不在清单里。
+ * 清单里的展示字段 + 运行态投影, 两类实体逐字相同;`type` / `scope` /
+ * `hasConfig` 的取值口径由各自的视图补足。
  */
-export type PluginView = {
+export type ManagedViewBase = {
 	id: string;
 	name: string | undefined;
 	version: string;
 	author: string | undefined;
 	description: string | undefined;
-	/** 插件类型: adapter 适配器 / normal 普通插件 */
-	type: string;
-	/** 是否声明了配置定义并装配成功, 决定是否给出配置入口 */
+	/** 是否给出配置入口; 插件看装配结果, 服务插件看清单声明 */
 	hasConfig: boolean;
 	/** 运行状态, 供前端显示徽章与开关 */
 	status: PluginViewStatus;
+};
+
+/** 投影成视图所需的最小实体形状: `Plugin` 与 `Service` 都满足 */
+export type ViewSource = {
+	id: string;
+	manifest: PluginManifest;
+	status: PluginStatus;
+};
+
+/** 把清单与运行态投影成 WebUI 视图的共通部分 */
+export function toManagedView(entity: ViewSource, hasConfig: boolean): ManagedViewBase {
+	const manifest = entity.manifest;
+	return {
+		id: entity.id,
+		name: manifest.name,
+		version: manifest.version,
+		author: manifest.author,
+		description: manifest.description,
+		hasConfig,
+		status: toViewStatus(entity.status),
+	};
+}
+
+/**
+ * 插件在 WebUI 中的视图数据: 清单里的展示字段 + 运行状态
+ *
+ * 不直接返回 Plugin/manifest: manifest.path 是服务器本地绝对路径, 对前端无用;
+ * 前端真正关心的"有没有配置""现在是启用还是停用"也不在清单里。
+ */
+export type PluginView = ManagedViewBase & {
+	/** 插件类型: adapter 适配器 / normal 普通插件 */
+	type: string;
 	/** 来源: 全局目录 / Bot 私有目录 */
 	scope: PluginScope;
 };
@@ -74,16 +104,9 @@ export function buildPluginViews(bot: Bot): PluginList {
 }
 
 function toPluginView(plugin: Plugin): PluginView {
-	const manifest = plugin.manifest;
 	return {
-		id: plugin.id,
-		name: manifest.name,
-		version: manifest.version,
-		author: manifest.author,
-		description: manifest.description,
+		...toManagedView(plugin, plugin.config !== null),
 		type: plugin.type,
-		hasConfig: plugin.config !== null,
-		status: toViewStatus(plugin.status),
 		scope: plugin.scope,
 	};
 }

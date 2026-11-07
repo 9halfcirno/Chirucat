@@ -145,6 +145,8 @@ export function createPluginCard(item, opts) {
 
 	const card = document.createElement("div")
 	card.className = "card plugin-card"
+	// 依赖连带时前端按 id 找到关联卡片, 逐个对齐运行态(不必重绘整页)
+	card.dataset.pluginId = item.id
 
 	// ---- 头部: 名称在左, 配置入口与启停开关在右 ----
 	const cardHead = document.createElement("div")
@@ -196,6 +198,20 @@ export function createPluginCard(item, opts) {
 	swh.classList.add("plugin-card-switch")
 	paintSwitch(swh, status, opts.toggleable, opts.toggleHint)
 	cardHead.append(swh)
+
+	/**
+	 * 从外部对齐运行态(插件依赖连带)
+	 *
+	 * 卡片与 dot-switch 各持一份状态闭包, 必须一起更新: 只改徽章/class 的话,
+	 * 下次点这个开关会按旧状态取反, 发出与所见相反的意图。
+	 * @param {boolean} next true 为启用
+	 */
+	card.setPluginStatus = (next) => {
+		status = next === true ? "enabled" : "disabled"
+		paintStatus(statusEl, status)
+		paintSwitch(swh, status, opts.toggleable, opts.toggleHint)
+		swh.setState?.(next === true)
+	}
 
 	// ---- 第一行: id + 作者 + 版本 ----
 	const meta = document.createElement("div")

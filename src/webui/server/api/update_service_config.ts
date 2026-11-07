@@ -1,5 +1,5 @@
 import type { WebUIAPI } from "../types";
-import { fail, requireCore, savePluginConfig } from "./_shared";
+import { fail, requireCore, requirePluginConfig, savePluginConfig } from "./_shared";
 
 /**
  * 更新服务插件配置
@@ -25,11 +25,9 @@ export default {
 		const service = c.services.resolve(id);
 		if (!service) fail(404, `服务插件 ${id} 不存在`);
 
-		if (!service.config) {
-			await c.services.setupConfig(service);
-			if (!service.config) fail(404, `服务插件 ${id} 没有可用的配置`);
-		}
+		const { config } = await requirePluginConfig(
+			service, "服务插件", (s) => c.services.setupConfig(s));
 
-		return savePluginConfig(service.config, req.body?.config, `服务插件 ${id}`);
+		return savePluginConfig(config, req.body?.config, `服务插件 ${id}`);
 	},
 } as WebUIAPI;

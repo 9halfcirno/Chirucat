@@ -1,5 +1,5 @@
 import type { WebUIAPI } from "../types";
-import { fail, requireBot, requireCore } from "./_shared";
+import { fail, requireBot, requireCore, requirePluginConfig } from "./_shared";
 
 /**
  * 获取插件配置
@@ -31,19 +31,15 @@ export default {
 					: `插件 ${id} 不存在`,
 			);
 		}
-		if (!plugin.config) {
-			// 如果没有配置, 可能是插件卸载导致的清理, 尝试重新装配一次
-			await bot.plugin.setupConfig(plugin);
-			if (!plugin.config) // 如果还没有就报错
-				fail(404, `插件 ${id} 没有可用的配置`);
-		};
+		const { config, define } = await requirePluginConfig(
+			plugin, "插件", (p) => bot.plugin.setupConfig(p));
 
 		return {
 			success: true,
 			/** 控件定义, 前端用来渲染表单 */
-			define: plugin.configSchema,
+			define,
 			/** 当前配置值 */
-			config: plugin.config.data,
+			config: config.values(),
 		};
 	},
 } as WebUIAPI;

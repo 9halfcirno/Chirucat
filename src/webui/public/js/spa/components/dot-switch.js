@@ -34,6 +34,18 @@ export function createDotSwitch(onclick, state = true) {
 		}
 	}
 
+	/**
+	 * 从外部对齐开关状态(如插件依赖连带)
+	 *
+	 * 必须同步这份闭包里的 `state`: 只改 DOM class 的话, 下次点击仍按旧状态
+	 * 取反, 会发出与用户所见相反的意图。
+	 * @param {boolean} next 目标状态
+	 */
+	swh.setState = (next) => {
+		state = Boolean(next);
+		switchState(swh, state);
+	};
+
 	switchState(swh, state);
 
 	return swh;

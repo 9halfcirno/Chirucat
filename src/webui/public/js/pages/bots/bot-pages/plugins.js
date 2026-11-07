@@ -3,7 +3,8 @@
  *
  * 提供四件事:
  * - 列表: 全局插件 / Bot 私有插件分组展示, 带类型、版本与运行状态
- * - 启停: 单个插件开关, 走 set_plugin_state (先收敛运行态, 成功才落盘)
+ * - 启停: 单个插件开关, 走 set_plugin_state (先收敛运行态, 成功才落盘);
+ *   接口回传依赖连带的 affected, 这里逐个对齐那些卡片, 不重新扫描目录
  * - 刷新: 重新扫描插件目录, 与 scan_bots 同语义(先扫描再回传列表)
  * - 配置: 声明了配置的插件给出入口, 弹窗内用 config-editor 渲染并保存
  *
@@ -99,17 +100,42 @@ export default {
 		}
 
 		/**
-		 * 启停单个插件: 回传收敛后的运行态, 失败由卡片提示并回弹
+		 * 启停单个插件: 回传收敛后的运行态与依赖连带的 affected, 失败由卡片提示并回弹
 		 * @param {object} item 插件视图数据
 		 * @param {boolean} target 目标状态
 		 */
 		async function togglePlugin(item, target) {
-			const data = await postJSON("/api/set_plugin_state", {
-				bot: bot.id,
-				id: item.id,
-				state: target,
-			})
+			let data
+			try {
+				data = await postJSON("/api/set_plugin_state", {
+					bot: bot.id,
+					id: item.id,
+					state: target,
+				})
+			} catch (e) {
+				// 连带加载/卸载可能已经跑了一半: 用只读列表(不扫描目录)把界面拉回现实,
+				// 再把原始错误抛给卡片去提示与回弹
+				try {
+					paint(await postJSON("/api/get_plugin_list", { bot: bot.id }))
+				} catch { /* 刷新失败就维持现状: 原始错误更要紧 */ }
+				throw e
+			}
+
 			const state = data.state === true
+			// 依赖连带: 只对齐真正变化的卡片, 不重绘整页、不重新扫描
+			const affected = Array.isArray(data.affected) ? data.affected : []
+			if (affected.length) {
+				const cards = [...body.querySelectorAll(".plugin-card")]
+				for (const id of affected) {
+					for (const card of cards) {
+						if (card.dataset.pluginId === id) card.setPluginStatus?.(state)
+					}
+				}
+				toast(
+					`受依赖连带影响, ${state ? "已一并启用" : "已一并停用"}: ${affected.join(", ")}`,
+					{ duration: 5000 },
+				)
+			}
 			toast(`插件 ${item.name || item.id} ${state ? "已启用" : "已停用"}`)
 			return state
 		}

@@ -1,5 +1,5 @@
 import type { WebUIAPI } from "../types";
-import { fail, requireBot, requireCore, savePluginConfig } from "./_shared";
+import { fail, requireBot, requireCore, requirePluginConfig, savePluginConfig } from "./_shared";
 
 /**
  * 更新插件配置
@@ -33,8 +33,8 @@ export default {
 					: `插件 ${id} 不存在`,
 			);
 		}
-		if (!plugin.config) fail(404, `插件 ${id} 没有可用的配置`);
+		const { config } = await requirePluginConfig(plugin, "插件");
 
-		return savePluginConfig(plugin.config, req.body?.config, `插件 ${id}`);
+		return savePluginConfig(config, req.body?.config, `插件 ${id}`);
 	},
 } as WebUIAPI;

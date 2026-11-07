@@ -1,6 +1,8 @@
 import type { Core } from "../../../core";
 import type { Bot } from "../../../bot/bot";
 import type { ConfigManager, ConfigValues } from "../../../config/manager";
+import type { ConfigRoot } from "../../../config/types";
+import type { PluginStatus } from "../../../plugin/types";
 import type { UserManager } from "../../../internal/user-manager";
 import { SettingsApplyError } from "../../../config/settings/manager";
 import { SettingsError } from "../../../config/settings/types";
@@ -80,6 +82,61 @@ export function parseTarget(value: unknown, field?: string): { platform: string;
 	return { platform: platform.trim(), id: id.trim() };
 }
 
+/** 可编辑配置的实体形状: `Plugin` 与 `Service` 都满足 */
+export type ConfigTarget = {
+	id: string;
+	config: ConfigManager | null;
+	configSchema: ConfigRoot | null;
+};
+
+/**
+ * 取一份可编辑的插件/服务配置
+ *
+ * 两个配置端点的共同前置: 实体停用时会清空 config, 读取类接口需要按需重新
+ * 装配一次(`setup`), 装配不上就 404; 更新类接口不传 `setup`, 直接拒绝。
+ * 返回 `define`(控件定义)与 `config`(值管理器), 由端点自己决定返回体形状 ——
+ * 插件/服务两端刻意不对称的字段不在这里合并。
+ *
+ * @param entity 目标插件或服务插件
+ * @param label 错误文案里的主体名, 形如 "插件" / "服务插件"
+ * @param setup 可选的重装配回调, 由对应宿主提供
+ */
+export async function requirePluginConfig<T extends ConfigTarget>(
+	entity: T,
+	label: string,
+	setup?: (entity: T) => Promise<void>,
+): Promise<{ config: ConfigManager; define: ConfigRoot | null }> {
+	if (!entity.config && setup) await setup(entity);
+	const config = entity.config;
+	if (!config) fail(404, `${label} ${entity.id} 没有可用的配置`);
+	return { config, define: entity.configSchema };
+}
+
+/**
+ * 记录一次插件运行态快照(只读内存, 不扫描目录)
+ *
+ * 启停一个插件会连带加载它依赖的插件、卸载依赖它的插件(`ManagedHostBase`
+ * 的 `load` / `unloadTree`)。宿主本身不返回"谁被连带改了", 端点在调用前后
+ * 各取一次快照来算 —— 比重新扫描目录或回传整份列表都便宜, 且只反映
+ * **本次真的发生变化**的插件。
+ */
+export function snapshotEnabledPlugins(
+	host: { allEntities(): readonly { id: string; status: PluginStatus }[] },
+): Map<string, boolean> {
+	return new Map(host.allEntities().map((e) => [e.id, e.status === "enabled"]));
+}
+
+/** 对比两次快照, 取本次状态真的变了插件 id; 目标自身由 state 字段表达, 可排除 */
+export function changedPluginIds(
+	before: Map<string, boolean>,
+	after: Map<string, boolean>,
+	excludeId?: string,
+): string[] {
+	return [...after]
+		.filter(([id, on]) => id !== excludeId && (before.get(id) ?? false) !== on)
+		.map(([id]) => id);
+}
+
 /**
  * 校验并保存一份插件/服务插件配置
  *
@@ -111,7 +168,7 @@ export async function savePluginConfig(
 	}
 
 	// 回传规范化后的值: 隐藏项、缺失键已被补齐, 便于前端与后端对齐
-	return { success: true, config: config.data };
+	return { success: true, config: config.values() };
 }
 
 /**

@@ -1,6 +1,6 @@
 import type { Service } from "../../plugin/services/service";
 import type { ServiceHost } from "../../plugin/services/host";
-import { toViewStatus, type PluginViewStatus } from "./plugin-view";
+import { toManagedView, type ManagedViewBase } from "./plugin-view";
 
 /**
  * 服务插件在 WebUI 中的视图数据
@@ -11,22 +11,8 @@ import { toViewStatus, type PluginViewStatus } from "./plugin-view";
  *
  * 运行状态仍只有"开 / 关 / 切换中"三种观感, 与普通插件同一套口径。
  */
-export type ServiceView = {
-	id: string;
-	name: string | undefined;
-	version: string;
-	author: string | undefined;
-	description: string | undefined;
+export type ServiceView = ManagedViewBase & {
 	type: "service";
-	/**
-	 * 是否声明了配置定义, 决定是否给出配置入口
-	 *
-	 * 按清单声明判断, 而不是看当前是否装配成功: 服务停用时会清空 config, 用
-	 * 运行态判断会让停用后的服务再也点不开配置 —— 而读取配置的接口本就会重新装配。
-	 */
-	hasConfig: boolean;
-	/** 运行状态, 供前端显示徽章与开关 */
-	status: PluginViewStatus;
 };
 
 /** 服务插件列表接口的返回体 */
@@ -45,15 +31,10 @@ export function buildServiceViews(host: ServiceHost): ServiceView[] {
 }
 
 function toServiceView(service: Service): ServiceView {
-	const manifest = service.manifest;
+	// 按清单声明判断, 而不是看当前是否装配成功: 服务停用时会清空 config,
+	// 用运行态判断会让停用后的服务再也点不开配置 —— 读取配置的接口本就会重新装配。
 	return {
-		id: service.id,
-		name: manifest.name,
-		version: manifest.version,
-		author: manifest.author,
-		description: manifest.description,
+		...toManagedView(service, Boolean(service.manifest.config)),
 		type: "service",
-		hasConfig: Boolean(manifest.config),
-		status: toViewStatus(service.status),
 	};
 }
