@@ -10,7 +10,7 @@ export const CORE_DOMAIN_ID = "core";
 /**
  * Core 设置值文件
  *
- * 与 `app.ts` 启动时读的是同一份: 域负责运行期读写, 启动参数仍由 app.ts 组装。
+ * 启动参数与运行期配置都从这里读, 是这份文件的唯一真相源。
  */
 export const CORE_SETTINGS_FILE = path.resolve(root, "configs", "core.json");
 
@@ -49,8 +49,8 @@ export const coreSettings: SettingsDefinition = defineSettings({
 /**
  * 生成 Core 值文件的初始内容 (文件首次创建时用)
  *
- * 字段全部取定义的默认值 —— 内容只有这一个真相源, `app.ts` 与设置域
- * 载入到缺失文件时都调它, 两边建出来的文件不会不一样。
+ * 字段全部取定义的默认值 —— 内容只有这一个真相源, 值文件缺失或损坏时
+ * 由设置域调它生成, 不会出现第二份默认值。
  */
 export function initialCoreSettings(): CoreSettings {
 	return { ...defaultsOf(coreSettings) } as CoreSettings;

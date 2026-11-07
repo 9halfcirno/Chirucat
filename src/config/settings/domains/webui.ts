@@ -11,8 +11,8 @@ export const WEBUI_DOMAIN_ID = "webui";
 /**
  * WebUI 设置值文件
  *
- * 与 `app.ts` 读取的是同一份文件: 定义里的键必须与 `WebUIServerOptions`
- * 逐字对齐, 否则会出现"写进去的字段启动时读不出来"。
+ * 启动 WebUIServer 时直接把这份设置展开成构造参数: 定义里的键必须与
+ * `WebUIServerOptions` 逐字对齐, 否则会出现"写进去的字段启动时读不出来"。
  */
 export const WEBUI_SETTINGS_FILE = path.resolve(root, "configs", "webui.json");
 
@@ -94,8 +94,8 @@ export const webuiSettings: SettingsDefinition = defineSettings({
  * 密码必须每次安装都不同(随机串), 因此不能写进定义的 `default` —— 定义里
  * `password.default: ""` 表达的是**运行期**语义(空串 = 不鉴权, 见
  * `WebUIServer.updateSecurity`), 与"首次该生成什么"是两回事。本函数是
- * "首次生成"的唯一真相源: `app.ts` 启动建文件与设置域载入到缺失文件时
- * 都调它, 谁先跑都只会落盘一份带随机密码的配置 —— 不会出现
+ * "首次生成"的唯一真相源: 设置域在值文件缺失或损坏重建时都调它,
+ * 只会落盘一份带随机密码的配置 —— 不会出现
  * "空密码 + 全网卡监听"的裸奔管理后台。
  *
  * 其余字段直接取定义的默认值, 字段增减时只需改定义。

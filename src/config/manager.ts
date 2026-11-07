@@ -1,8 +1,13 @@
 import path from "node:path";
-import { readJSON } from "../utils/readJSON";
 import { readProp } from "../utils/readProp";
 import { root } from "../utils/root";
-import { SerialQueue, cloneValue, deepEqual, isPlainObject, writeJsonFile } from "./store";
+import {
+	JsonFileStore,
+	cloneValue,
+	deepEqual,
+	isPlainObject,
+	writeJsonFile,
+} from "./store";
 import type { ConfigRoot, Control } from "./types";
 import { validateConfig } from "./validate-config";
 
@@ -48,20 +53,51 @@ function collectChangedPaths(
 export type ConfigChangeHandler = (key: string, value: unknown, oldValue: unknown) => void;
 
 /**
- * 配置管理器: 控件定义(schema) + 配置值(data) + 持久化文件(file)
+ * 配置管理器: 控件定义(schema) + 配置值 + 持久化文件
+ *
+ * 值文件统一交给 `JsonFileStore` —— 与设置域、期望态存储共用同一套原子写、
+ * 串行化与 revision 守卫。本类只负责 schema 驱动的规范化(`coerce`)与逐字段
+ * 变更通知。
+ *
+ * **刻意不监听值文件的外部改动**: 插件配置几乎都经 WebUI/API 程序化写入,
+ * 而每份配置一个 fs.watch 会让几十上百个插件同时启用时句柄与事件成倍放大。
+ * 手工编辑值文件需重启对应插件(或走 `load()` 重新载入)才生效。
+ *
+ * 三条与设置域不同的语义, 由传入 store 的选项固定下来:
+ * - 语法错误**抛出**, 不静默覆盖用户值文件(设置域是备份后重建);
+ * - 文件缺失时按 schema 默认值建一份;
+ * - `data` 是只读视图, 写入一律走 `update()` / `save()`。
  */
 export class ConfigManager {
-	/** 当前配置值 (内存态, 改动需显式 save / update 才落盘) */
-	data: ConfigValues;
+	/** 绑定了值文件时的存储层; 纯内存(未绑定文件)时为 null */
+	private readonly store: JsonFileStore<ConfigValues> | null;
+
+	/** 纯内存模式下的配置值(测试/嵌入式用) */
+	private memoryData: ConfigValues;
 
 	/** 变更监听器 */
 	private readonly watchers = new Set<ConfigChangeHandler>();
 
-	/** 串行化写链: 并发的两次保存不会交错落盘 */
-	private readonly queue = new SerialQueue();
-
 	constructor(readonly schema: ConfigRoot, readonly file?: string) {
-		this.data = this.defaults();
+		this.memoryData = this.defaults();
+		this.store = file
+			? new JsonFileStore<ConfigValues>(file, {
+				defaults: () => this.defaults(),
+				normalize: (raw) => this.coerce(this.schema?.controls ?? [], raw),
+				onError: "throw",
+				createIfMissing: true,
+			})
+			: null;
+	}
+
+	/**
+	 * 当前配置值的只读视图(深拷贝)
+	 *
+	 * 插件与 WebUI 共享同一个 ConfigManager 实例, 这里永远读到最新值。
+	 * 直接改这份对象不会生效 —— 写入请用 `update()` / `save()`。
+	 */
+	get data(): ConfigValues {
+		return this.store ? this.store.get() : this.memoryData;
 	}
 
 	/* ---------- 默认值 ---------- */
@@ -162,8 +198,9 @@ export class ConfigManager {
 	/**
 	 * 监听配置变更
 	 *
-	 * 仅在 update() 改动配置时触发(load 视为载入, 不算变更);
-	 * 一次 update 里每个发生变化的配置项调用一次回调, 没有变化就不调用。
+	 * `update()` / `updateSchema()` 触发; 一次变更里每个发生变化的配置项
+	 * 调用一次回调, 没有变化就不调用。`load()` 视为载入、不算变更。
+	 * 手工编辑值文件不会触发(见类注释), 需 `load()` 重新载入。
 	 *
 	 * @param handler 变更回调, 参数为 (配置项路径, 新值, 旧值)
 	 * @returns 取消监听
@@ -203,18 +240,8 @@ export class ConfigManager {
 	 * @param file 值文件路径, 缺省用构造时传入的 file
 	 */
 	async load(file: string = this.file ?? ""): Promise<ConfigValues> {
-		if (!file) return this.data;
-
-		let loaded: unknown;
-		try {
-			loaded = await readJSON(file);
-		} catch (e) {
-			if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-			loaded = this.defaults();
-			await writeJsonFile(file, loaded);
-		}
-
-		this.data = this.coerce(this.schema?.controls ?? [], loaded);
+		if (!this.store) return this.data;
+		await this.store.load(file || this.store.file);
 		return this.data;
 	}
 
@@ -229,15 +256,18 @@ export class ConfigManager {
 	 */
 	async update(submitted: unknown): Promise<ConfigValues> {
 		const before = this.data;
-		this.data = this.coerce(this.schema?.controls ?? [], submitted, this.data);
-		await this.save();
-		this.notifyChanges(before, this.data);
+		const next = this.coerce(this.schema?.controls ?? [], submitted, before);
+
+		if (this.store) await this.store.commit(next);
+		else this.memoryData = next;
+
+		this.notifyChanges(before, next);
 		return this.data;
 	}
 
 	/**
 	 * 热更新 Schema 定义
-	 * 
+	 *
 	 * @param newSchema 新的 schema 控件定义
 	 * @param options.saveAfterUpdate 重构数据后是否立即持久化落盘（默认 true）
 	 * @param options.notifyChanges 是否对变更的字段触发 watch 监听回调（默认 true）
@@ -249,24 +279,15 @@ export class ConfigManager {
 		const { saveAfterUpdate = true, notifyChanges = true } = options;
 
 		const oldData = this.data;
-		const oldSchema = this.schema;
-
-		// 更新 schema 引用
 		(this as { schema: ConfigRoot }).schema = newSchema;
+		const next = this.coerce(newSchema?.controls ?? [], oldData);
 
-		// 使用新 schema 重新规范化数据
-		this.data = this.coerce(newSchema?.controls ?? [], oldData);
+		// 只改内存: 是否落盘由 saveAfterUpdate 决定, 不能在 commit 里顺手写掉
+		if (this.store) this.store.replace(next);
+		else this.memoryData = next;
 
-		// 如果需要，通知字段变更
-		if (notifyChanges) {
-			this.notifyChanges(oldData, this.data);
-		}
-
-		// 落盘保存新结构下的配置值
-		if (saveAfterUpdate && this.file) {
-			await this.save();
-		}
-
+		if (notifyChanges) this.notifyChanges(oldData, next);
+		if (saveAfterUpdate && this.file) await this.save();
 		return this.data;
 	}
 
@@ -326,15 +347,19 @@ export class ConfigManager {
 	/**
 	 * 保存到文件: 先建目录, 再原子写入
 	 *
-	 * 写入经过串行队列: 并发的 update/save 不会交错落盘。落盘的是调用这一刻
-	 * 的快照 —— 排队期间 data 又被改动时, 本次写的仍是当时那份值。
+	 * 写入经过 store 的串行队列: 并发的 update/save 不会交错落盘。落盘的是调用
+	 * 这一刻的快照 —— 排队期间内存又被改动时, 本次写的仍是当时那份值。
 	 * @param file 目标文件, 缺省用构造时传入的 file
 	 */
 	async save(file?: string) {
 		const target = file ?? this.file;
 		if (!target) throw new Error("ConfigManager 未绑定配置文件, 无法保存");
-		const snapshot = cloneValue(this.data);
-		await this.queue.run(() => writeJsonFile(target, snapshot));
+
+		if (this.store) {
+			await this.store.write(target);
+			return;
+		}
+		await writeJsonFile(target, cloneValue(this.memoryData));
 	}
 
 	/* ---------- 路径约定 ---------- */

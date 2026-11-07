@@ -165,3 +165,30 @@ export interface SettingsPatchResult {
 	/** 本次改动中需要重启才生效的字段路径 */
 	restartRequired: string[];
 }
+
+/* ---------- 载入结果 ---------- */
+
+/**
+ * 一次设置域载入的结果
+ *
+ * 域定义只描述数据, 不负责打日志; `created` / `recovered` 由启动层消费,
+ * 用来决定"要不要打印初始密码"或"提示值文件被重建"。
+ */
+export interface SettingsLoadResult<T extends Record<string, unknown> = Record<string, unknown>> {
+	/** 载入后的完整值(含敏感字段明文, 内部通道) */
+	values: T;
+	/** 值文件首次生成 */
+	created: boolean;
+	/** 值文件损坏, 已备份原文件并按默认值重建 */
+	recovered: boolean;
+	/** 损坏原文件的备份路径(仅 recovered 时有值) */
+	backupFile?: string;
+}
+
+/** `SettingsManager.loadAll()` 的结果 */
+export interface SettingsLoadAllResult {
+	/** 成功载入的域, 按注册顺序 */
+	loaded: { id: string; result: SettingsLoadResult }[];
+	/** 载入失败的域(备份/重建也失败时会落到这里) */
+	failures: { id: string; error: unknown }[];
+}

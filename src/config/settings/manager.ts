@@ -5,6 +5,8 @@ import { defaultsOf, entriesOf, toControls, writePath } from "./compile";
 import { coercePatch, normalizeValues } from "./validate";
 import type {
 	SettingsDefinition,
+	SettingsLoadAllResult,
+	SettingsLoadResult,
 	SettingsPatchResult,
 	SettingsSnapshot,
 } from "./types";
@@ -30,7 +32,7 @@ export interface SettingsDomainOptions<T extends Record<string, unknown> = Recor
 	/** 载入完成后调用 (把值同步给运行中的对象) */
 	onLoad?: (values: T) => void | Promise<void>;
 	/**
-	 * 值文件缺失时生成初始内容的工厂; 缺省取定义的默认值
+	 * 值文件缺失或损坏重建时生成初始内容的工厂; 缺省取定义的默认值
 	 *
 	 * 定义里的 `default` 表达的是"字段缺省值", 但有的文件首次生成需要一次性的
 	 * 随机内容(如 WebUI 的初始密码), 这种值写不进定义 —— 交给本钩子, 让
@@ -39,6 +41,13 @@ export interface SettingsDomainOptions<T extends Record<string, unknown> = Recor
 	onCreate?: () => Record<string, unknown>;
 	/** 是否监听值文件的外部改动并自动重读, 默认 false */
 	watchFile?: boolean;
+	/**
+	 * 值文件损坏时的行为, 缺省 `recreate`(备份原文件后按默认值重建)
+	 *
+	 * 框架自身的值文件可重建; 但 `bot:<id>` 域里 `id` 同时是目录名与索引键,
+	 * 默认值是空串, 重建会造出身份不明的 Bot —— 那里必须显式传 `throw`。
+	 */
+	onError?: "throw" | "fallback" | "recreate";
 	/** 注入存储 (测试用); 缺省新建一个绑定 file 的 JsonFileStore */
 	store?: JsonFileStore<Record<string, unknown>>;
 }
@@ -73,6 +82,9 @@ export class SettingsDomain<T extends Record<string, unknown> = Record<string, u
 		this.store = options.store ?? new JsonFileStore<Record<string, unknown>>(options.file, {
 			defaults: () => (options.onCreate ? options.onCreate() : defaultsOf(definition)),
 			normalize: (raw) => normalizeValues(definition, raw),
+			// 设置值文件是可重建的框架配置: 损坏时备份原文件再按默认值生成一份,
+			// 而不是静默跳过(启动后配置仍是坏的)或直接抛错(整个框架起不来)
+			onError: options.onError ?? "recreate",
 		});
 	}
 
@@ -80,12 +92,22 @@ export class SettingsDomain<T extends Record<string, unknown> = Record<string, u
 		return this.store.file;
 	}
 
-	/** 从文件载入; 文件缺失时按定义生成默认值 */
-	async load(): Promise<T> {
-		const values = await this.store.load();
+	/**
+	 * 从文件载入; 文件缺失时按定义生成默认值, 损坏时备份后重建
+	 *
+	 * 返回载入结果而不只是值: `created` / `recovered` 交给启动层打日志,
+	 * 域定义文件里不掺任何日志逻辑。
+	 */
+	async load(): Promise<SettingsLoadResult<T>> {
+		const outcome = await this.store.loadOutcome();
 		if (this.options.watchFile) this.attachFileWatch();
-		await this.options.onLoad?.(values as T);
-		return this.get();
+		await this.options.onLoad?.(outcome.value as T);
+		return {
+			values: this.get(),
+			created: outcome.created,
+			recovered: outcome.recovered,
+			...(outcome.backupFile ? { backupFile: outcome.backupFile } : {}),
+		};
 	}
 
 	/**
@@ -298,21 +320,23 @@ export class SettingsManager {
 	/**
 	 * 载入全部域
 	 *
-	 * 单个域的文件损坏不阻断其余域, 失败的域在返回值里列出, 由调用方决定
-	 * 是记录日志还是让启动失败。
+	 * 单个域的备份/重建失败不阻断其余域, 失败的域列在 `failures` 里由调用方决定
+	 * 怎么处理。成功载入的域连同 `created` / `recovered` 一并返回, 供启动层
+	 * 打印初始密码或提示值文件被重建。
 	 */
-	async loadAll(): Promise<{ id: string; error: unknown }[]> {
-		const failures: { id: string; error: unknown }[] = [];
+	async loadAll(): Promise<SettingsLoadAllResult> {
+		const loaded: SettingsLoadAllResult["loaded"] = [];
+		const failures: SettingsLoadAllResult["failures"] = [];
 
 		for (const [id, domain] of this.domains) {
 			try {
-				await domain.load();
+				loaded.push({ id, result: await domain.load() });
 			} catch (error) {
 				failures.push({ id, error });
 				logger.error(`设置域 ${id} 载入失败: ${error instanceof Error ? error.message : error}`);
 			}
 		}
-		return failures;
+		return { loaded, failures };
 	}
 
 	/** 注销一个域并释放 (Bot 被删除时用) */
