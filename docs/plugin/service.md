@@ -17,6 +17,21 @@
 
 放错地方的插件会被跳过并告警: `services/` 里只收 `type: "service"`; 反过来, Bot 插件目录里出现 `type: "service"` 的插件也会被跳过。
 
+## 与普通插件共用的实现
+
+服务插件与普通插件的**实体状态机**与**宿主流程**其实是同一套代码: `src/plugin/managed-entity.ts`
+的 `ManagedEntity` 承载 enable/disable 与配置/模块生命周期, `src/plugin/managed-host.ts`
+的 `ManagedHostBase` 承载注册表、依赖图、扫描对账、按依赖顺序加载、递归卸载与状态收敛。
+
+差异全部由两个子类显式覆写的策略方法给出, 基类里没有布尔开关:
+单表 vs 双表(及查找优先顺序)、`ServiceContext` vs `PluginContextFactory`、Hook 名、
+配置值文件路径、加载器的受限策略、清单过滤规则、关态实例是否重建、依赖豁免与跳过理由。
+
+刻意留在 `ServiceHost` 子类的编排层是: 持久化期望态、启停串行队列、`setEnabled` 的依赖连带、
+以及释放流程 —— 这些在 `PluginManager` 里没有对应物。尤其**期望名单的求解时机**:
+服务宿必须在串行队列内部读黑名单(排队期间用户可能刚改过状态), 插件宿在调用点读白名单,
+两者不能统一, 因此基类只提供 `convergeState`, 由两个子类各自保留 `syncState` 外壳。
+
 ## 目录与文件
 
 以 `services/bind/` 为例:

@@ -2,17 +2,15 @@ import path from "path";
 import type { Bot } from "../../bot/bot";
 import { CommandManager } from "../../command/manager";
 import { ConfigManager } from "../../config/manager";
-import { readConfigDefine } from "../../config/define";
 import type { Core } from "../../core";
 import type { Message } from "../../entity/message";
 import { StateError } from "../../errors/state-error";
 import type { BotEvents, BotEventMeta } from "../../protocols/events";
-import { dfs } from "../../utils/dfs";
-import Logger from "../../utils/logger";
 import { dirCheck } from "../../utils/dir-check";
+import Logger from "../../utils/logger";
+import { ManagedHostBase } from "../managed-host";
 import { PluginExports } from "../exports";
 import { PluginLoader } from "../loader";
-import { readManifests } from "../manifest";
 import type { PluginManifest, PluginStatus } from "../types";
 import { Service, type ServiceModule } from "./service";
 import { ServiceContext } from "./context";
@@ -33,14 +31,14 @@ export type ServiceToggleResult = {
 /**
  * 服务插件宿主
  *
- * 管理 services/ 目录下的框架级插件: 与 PluginManager 相同的发现 / 依赖 / 加载语义,
- * 但注册表挂在 Core 上而不是某个 Bot 上 —— 一个服务插件在整个进程里只有一份实例,
- * 这正是 service 与"全局目录里的普通插件(每个 Bot 各实例化一份)"的分界。
+ * 注册表 / 依赖图 / 启停 / 收敛 / 配置装配由 `ManagedHostBase` 承担, 这里给出
+ * 全局单例的差异策略(单表、ServiceContext、可信加载器、黑名单期望态),
+ * 并保留本宿主独有的编排层: 持久化期望态、启停串行队列、依赖连带、释放流程。
  *
  * 生命周期由 Core 管理: init 时先于 Bot 扫描并加载(供 Bot 插件 require),
  * close 时后于 Bot 卸载(基础设施最后倒)。
  */
-export class ServiceHost {
+export class ServiceHost extends ManagedHostBase<Service, ServiceContext> {
 	readonly logger = new Logger("ServiceHost");
 
 	/** 服务插件专用加载器: services/ 属于框架级可信代码, 不限制内置模块 */
@@ -81,8 +79,63 @@ export class ServiceHost {
 		private readonly core: Core,
 		stateFile: string = ConfigManager.fileForServiceState(),
 	) {
+		super("服务插件");
 		this.state = new ServiceStateManager(stateFile);
 	}
+
+	/* ---------- 差异策略 ---------- */
+
+	protected loggerSource(): Logger { return this.logger; }
+
+	protected registries(): Map<string, Service>[] { return [this.registry]; }
+
+	protected configFileFor(service: Service): string {
+		return ConfigManager.fileForService(service.id);
+	}
+
+	protected createEntity(manifest: PluginManifest): Service {
+		return new Service({ manifest, core: this.core });
+	}
+
+	protected createContext(service: Service): ServiceContext {
+		return new ServiceContext(service, this.exports, this.command);
+	}
+
+	protected async loadModule(service: Service): Promise<ServiceModule> {
+		const loaded = await this.loader.load<ServiceModule>(path.join(service.manifest.path, service.manifest.main));
+		if (!loaded?.default) throw new Error(`服务插件 ${service.id} 没有默认导出`)
+		return loaded.default;
+	}
+
+	protected beforeEnable(service: Service): boolean {
+		// Hook 埋点: 服务启用之前, 可被已启用的服务插件取消
+		// (与普通插件的 before.plugin.enable 同位置、同取消语义)
+		return this.core.hooks.dispatch("before.service.enable", service);
+	}
+
+	protected releaseExports(service: Service): void {
+		this.exports.releaseExports(service.id);
+	}
+
+	/** 关态服务每次扫描都重建, 不像插件宿那样要求清单发生变化 */
+	protected shouldReplace(): boolean { return true; }
+
+	protected acceptManifest(manifest: PluginManifest, id: string): boolean {
+		if (manifest.type === "service") return true;
+		this.logger.warn(`services/ 中跳过非 service 类型插件: ${id} (type=${manifest.type ?? "normal"})`);
+		return false;
+	}
+
+	protected onReadError(error: unknown, pluginDir: string): void {
+		this.logger.error(`读取服务插件清单失败: ${pluginDir}`, error);
+	}
+
+	/** 依赖闭包里有显式停用的服务时, 收敛阶段跳过该服务且不写盘 */
+	protected preLoadIssues(id: string): string[] {
+		return this.stoppedDependencies(id);
+	}
+
+	/* ---------- 状态文件与生命周期 ---------- */
 
 	/** 状态文件路径 */
 	get stateFile(): string {
@@ -93,7 +146,6 @@ export class ServiceHost {
 	 * 覆盖状态文件路径(测试/嵌入式注入用)
 	 *
 	 * 只在期望态尚未装载时有效 —— 已经读过盘再换文件, 内存态与磁盘就会脱节。
-	 * @param file 状态文件路径
 	 */
 	setStateFile(file: string) {
 		if (this.stateLoaded) throw new StateError("服务插件状态已装载, 不能再更换状态文件");
@@ -129,222 +181,33 @@ export class ServiceHost {
 		this.state.startWatching();
 	}
 
+	/* ---------- 本宿主独有的入口 ---------- */
+
 	/**
 	 * 扫描服务插件目录, 创建 Service 实例(不加载模块)。
-	 *
-	 * 只维护注册表, 不改变任何服务插件的运行状态: 已启用实例不被替换,
-	 * 目录中已消失的悬空条目仅清理不在运行中的(非 enabled)。
-	 * @param dir 服务插件目录, 相对路径以项目根为基准
+	 * 扫描排进启停队列: WebUI 的"刷新"不能与一次启停交错。
 	 */
 	async scan(dir: string = "services"): Promise<void> {
-		// 扫描也排进启停队列: WebUI 的"刷新"可能与一次启停同时发生, 让 scan 与
-		// 启停交错会换掉正在加载中的实例(见 syncRegistry)
 		return this.serialize(async () => {
-			const collected = await readManifests(dir, (e, pluginDir) => {
-				this.logger.error(`读取服务插件清单失败: ${pluginDir}`, e);
-			});
-
-			// 服务目录只收 type: service 的插件; 其他类型放错地方, 跳过并提示
-			for (const [id, manifest] of [...collected]) {
-				if (manifest.type === "service") continue;
-				this.logger.warn(`services/ 中跳过非 service 类型插件: ${id} (type=${manifest.type ?? "normal"})`);
-				collected.delete(id);
-			}
-
-			await this.syncRegistry(collected);
+			await this.scanDir(dir, this.registry, 0);
 			this.checkDependencyCycles();
 		});
 	}
 
-	/** 用一份清单集合对账注册表 */
-	private async syncRegistry(collected: Map<string, PluginManifest>) {
-		// 活跃态(enabled/loading/unloading)持有异步流程引用: 既不能替换, 也不能清理
-		const ACTIVE: PluginStatus[] = ["enabled", "loading", "unloading"];
-
-		for (const [id, manifest] of collected) {
-			const existing = this.registry.get(id);
-			if (existing && ACTIVE.includes(existing.status)) {
-				// 运行中或正在切换的服务不替换实例, 避免运行态与注册表脱节
-				continue;
-			}
-			// 实例即将被丢弃, 先释放其运行时资源(含对外导出)
-			await existing?.context?.dispose();
-			const service = new Service({ manifest, core: this.core });
-			await this.setupConfig(service);
-			this.registry.set(id, service);
-		}
-
-		// 清理悬空条目: 目录中已消失且不在活跃态的服务
-		for (const [id, service] of [...this.registry]) {
-			if (!collected.has(id) && !ACTIVE.includes(service.status)) {
-				await service.context?.dispose();
-				this.registry.delete(id);
-			}
-		}
-	}
-
-	/**
-	 * 装配服务插件配置
-	 *
-	 * 定义(controls / default)来自插件自带的 manifest.config 文件, 属于插件代码、只读;
-	 * 值文件是全局的: configs/services/<插件id>.json, 不存在时按默认值生成。
-	 */
-	async setupConfig(service: Service) {
-		const define = service.manifest.config;
-		if (!define) return;
-
-		const file = path.resolve(service.manifest.path, define);
-		try {
-			service.configSchema = await readConfigDefine(file);
-
-			const config = new ConfigManager(
-				service.configSchema,
-				ConfigManager.fileForService(service.id),
-			);
-			await config.load();
-			service.config = config;
-		} catch (e) {
-			this.logger.error(`装配服务插件 ${service.id} 的配置失败: ${e instanceof Error ? e.message : e}`);
-		}
-	}
-
-	/** 按 id 取服务插件 */
-	resolve(id: string): Service | undefined {
-		return this.registry.get(id);
-	}
-
 	/** 已启用的服务插件, 按注册顺序 */
 	get enabledServices(): Service[] {
-		return [...this.registry.values()].filter(s => s.status === "enabled");
+		return this.enabledEntities();
 	}
 
-	/** 解析服务插件的依赖列表(仅已注册的; 缺失依赖提示后跳过) */
-	private getDependencyServices(service: Service): Service[] {
-		const deps: Service[] = [];
-		for (const depId of Object.keys(service.manifest.dependencies ?? {})) {
-			const dep = this.registry.get(depId);
-			if (!dep) {
-				this.logger.warn(`服务插件 ${service.id} 的依赖 ${depId} 未注册`);
-				continue;
-			}
-			deps.push(dep);
-		}
-		return deps;
-	}
-
-	/** 收集 manifest 中声明但未注册的依赖 id(缺失依赖) */
-	private getMissingDependencies(service: Service): string[] {
-		const missing: string[] = [];
-		for (const depId of Object.keys(service.manifest.dependencies ?? {})) {
-			if (!this.registry.has(depId)) missing.push(depId);
-		}
-		return missing;
-	}
-
-	/** 依赖指定服务插件的服务插件列表 */
-	private getDependents(id: string): Service[] {
-		return [...this.registry.values()].filter(s => s.manifest.dependencies?.[id]);
-	}
-
-	/** 全图循环检测: 以每个服务为根跑一次dfs, 发现环就warn(不阻断扫描) */
-	private checkDependencyCycles() {
-		const reported = new Set<string>();
-		for (const service of this.registry.values()) {
-			if (reported.has(service.id)) continue;
-			const cycle = dfs(service, s => s.id, s => this.getDependencyServices(s));
-			if (!cycle) continue;
-			cycle.forEach(s => reported.add(s.id));
-			this.logger.warn(`检测到服务插件依赖循环: ${cycle.map(s => s.id).join(" -> ")}`);
-		}
-	}
-
-	/**
-	 * 启动指定服务插件: 加载模块并创建上下文, 幂等
-	 * @param id 服务插件id
-	 */
+	/** 释放栅栏: 宿主进入释放流程后不再接受状态变更 */
 	async load(id: string): Promise<void> {
 		if (this.released) throw new StateError("服务插件宿主正在释放, 不再接受状态变更");
-
-		const service = this.registry.get(id);
-		if (!service) throw new Error(`服务插件 ${id} 未被索引`)
-		if (service.status === "enabled") return; // 幂等
-		if (service.status === "loading" || service.status === "unloading") throw new StateError(`服务插件 ${id} 正在切换状态, 请稍后再试`)
-
-		// 依赖环预检: 存在循环则拒绝加载
-		const cycle = dfs(service, s => s.id, s => this.getDependencyServices(s));
-		if (cycle) throw new StateError(`服务插件依赖存在循环, 拒绝加载: ${cycle.map(s => s.id).join(" -> ")}`);
-
-		// 依赖缺失预检: 直接依赖未注册则拒绝加载(传递依赖由递归 load 逐层拦截)
-		const missing = this.getMissingDependencies(service);
-		if (missing.length) {
-			throw new StateError(`服务插件 ${id} 的依赖未注册: ${missing.join(", ")}`);
-		}
-
-		// 先按依赖顺序递归加载依赖
-		for (const dep of this.getDependencyServices(service)) {
-			await this.load(dep.id);
-		}
-
-		// 进入 loading 前的状态只可能是关态, 失败时恢复到它
-		const before = service.status;
-
-		service.status = "loading";
-		try {
-			// 加载模块(未加载过, 或上次卸载时已释放)
-			if (!service.module) {
-				// 重新装配配置
-				await this.setupConfig(service);
-
-				const loaded = await this.loader.load<ServiceModule>(path.join(service.manifest.path, service.manifest.main));
-				if (!loaded?.default) throw new Error(`服务插件 ${id} 没有默认导出`)
-				service.module = loaded.default;
-			}
-
-			// 启用服务插件
-			const context = new ServiceContext(service, this.exports, this.command);
-			try {
-				await service.enable(context);
-			} catch (e) {
-				// enable 可能在其内部释放之前就报错, 这里兜底(dispose 幂等)
-				await context.dispose();
-				throw e;
-			}
-
-			this.logger.log(`成功载入服务插件: ${service.manifest.name || "???"}(${service.id})`);
-		} catch (e) {
-			// 构建/启用失败: 回到加载前的关态
-			service.status = before;
-			throw e;
-		}
+		return super.load(id);
 	}
 
-	/**
-	 * 卸载指定服务插件: 释放运行态, 保留注册表条目
-	 * @param ids 服务插件id
-	 */
-	async unload(...ids: string[]) {
+	async unload(...ids: string[]): Promise<void> {
 		if (this.released) throw new StateError("服务插件宿主正在释放, 不再接受状态变更");
-
-		for (const id of ids) {
-			await this.unloadTree(id, []);
-		}
-	}
-
-	/** 递归卸载: 先卸载依赖该服务插件的服务, 再卸载自身 */
-	private async unloadTree(id: string, stack: string[]): Promise<void> {
-		if (stack.includes(id)) return; // 依赖环防御, 防止无限递归
-
-		for (const dependent of this.getDependents(id)) {
-			await this.unloadTree(dependent.id, [...stack, id]);
-		}
-
-		const service = this.registry.get(id);
-		if (!service || service.status === "disabled" || service.status === "registered") return; // 幂等
-		await service.disable(true);
-		// 兜底: 导出正常已由 context.dispose() 释放, 这里覆盖上下文缺失等异常情况
-		this.exports.releaseExports(service.id);
-
-		this.logger.log(`已卸载服务插件: ${service.id}`);
+		return super.unload(...ids);
 	}
 
 	/**
@@ -354,49 +217,11 @@ export class ServiceHost {
 	 * @returns 期望启用但没能跑起来的服务插件 id(未注册、依赖被停用或加载失败)
 	 */
 	async syncState(desired?: string[]): Promise<string[]> {
-		return this.serialize(async () => {
+		return this.serialize(() => {
 			// 期望名单在队列**内部**求解: 排队期间用户可能刚改过状态(setEnabled),
 			// 在调用点取快照会把那次改动反向拉回
 			const wanted = new Set(desired ?? this.state.resolve([...this.registry.keys()]));
-
-			/** 起不来的服务: 期望里有、运行态给不出来 */
-			const failed: string[] = [];
-
-			// 先卸载期望关闭的
-			for (const service of [...this.enabledServices]) {
-				if (!wanted.has(service.id)) {
-					await this.unload(service.id);
-				}
-			}
-
-			// 再加载期望开启的
-			for (const id of wanted) {
-				if (!this.registry.has(id)) {
-					this.logger.warn(`期望启用但未注册的服务插件: ${id}`);
-					failed.push(id);
-					continue;
-				}
-
-				// 依赖里有被显式停用的服务: 加载会把停用项重新拉起, 与状态文件的
-				// 期望直接矛盾(只可能出现在手改文件的场景), 因此拒绝加载并如实报告。
-				// 不写盘: 一次启动失败不该把期望改成"以后都别启用"。
-				const stopped = this.stoppedDependencies(id);
-				if (stopped.length) {
-					this.logger.warn(`服务插件 ${id} 的依赖已被停用, 跳过加载: ${stopped.join(", ")}`);
-					failed.push(id);
-					continue;
-				}
-
-				try {
-					await this.load(id);
-				} catch (e) {
-					// 单个服务加载失败不阻断状态收敛, 记录后继续
-					this.logger.error(`服务插件 ${id} 加载失败: ${e instanceof Error ? e.message : e}`);
-					failed.push(id);
-				}
-			}
-
-			return failed;
+			return this.convergeState(wanted);
 		});
 	}
 
@@ -409,9 +234,6 @@ export class ServiceHost {
 	 * 依赖连带(与 load/unload 自身的递归语义一致, 保证运行态与名单同一口径):
 	 * - 停用: 依赖它才能运行的服务会被递归卸载, 这些 id 一并记入停用名单
 	 * - 启用: 它依赖的服务会被递归加载, 这些 id 一并移出停用名单
-	 * @param id 服务插件 id
-	 * @param enabled 是否期望启用
-	 * @returns 目标收敛后的运行态, 以及被连带变更的服务 id
 	 */
 	async setEnabled(id: string, enabled: boolean): Promise<ServiceToggleResult> {
 		return this.serialize(async () => {
@@ -571,10 +393,6 @@ export class ServiceHost {
 
 	/**
 	 * 事件过滤: 任一服务插件的过滤器返回 false, 该事件不再进入处理链
-	 * @param event 适配器派发的原始事件
-	 * @param bot 收到事件的 Bot
-	 * @param meta 事件来源元数据(适配器 id / Bot id)
-	 * @returns 是否放行
 	 */
 	filterEvent(event: BotEvents, bot: Bot, meta: BotEventMeta): boolean {
 		for (const service of this.enabledServices) {
@@ -588,10 +406,6 @@ export class ServiceHost {
 	 *
 	 * 由事件派发链在**过滤结果已知**之后调用, 不论结果如何 —— 是否把被拦下的事件
 	 * 交给某个观察者, 由观察者注册时的 `includeFiltered` 决定(见 `ctx.event.observe`)。
-	 * @param event 适配器派发的原始事件
-	 * @param bot 收到事件的 Bot
-	 * @param meta 事件来源元数据(适配器 id / Bot id)
-	 * @param accepted 该事件是否通过过滤
 	 */
 	observeEvent(event: BotEvents, bot: Bot, meta: BotEventMeta, accepted: boolean) {
 		for (const service of this.enabledServices) {
@@ -600,33 +414,7 @@ export class ServiceHost {
 	}
 
 	/**
-	 * 将平台原生事件派发给所有已启用服务插件 (逃生舱通路)
-	 *
-	 * 与 `observeEvent` 的区别: 原生事件没有"过滤/放行"概念, 是否投递只取决于
-	 * 服务插件有没有订阅该来源(见 `ServiceContext.onPlatformEvent`)。
-	 * @param event 平台原生事件
-	 * @param meta 事件元数据(适配器 id / Bot id)
-	 */
-	handlePlatformEvent(event: Record<string, any>, meta: BotEventMeta) {
-		for (const service of this.enabledServices) {
-			service.context?.handlePlatformEvent(event, meta);
-		}
-	}
-
-	/**
-	 * 将消息派发给所有已启用服务插件的全局消息回调 (按注册顺序)
-	 * @param msg 框架消息
-	 */
-	handleMessage(msg: Message) {
-		for (const service of this.enabledServices) {
-			service.context?.handleMessage(msg);
-		}
-	}
-
-	/**
 	 * 用全局指令表匹配消息
-	 * @param msg 框架消息
-	 * @returns 命中的指令名, 未命中为 false
 	 */
 	execCommand(msg: Message): string | false {
 		return this.command.exec(msg);

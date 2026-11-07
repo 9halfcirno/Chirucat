@@ -1,22 +1,27 @@
 import path from "path";
 import { Plugin } from "./plugin";
+import { ManagedHostBase } from "./managed-host";
 import { PluginLoader } from "./loader";
-import type { PluginScope, PluginStatus } from "./types";
-import { readManifests } from "./manifest";
-import { StateError } from "../errors/state-error";
+import type { PluginScope } from "./types";
+import type { PluginModule } from "./types";
 import { PluginContextFactory } from "./contexts/factory";
 import { ConfigManager } from "../config/manager";
-import { readConfigDefine } from "../config/define";
 import type { Bot } from "../bot/bot";
-import type { Message } from "../entity/message";
+import type { PluginContext } from "./contexts/context";
+import type { PluginManifest } from "./types";
 import type { ActionResponses, BotActions } from "../protocols/actions";
 import { AdapterContext } from "./contexts/adapter-context";
-import { dfs } from "../utils/dfs";
 import { PluginExports } from "./exports";
-import { deepEqual } from "../utils/deepEqual";
-import type { BotEventMeta } from "../protocols/events";
+import type Logger from "../utils/logger";
 
-export class PluginManager {
+/**
+ * Bot 的插件宿主
+ *
+ * 发现 / 依赖图 / 启停 / 收敛 / 配置装配由 `ManagedHostBase` 承担, 这里只给出
+ * Bot 侧的差异策略(双注册表、私有优先、上下文工厂、服务依赖豁免、适配器逃生舱)
+ * 与本宿主独有的动作派发和双目录扫描。
+ */
+export class PluginManager extends ManagedHostBase<Plugin, PluginContext> {
 	loader = new PluginLoader();
 
 	/** 全局目录插件注册表: id -> Plugin */
@@ -30,321 +35,99 @@ export class PluginManager {
 	#adapterExports = new PluginExports();
 
 	constructor(private bot: Bot) {
+		super("插件");
 	}
 
-	/**
-	 * 扫描插件目录, 创建Plugin实例(不加载模块)。
-	 * 只维护注册表, 不改变任何插件的运行状态:
-	 * - 已启用插件的实例不被替换, 仅更新清单(模块已在内存)
-	 * - 目录中已消失的悬空插件, 仅清理不在运行中的(非enabled)
-	 * @param paths 插件目录: global 全局目录, bot Bot私有目录(覆盖global同名插件)
-	 */
-	async scan(paths: { global: string, bot: string }) {
-		await this.scanDir(paths.global, "global", this.globalPlugins);
-		await this.scanDir(paths.bot, "bot", this.botPlugins);
-		this.checkDependencyCycles();
+	/* ---------- 差异策略 ---------- */
+
+	protected loggerSource(): Logger { return this.bot.logger; }
+
+	protected registries(): Map<string, Plugin>[] {
+		return [this.globalPlugins, this.botPlugins];
 	}
 
-	/** 解析插件的依赖插件列表(仅已注册的; 缺失依赖提示后跳过)。
-	 * 供依赖图遍历(环检测/按序加载)使用, 缺失拦截职责在 load 的预检, 不在本方法 */
-	private getDependencyPlugins(plugin: Plugin): Plugin[] {
-		const deps: Plugin[] = [];
-		for (const depId of Object.keys(plugin.manifest.dependencies ?? {})) {
-			const dep = this.resolve(depId);
-			if (!dep) {
-				// 服务插件已由 Core 先于所有 Bot 加载, 不进 Bot 的依赖图, 也不算缺失
-				if (this.isServiceDependency(depId)) continue;
-				this.bot.logger.warn(`插件 ${plugin.id} 的依赖 ${depId} 未注册`);
-				continue;
-			}
-			deps.push(dep);
-		}
-		return deps;
+	/** 解析优先 Bot 私有, 与迭代顺序(全局在前)不同 */
+	protected lookupRegistries(): Map<string, Plugin>[] {
+		return [this.botPlugins, this.globalPlugins];
 	}
 
-	/** 该依赖 id 是否指向已注册的服务插件(services/ 目录, 由 Core 管理) */
-	private isServiceDependency(id: string): boolean {
+	protected configFileFor(plugin: Plugin): string {
+		return ConfigManager.fileForPlugin(this.bot.path, plugin.id);
+	}
+
+	protected createEntity(manifest: PluginManifest, index: number): Plugin {
+		const scope: PluginScope = index === 0 ? "global" : "bot";
+		return new Plugin({ manifest, scope, bot: this.bot });
+	}
+
+	protected createContext(plugin: Plugin): PluginContext {
+		return PluginContextFactory.create(
+			plugin, this.pluginExports, this.bot.core.services.exports, this.#adapterExports);
+	}
+
+	protected async loadModule(plugin: Plugin): Promise<PluginModule> {
+		const loaded = await this.loader.load(path.join(plugin.manifest.path, plugin.manifest.main));
+		if (!loaded?.default) throw new Error(`插件 ${plugin.id} 没有默认导出`)
+		return loaded.default;
+	}
+
+	protected beforeEnable(plugin: Plugin): boolean {
+		// Hook 埋点: 插件启用之前, 可被服务插件取消
+		return this.bot.core.hooks.dispatch("before.plugin.enable", plugin);
+	}
+
+	protected releaseExports(plugin: Plugin): void {
+		this.pluginExports.releaseExports(plugin.id);
+		this.#adapterExports.releaseExports(plugin.id);
+	}
+
+	/** 服务插件由 Core 先于所有 Bot 加载, 不进 Bot 的依赖图, 也不算缺失 */
+	protected isDependencyExempt(id: string): boolean {
 		return this.bot.core.services.registry.has(id);
 	}
 
-	/** 收集 manifest 中声明但未注册的依赖 id(缺失依赖) */
-	private getMissingDependencies(plugin: Plugin): string[] {
-		const missing: string[] = [];
-		for (const depId of Object.keys(plugin.manifest.dependencies ?? {})) {
-			// 依赖可以是普通插件, 也可以是全局服务插件
-			if (this.resolve(depId) || this.isServiceDependency(depId)) continue;
-			missing.push(depId);
-		}
-		return missing;
-	}
-
-	/** 全图循环检测: 以每个插件为根跑一次dfs, 发现环就warn(不阻断扫描) */
-	private checkDependencyCycles() {
-		// 环上节点只报告一次
-		const reported = new Set<string>();
-		for (const plugin of [...this.globalPlugins.values(), ...this.botPlugins.values()]) {
-			if (reported.has(plugin.id)) continue;
-			const cycle = dfs(plugin, p => p.id, p => this.getDependencyPlugins(p));
-			if (!cycle) continue;
-			cycle.forEach(p => reported.add(p.id));
-			this.bot.logger.warn(`检测到插件依赖循环: ${cycle.map(p => p.id).join(" -> ")}`);
-		}
-	}
-
-	/** 扫描单个插件目录并同步到对应注册表 */
-	private async scanDir(dir: string, scope: PluginScope, registry: Map<string, Plugin>) {
-		const collected = await readManifests(dir, (e) => this.bot.logger.error(e));
-
+	protected acceptManifest(manifest: PluginManifest, id: string): boolean {
 		// service 类型归 services/ 目录(由 ServiceHost 承接全局单例);
-		// 出现在 Bot 插件目录里是放错了地方 —— 按普通插件加载会每个 Bot 各起一份, 不是它的语义
-		for (const [id, manifest] of [...collected]) {
-			if (manifest.type !== "service") continue;
-			this.bot.logger.warn(`插件 ${id} 声明为 service 类型, 应放入 services/ 目录, 已跳过`);
-			collected.delete(id);
-		}
-
-		// 更新注册表
-		for (const [id, manifest] of collected) {
-			const existing = registry.get(id);
-			// 未启动/仅注册的实例在清单变化时重建; 不存在则直接新建
-			if ( // 只有满足以下条件的重建Plugin对象
-				!existing || // 之前不存在
-				(
-					(
-						existing.status === "disabled" || // 状态是disabled
-						existing.status === "registered" // 状态停在仅注册
-					) && !deepEqual(existing.manifest, manifest) // 且清单发生变化
-				)
-			) {
-				// 实例即将被丢弃, 先释放其运行时资源(含对外导出)
-				await existing?.context?.dispose();
-				const plugin = new Plugin({ manifest, scope, bot: this.bot });
-				await this.setupConfig(plugin);
-				registry.set(id, plugin);
-			}
-		}
-
-		// 清理悬空条目: 目录中已消失且不在运行中的插件
-		// 活跃态(enabled/loading/unloading)持有异步流程引用, 不清理
-		const ACTIVE: PluginStatus[] = ["enabled", "loading", "unloading"];
-		for (const [id, plugin] of [...registry]) {
-			if (!collected.has(id) && !ACTIVE.includes(plugin.status)) {
-				// 丢弃前释放运行时资源(含对外导出); dispose 幂等
-				await plugin.context?.dispose();
-				registry.delete(id);
-			}
-		}
+		// 出现在 Bot 插件目录里是放错了地方 —— 按普通插件加载会每个 Bot 各起一份
+		if (manifest.type !== "service") return true;
+		this.bot.logger.warn(`插件 ${id} 声明为 service 类型, 应放入 services/ 目录, 已跳过`);
+		return false;
 	}
 
-	/**
-	 * 装配插件配置
-	 *
-	 * 定义(controls / default)来自插件自带的 manifest.config 文件, 属于插件代码、只读;
-	 * 值文件按 Bot 隔离: <Bot目录>/configs/plugins/<插件id>.json, 不存在时按默认值生成。
-	 *
-	 * 未声明 config 的插件保持 config = null; 定义读取失败只记录日志, 不阻断插件注册。
-	 */
-	async setupConfig(plugin: Plugin) {
-		const define = plugin.manifest.config;
-		if (!define) return;
-
-		const file = path.resolve(plugin.manifest.path, define);
-		try {
-			plugin.configSchema = await readConfigDefine(file);
-
-			const config = new ConfigManager(
-				plugin.configSchema,
-				ConfigManager.fileForPlugin(this.bot.path, plugin.id),
-			);
-			await config.load();
-			plugin.config = config;
-		} catch (e) {
-			this.bot.logger.error(`装配插件 ${plugin.id} 的配置失败: ${e instanceof Error ? e.message : e}`);
-		}
+	protected onReadError(error: unknown): void {
+		this.bot.logger.error(error);
 	}
 
+	/* ---------- 本宿主独有的入口 ---------- */
+
 	/**
-	 * 解析插件: 优先Bot私有, 回退全局
-	 * @param id 插件id
+	 * 扫描插件目录, 创建 Plugin 实例(不加载模块)。
+	 * 只维护注册表, 不改变运行状态: 已启用实例不被替换, 悬空条目只清理非活跃态。
 	 */
-	resolve(id: string): Plugin | undefined {
-		return this.botPlugins.get(id) ?? this.globalPlugins.get(id);
+	async scan(paths: { global: string, bot: string }): Promise<void> {
+		await this.scanDir(paths.global, this.globalPlugins, 0);
+		await this.scanDir(paths.bot, this.botPlugins, 1);
+		this.checkDependencyCycles();
 	}
 
 	/** 已启用插件, 按注册顺序(全局在前, Bot私有在后) */
 	get enabledPlugins(): Plugin[] {
-		return [...this.globalPlugins.values(), ...this.botPlugins.values()]
-			.filter(p => p.status === "enabled");
-	}
-
-	/**
-	 * 启动指定插件: 加载模块并创建上下文, 幂等
-	 * @param id 插件id
-	 */
-	async load(id: string): Promise<void> {
-		const plugin = this.resolve(id);
-		if (!plugin) throw new Error(`插件 ${id} 未被索引`)
-		if (plugin.status === "enabled") return; // 幂等
-		if (plugin.status === "loading" || plugin.status === "unloading") throw new StateError(`插件 ${id} 正在切换状态, 请稍后再试`)
-
-		// 依赖环预检: 存在循环则拒绝加载
-		const cycle = dfs(plugin, p => p.id, p => this.getDependencyPlugins(p));
-		if (cycle) throw new StateError(`插件依赖存在循环, 拒绝加载: ${cycle.map(p => p.id).join(" -> ")}`);
-
-		// 依赖缺失预检: 直接依赖未注册则拒绝加载(传递依赖由递归 load 逐层拦截)
-		const missing = this.getMissingDependencies(plugin);
-		if (missing.length) {
-			throw new StateError(`插件 ${id} 的依赖未注册: ${missing.join(", ")}`);
-		}
-
-		// 先按依赖顺序递归加载依赖
-		for (const dep of this.getDependencyPlugins(plugin)) {
-			await this.load(dep.id);
-		}
-
-		// 进入 loading 前的状态只可能是关态(enabled/loading/unloading 已在上面拦掉),
-		// 失败时恢复到它 —— 加载失败对外就是"没开起来", 不引入第三种状态
-		const before = plugin.status;
-
-		// 前置loading: 覆盖整个加载流程(含模块构建), 防止scan清理悬空条目时误删
-		plugin.status = "loading";
-		try {
-			// 加载模块(未加载过, 或上次卸载时已释放)
-			if (!plugin.module) {
-				// 重新装配配置
-				await this.setupConfig(plugin);
-
-				const loaded = await this.loader.load(path.join(plugin.manifest.path, plugin.manifest.main));
-				if (!loaded?.default) throw new Error(`插件 ${id} 没有默认导出`)
-				plugin.module = loaded.default;
-			}
-
-			// 启用插件
-			const context = PluginContextFactory.create(
-				plugin, this.pluginExports, this.bot.core.services.exports, this.#adapterExports);
-
-			// Hook 埋点: 插件启用之前, 可被服务插件取消
-			if (this.bot.core.hooks.dispatch("before.plugin.enable", plugin)) {
-				await context.dispose();
-				throw new StateError(`插件 ${plugin.id} 启用被 Hook 取消`);
-			}
-
-			try {
-				await plugin.enable(context);
-			} catch (e) {
-				// enable 可能在其内部释放之前就报错, 这里兜底(dispose 幂等)
-				await context.dispose();
-				throw e;
-			}
-
-			this.bot.logger.log(`成功载入插件: ${plugin.manifest.name || "???"}(${plugin.id})`);
-		} catch (e) {
-			// 构建/启用失败: 回到加载前的关态, 既不卡在 loading, 也不产生错误态
-			plugin.status = before;
-			throw e;
-		}
-	}
-
-	/**
-	 * 卸载指定插件: 释放运行态, 保留注册表条目。
-	 * 仅处理运行时, 不修改持久化的启停偏好(由调用方通过 bot.setPluginEnabled 写回)。
-	 * @param ids 插件id
-	 */
-	async unload(...ids: string[]) {
-		for (let id of ids) {
-			await this.unloadTree(id, []);
-		}
-	}
-
-	/** 递归卸载: 先卸载依赖该插件的插件, 再卸载自身 */
-	private async unloadTree(id: string, stack: string[]): Promise<void> {
-		if (stack.includes(id)) return; // 依赖环防御, 防止无限递归
-
-		for (const dependent of this.getDependents(id)) {
-			await this.unloadTree(dependent.id, [...stack, id]);
-		}
-
-		const plugin = this.resolve(id);
-		if (!plugin || plugin.status === "disabled" || plugin.status === "registered") return; // 幂等
-		await plugin.disable(true);
-		// 兜底: 导出正常已由 context.dispose() 释放, 这里覆盖上下文缺失等异常情况
-		this.pluginExports.releaseExports(plugin.id);
-		this.#adapterExports.releaseExports(plugin.id);
-
-		this.bot.logger.log(`已卸载插件: ${plugin.id}`);
-	}
-
-	/** 依赖指定插件的插件列表(跨 global/bot 注册表) */
-	private getDependents(id: string): Plugin[] {
-		return [...this.globalPlugins.values(), ...this.botPlugins.values()]
-			.filter(p => p.manifest.dependencies?.[id]);
+		return this.enabledEntities();
 	}
 
 	/**
 	 * 同步插件启停状态: 让运行状态收敛到期望状态
-	 * 无参时从 state.json 读取期望状态(通过 bot.state 的 enabledPlugins)
-	 * @param desired 期望启用的插件 id 列表, 缺省读 state.json
-	 * @returns 期望启用但没能跑起来的插件 id(未注册或加载失败), 供调用方清理期望态
+	 *
+	 * 期望名单在**调用点**读取白名单( Bot.state 的 enabledPlugins ); 本宿主没有
+	 * 串行队列, 也不需要"在队列内部重算"的语义(那是服务宿对黑名单的要求)。
 	 */
 	async syncState(desired: string[] = this.bot.state.get().enabledPlugins): Promise<string[]> {
-		const wanted = new Set(desired);
-
-		/** 起不来的插件: 期望里有、运行态给不出来 */
-		const failed: string[] = [];
-
-		// 先卸载期望关闭的
-		for (const plugin of [...this.enabledPlugins]) {
-			if (!wanted.has(plugin.id)) {
-				await this.unload(plugin.id);
-			}
-		}
-
-		// 再加载期望开启的
-		for (const id of wanted) {
-			if (!this.resolve(id)) {
-				this.bot.logger.warn(`期望启用但未注册的插件: ${id}`);
-				failed.push(id);
-				continue;
-			}
-			try {
-				await this.load(id);
-			} catch (e) {
-				// 单个插件加载失败(如依赖循环)不阻断状态收敛, 记录后继续
-				this.bot.logger.error(`插件 ${id} 加载失败: ${e instanceof Error ? e.message : e}`);
-				failed.push(id);
-			}
-		}
-
-		return failed;
-	}
-
-	/**
-	 * 将消息派发给所有已启用插件的消息回调 (按注册顺序)
-	 * @param msg 框架消息
-	 */
-	handleMessage(msg: Message) {
-		for (const plugin of this.enabledPlugins) {
-			plugin.context?.handleMessage(msg);
-		}
+		return this.convergeState(new Set(desired));
 	}
 
 	/** 适配器逃生舱注册表(本 Bot): 发布端在 AdapterContext.exports/escape, 消费端是 Entity.escape / ctx.adapterEscape */
 	get adapterExports(): PluginExports {
 		return this.#adapterExports;
-	}
-
-	/**
-	 * 将平台原生事件派发给订阅了该来源的插件上下文 (逃生舱)
-	 *
-	 * 按 `meta.adapter` 过滤在上下文侧完成: 只投递给登记过 `onPlatformEvent(该适配器)`
-	 * 的插件, 不广播给无关插件。
-	 * @param event 平台原生事件
-	 * @param meta 事件元信息, 携带来源适配器与 Bot id
-	 */
-	handlePlatformEvent(event: Record<string, any>, meta: BotEventMeta) {
-		for (const plugin of this.enabledPlugins) {
-			plugin.context?.handlePlatformEvent(event, meta);
-		}
 	}
 
 	async handleAction<T extends BotActions>(action: T, adapter: string, extra?: Record<string, any>): Promise<ActionResponses[T["type"]]> {

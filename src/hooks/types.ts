@@ -3,6 +3,7 @@ import type { Command, CommandArgs } from "../command/types";
 import type { Core } from "../core";
 import type { Message } from "../entity/message";
 import type { Plugin } from "../plugin/plugin";
+import type { Service } from "../plugin/services/service";
 import type { ActionResponses, BotActions } from "../protocols/actions";
 
 /**
@@ -65,6 +66,8 @@ export type BeforeHooks = {
 	"before.bot.enable": HookCallback<Bot>;
 	/** Plugin初始化之前, 传入未enable的Plugin */
 	"before.plugin.enable": HookCallback<Plugin>;
+	/** Service初始化之前, 传入未enable的Service */
+	"before.service.enable": HookCallback<Service>;
 
 	/** 消息处理之前, 传入已构造的Message对象 */
 	"before.message.handle": HookCallback<Message>;

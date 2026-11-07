@@ -23,7 +23,7 @@ export class PluginConfig implements PluginConfigAPI {
 	}
 
 	has(key: string): boolean {
-		return this.manager ? readProp(this.manager.data, key) !== undefined : false;
+		return this.manager ? readProp(this.manager.values(), key) !== undefined : false;
 	}
 
 	all(): ConfigValues {
