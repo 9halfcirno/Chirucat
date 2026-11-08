@@ -136,7 +136,7 @@ export class SettingsError extends Error {
 
 /* ---------- 对外快照 ---------- */
 
-/** 一份设置的对外快照: 控件投影 + 脱敏后的值 + 语义标记 */
+/** 一份设置的对外快照: 控件投影 + 脱敏后的值 */
 export interface SettingsSnapshot {
 	/**
 	 * 控件定义投影, 供前端 config-editor 渲染
@@ -148,12 +148,6 @@ export interface SettingsSnapshot {
 	define: ConfigRoot;
 	/** 当前值 (secret 字段已脱敏为空串) */
 	values: Record<string, unknown>;
-	/** 已设置(非空)的敏感字段路径 */
-	setSecrets: string[];
-	/** 改动后需重启才生效的字段路径 */
-	restartFields: string[];
-	/** 不可修改的字段路径 (前端应只读展示) */
-	immutableFields: string[];
 }
 
 /** 一次 patch 的结果 */

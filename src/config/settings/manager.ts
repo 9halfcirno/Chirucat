@@ -1,6 +1,5 @@
-import { readProp } from "../../utils/readProp";
 import Logger from "../../utils/logger";
-import { JsonFileStore, cloneValue, deepEqual } from "../store";
+import { JsonFileStore, cloneValue } from "../store";
 import { defaultsOf, entriesOf, toControls, writePath } from "./compile";
 import { coercePatch, normalizeValues } from "./validate";
 import type {
@@ -13,24 +12,21 @@ import type {
 
 const logger = new Logger("Settings");
 
-/** 逐字段变更回调 (与 ConfigManager.watch 同形) */
-export type SettingsWatcher = (path: string, value: unknown, previousValue: unknown) => void;
-
 export interface SettingsDomainOptions<T extends Record<string, unknown> = Record<string, unknown>> {
 	/** 设置定义 (真相源) */
 	definition: SettingsDefinition;
 	/** 值文件路径 */
 	file: string;
 	/**
-	 * 热应用钩子
+	 * 应用钩子
 	 *
 	 * 校验与落盘成功后调用, 收到的是本次真正变化的字段 —— 且**已剔除 restart 字段**:
 	 * 需要重启才生效的项在运行期没有意义, 不交给域去"假装应用"。
+	 * 载入完成后也会调用一次, 此时 `changed` 为空数组, 用于把值同步给运行中的对象。
+	 *
 	 * 钩子抛错不回滚已落盘的值, 调用方会收到"已保存但热应用失败"的错误。
 	 */
 	apply?: (values: T, changed: string[]) => void | Promise<void>;
-	/** 载入完成后调用 (把值同步给运行中的对象) */
-	onLoad?: (values: T) => void | Promise<void>;
 	/**
 	 * 值文件缺失或损坏重建时生成初始内容的工厂; 缺省取定义的默认值
 	 *
@@ -39,8 +35,6 @@ export interface SettingsDomainOptions<T extends Record<string, unknown> = Recor
 	 * "首次生成什么"也只有定义这一个真相源。
 	 */
 	onCreate?: () => Record<string, unknown>;
-	/** 是否监听值文件的外部改动并自动重读, 默认 false */
-	watchFile?: boolean;
 	/**
 	 * 值文件损坏时的行为, 缺省 `recreate`(备份原文件后按默认值重建)
 	 *
@@ -48,8 +42,6 @@ export interface SettingsDomainOptions<T extends Record<string, unknown> = Recor
 	 * 默认值是空串, 重建会造出身份不明的 Bot —— 那里必须显式传 `throw`。
 	 */
 	onError?: "throw" | "fallback" | "recreate";
-	/** 注入存储 (测试用); 缺省新建一个绑定 file 的 JsonFileStore */
-	store?: JsonFileStore<Record<string, unknown>>;
 }
 
 /**
@@ -60,36 +52,17 @@ export interface SettingsDomainOptions<T extends Record<string, unknown> = Recor
  */
 export class SettingsDomain<T extends Record<string, unknown> = Record<string, unknown>> {
 	private readonly store: JsonFileStore<Record<string, unknown>>;
-	private readonly watchers = new Set<SettingsWatcher>();
-
-	/** 值文件外部改动的取消函数 */
-	private unwatchStore: (() => void) | null = null;
-
-	/** 静态语义标记, 构造时算好 */
-	private readonly restartFields: string[];
-	private readonly immutableFields: string[];
 
 	constructor(readonly id: string, private readonly options: SettingsDomainOptions<T>) {
 		const definition = options.definition;
 
-		this.restartFields = entriesOf(definition)
-			.filter(([, spec]) => spec.restart === true)
-			.map(([path]) => path);
-		this.immutableFields = entriesOf(definition)
-			.filter(([, spec]) => spec.immutable === true)
-			.map(([path]) => path);
-
-		this.store = options.store ?? new JsonFileStore<Record<string, unknown>>(options.file, {
+		this.store = new JsonFileStore<Record<string, unknown>>(options.file, {
 			defaults: () => (options.onCreate ? options.onCreate() : defaultsOf(definition)),
 			normalize: (raw) => normalizeValues(definition, raw),
 			// 设置值文件是可重建的框架配置: 损坏时备份原文件再按默认值生成一份,
 			// 而不是静默跳过(启动后配置仍是坏的)或直接抛错(整个框架起不来)
 			onError: options.onError ?? "recreate",
 		});
-	}
-
-	get file(): string {
-		return this.store.file;
 	}
 
 	/**
@@ -100,8 +73,9 @@ export class SettingsDomain<T extends Record<string, unknown> = Record<string, u
 	 */
 	async load(): Promise<SettingsLoadResult<T>> {
 		const outcome = await this.store.loadOutcome();
-		if (this.options.watchFile) this.attachFileWatch();
-		await this.options.onLoad?.(outcome.value as T);
+		// 载入也走 apply(空改动): "把值同步给运行中的对象"与"热应用"是同一件事,
+		// 不需要两个钩子 —— 热应用只对字段的改动负责, 载入时没有改动
+		await this.options.apply?.(outcome.value as T, []);
 		return {
 			values: this.get(),
 			created: outcome.created,
@@ -120,28 +94,19 @@ export class SettingsDomain<T extends Record<string, unknown> = Record<string, u
 		return this.store.get() as T;
 	}
 
-	/** 对外快照: 控件投影 + 脱敏后的值 + 语义标记, 供 WebUI 直接渲染 */
+	/** 对外快照: 控件投影 + 脱敏后的值, 供 WebUI 直接渲染 */
 	read(): SettingsSnapshot {
-		const values = this.store.get();
-
-		const setSecrets = entriesOf(this.options.definition)
-			.filter(([path, spec]) => spec.secret === true && hasValue(readProp(values, path)))
-			.map(([path]) => path);
-
 		return {
 			// ConfigRoot 形状: 前端 createConfigList 读 define.controls
 			define: { controls: toControls(this.options.definition) },
-			values: this.masked(values),
-			setSecrets,
-			restartFields: [...this.restartFields],
-			immutableFields: [...this.immutableFields],
+			values: this.masked(this.store.get()),
 		};
 	}
 
 	/**
 	 * 应用一份 patch
 	 *
-	 * 流程: 校验 → 合并 → 落盘 → 热应用 → 通知。
+	 * 流程: 校验 → 合并 → 落盘 → 热应用。
 	 * 没有字段发生变化时不写盘、不调钩子, 直接返回空改动。
 	 */
 	async patch(input: unknown): Promise<SettingsPatchResult> {
@@ -173,8 +138,6 @@ export class SettingsDomain<T extends Record<string, unknown> = Record<string, u
 			}
 		}
 
-		this.notify(before, outcome.values, outcome.changed);
-
 		return {
 			values: this.masked(outcome.values),
 			changed: outcome.changed,
@@ -182,56 +145,12 @@ export class SettingsDomain<T extends Record<string, unknown> = Record<string, u
 		};
 	}
 
-	/**
-	 * 监听字段变更 (仅通过 patch 的改动触发)
-	 *
-	 * 回调收到的是**明文**(含敏感字段): 它是框架内部通道, handler 不得把它
-	 * 写进日志、错误消息或任何会外流的结构。
-	 */
-	watch(handler: SettingsWatcher): () => void {
-		this.watchers.add(handler);
-		return () => { this.watchers.delete(handler); };
-	}
-
-	/** 停止文件监听并释放; 幂等 */
+	/** 停止并释放存储; 幂等 */
 	close(): void {
-		this.unwatchStore?.();
-		this.unwatchStore = null;
 		this.store.close();
-		this.watchers.clear();
 	}
 
 	/* ---------- 内部 ---------- */
-
-	/**
-	 * 接上值文件的外部改动
-	 *
-	 * 外部改动只更新内存、同步给运行时并逐字段通知, **不**触发 apply:
-	 * 热应用只对"经过校验的 patch"负责, 否则绕过校验的手改内容会静默进运行时。
-	 */
-	private attachFileWatch(): void {
-		if (this.unwatchStore) return;
-
-		this.store.startWatching();
-		this.unwatchStore = this.store.watch((values, previous) => {
-			Promise.resolve(this.options.onLoad?.(values as T)).catch((e) => {
-				logger.error(`设置外部改动回调失败 (domain=${this.id})`, e);
-			});
-			this.notify(previous, values, this.changedPaths(previous, values));
-		});
-	}
-
-	/** 逐字段比较出变化的路径 */
-	private changedPaths(
-		before: Record<string, unknown>,
-		after: Record<string, unknown>,
-	): string[] {
-		const changed: string[] = [];
-		for (const [path] of entriesOf(this.options.definition)) {
-			if (!deepEqual(readProp(before, path), readProp(after, path))) changed.push(path);
-		}
-		return changed;
-	}
 
 	/** 按定义把所有敏感字段抹成空串 */
 	private masked(values: Record<string, unknown>): Record<string, unknown> {
@@ -240,27 +159,6 @@ export class SettingsDomain<T extends Record<string, unknown> = Record<string, u
 			if (spec.secret) writePath(out, path, "");
 		}
 		return out;
-	}
-
-	/** 逐个变更字段通知监听者; 单个监听器抛错不影响其余 */
-	private notify(
-		before: Record<string, unknown>,
-		after: Record<string, unknown>,
-		changed: string[],
-	): void {
-		if (this.watchers.size === 0) return;
-
-		for (const path of changed) {
-			const value = readProp(after, path);
-			const previousValue = readProp(before, path);
-			for (const handler of [...this.watchers]) {
-				try {
-					handler(path, value, previousValue);
-				} catch (e) {
-					logger.error(`设置变更回调出错 (domain=${this.id}, path=${path})`, e);
-				}
-			}
-		}
 	}
 }
 
@@ -275,13 +173,6 @@ export class SettingsApplyError extends Error {
 		super(message);
 		this.name = "SettingsApplyError";
 	}
-}
-
-/** 值是否算"已设置" (空串 / null / 空数组视为未设置) */
-function hasValue(value: unknown): boolean {
-	if (value === undefined || value === null || value === "") return false;
-	if (Array.isArray(value)) return value.length > 0;
-	return true;
 }
 
 /**
@@ -339,7 +230,7 @@ export class SettingsManager {
 		return { loaded, failures };
 	}
 
-	/** 注销一个域并释放 (Bot 被删除时用) */
+	/** 注销一个域并释放; 返回是否确有该域 */
 	unregister(id: string): boolean {
 		const domain = this.domains.get(id);
 		if (!domain) return false;

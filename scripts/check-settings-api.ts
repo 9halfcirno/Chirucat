@@ -126,7 +126,6 @@ try {
 		snap.define.controls.some((c: any) => c.id === "localNoAuth" && c.type === "switch"));
 	check("本机免密默认关闭", snap.values["localNoAuth"] === false);
 	check("快照里的值已脱敏", snap.values["password"] === "");
-	check("快照标出 restart 字段", snap.restartFields.length === 0, snap.restartFields.join(","));
 	check("快照标出密码为密码框",
 		snap.define.controls.some((c: any) => c.id === "password" && c.attr?.type === "password"));
 	check("默认端口来自定义", snap.values["port"] === 7636);
@@ -136,11 +135,9 @@ try {
 		snapshot.domains.some((d: any) => d.id === "statistics"));
 
 	const coreSnap = snapshot.domains.find((d: any) => d.id === "core");
-	check("core.webui 标为不可修改", coreSnap.immutableFields.includes("webui"));
 
 	const statsSnap = snapshot.domains.find((d: any) => d.id === "statistics");
 	check("统计参数读出来是数字", typeof statsSnap.values["flushIntervalMs"] === "number");
-	check("统计 4 项都是热生效", statsSnap.restartFields.length === 0, statsSnap.restartFields.join(","));
 	check("统计参数投影成滑块",
 		statsSnap.define.controls.length === 4
 		&& statsSnap.define.controls.every((c: any) => c.type === "slider"));
@@ -151,8 +148,13 @@ try {
 		logSnap?.define?.controls?.some((c: any) => c.id === "level" && c.type === "select") === true);
 	check("日志级别有四个选项",
 		logSnap?.define?.controls?.find((c: any) => c.id === "level")?.items?.length === 4);
-	check("日志级别是热生效(不标重启)", !logSnap?.restartFields?.includes("level"));
-	check("日志级别默认值与 Logger 内置默认一致", logSnap?.values?.level === "debug");
+	// 不假设本机 configs/logging.json 里是什么级别: 断言"域读到的就是值文件里的值",
+	// 否则换台机器(或用户改过日志级别)就会凭空失败
+	const loggingFile = JSON.parse(await fs.readFile(LOGGING_SETTINGS_FILE, "utf-8")) as { level?: string };
+	check("日志级别取自值文件且是合法枚举",
+		logSnap?.values?.level === loggingFile.level
+		&& ["debug", "info", "warn", "error"].includes(String(logSnap.values.level)),
+		`快照=${String(logSnap?.values?.level)}, 文件=${String(loggingFile.level)}`);
 
 	/* ---------- update_settings ---------- */
 	console.log("\n[update_settings]");
@@ -227,7 +229,6 @@ try {
 	const after = await getSettings.handler!(req(), core) as any;
 	const snapAfter = after.domains.find((d: any) => d.id === "webui");
 	check("接口不回传明文", snapAfter.values["password"] === "");
-	check("接口标出已设置的敏感字段", snapAfter.setSecrets.includes("password"));
 	check("整个响应体不含明文", !JSON.stringify(after).includes("CANARY_API"));
 	check("改密码也是热生效(仅会话失效, 无需重启)",
 		(await updateSettings.handler!(
@@ -248,7 +249,6 @@ try {
 	const botSnap = await getBotConfig.handler!(req({ id: "probe" }), core) as any;
 	check("get_bot_config 返回该 Bot", botSnap.id === "probe");
 	check("值来自 Bot 自己的 config.json", botSnap.values["name"] === "探针");
-	check("id 被标为不可修改", botSnap.immutableFields.includes("id"));
 	check("id 控件投影成只读",
 		botSnap.define.controls.some((c: any) => c.id === "id" && c.attr?.disabled === "true"));
 	check("Bot 域不出现在全局设置列表里",

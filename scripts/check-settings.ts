@@ -2,7 +2,7 @@
  * 设置基础设施自检
  *
  * 覆盖: 定义校验 → 控件投影 → 默认值 → patch 校验/规范化 → 落盘回读 →
- * 敏感字段脱敏 → 热应用钩子 → 并发写 → 外部改动监听 → 值文件容错,
+ * 敏感字段脱敏 → 热应用钩子 → 并发写 → 值文件容错,
  * 以及 ConfigManager 改用共享存储后的回归。
  *
  * 用法:
@@ -158,6 +158,8 @@ try {
 
 	await domain.load();
 	check("文件缺失时按定义生成默认值", (await fs.readFile(file, "utf-8")).includes("7636"));
+	check("载入时 apply 收到空改动",
+		hotChanges.length === 1 && hotChanges[0].length === 0, JSON.stringify(hotChanges));
 
 	const r1 = await domain.patch({ port: "8000" });
 	check("数字字符串被转成数字", domain.get().port === 8000);
@@ -186,14 +188,12 @@ try {
 	await domain.patch({ password: "s3cret" });
 	check("明文只在内存", domain.get().password === "s3cret");
 	check("对外读取已脱敏", domain.read().values["password"] === "");
-	check("read 标出已设置的敏感字段", domain.read().setSecrets.includes("password"));
 
 	await domain.patch({ password: "" });
 	check("空串表示不修改", domain.get().password === "s3cret");
 
 	await domain.patch({ password: null });
 	check("null 表示清除", domain.get().password === "");
-	check("清除后不再标为已设置", !domain.read().setSecrets.includes("password"));
 
 	/* ---------- 幂等与回读 ---------- */
 	console.log("\n[幂等与回读]");
@@ -255,7 +255,6 @@ try {
 	const ri = await imm.patch({ id: "a", name: "x" });
 	check("原值重复提交不算改动", ri.changed.join(",") === "name", ri.changed.join(","));
 	check("immutable 改动被拒", await rejects(() => imm.patch({ id: "b" }), "不可修改"));
-	check("immutable 字段被标出", imm.read().immutableFields.includes("id"));
 
 	/* ---------- 热应用失败 ---------- */
 	console.log("\n[热应用失败]");
@@ -263,7 +262,7 @@ try {
 	const failDomain = new SettingsManager().register("fail", {
 		definition: webuiSettings,
 		file: failFile,
-		apply: () => { throw new Error("模拟热应用失败"); },
+		apply: (_values, changed) => { if (changed.length) throw new Error("模拟热应用失败"); },
 	});
 	await failDomain.load();
 	check("热应用失败会抛出",
@@ -276,7 +275,7 @@ try {
 	const failSecretDomain = new SettingsManager().register("fail2", {
 		definition: webuiSettings,
 		file: failSecretFile,
-		apply: () => { throw new Error("模拟热应用失败"); },
+		apply: (_values, changed) => { if (changed.length) throw new Error("模拟热应用失败"); },
 	});
 	await failSecretDomain.load();
 	// apply 总会抛, 而 password 现在是热生效的 —— 这一行也会抛, 属预期
@@ -300,25 +299,6 @@ try {
 			&& !direct.includes("CANARY_SECOND"),
 			dumped.slice(0, 240));
 	}
-
-	/* ---------- 外部改动 ---------- */
-	console.log("\n[外部改动]");
-	const watchFile = path.join(tmp, "watched.json");
-	const wd = new SettingsManager().register<WebUISettings>("w", {
-		definition: webuiSettings,
-		file: watchFile,
-		watchFile: true,
-	});
-	await wd.load();
-
-	const notified: string[] = [];
-	wd.watch((p) => { notified.push(p); });
-	await fs.writeFile(watchFile, JSON.stringify({ port: 9000 }));
-	await sleep(600);
-
-	check("外部改动被重读进内存", wd.get().port === 9000, String(wd.get().port));
-	check("外部改动通知到监听者", notified.includes("port"), notified.join(","));
-	wd.close();
 
 	/* ---------- 值文件容错 ---------- */
 	console.log("\n[值文件容错]");

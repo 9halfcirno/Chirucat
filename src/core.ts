@@ -198,7 +198,6 @@ export class Core {
 			file: CORE_SETTINGS_FILE,
 			onCreate: initialCoreSettings,
 			apply: (values, changed) => this.applyCoreSettings(values, changed),
-			onLoad: (values) => this.applyCoreSettings(values, []),
 		});
 
 		// webui 域始终注册, 不随启动开关走: 模块被关掉时, 更需要能从设置页把它打开
@@ -208,9 +207,8 @@ export class Core {
 			// 定义里 password 的默认值是空串(运行期语义 = 不鉴权),
 			// 直接由它生成文件会得到裸奔的管理后台 —— 首次内容必须走随机密码
 			onCreate: initialWebUISettings,
+			// 载入时 apply 收到空改动: 服务器就是用这份配置构造出来的, 只需要同步前端开关
 			apply: (values, changed) => this.applyWebUISettings(values, changed),
-			// 载入时什么都无需热应用: 服务器就是用这份配置构造出来的
-			onLoad: (values) => this.applyWebUISettings(values, []),
 		});
 
 		// 统计域不随模块启停而注册: 模块被关掉时, 更需要能从设置页把它打开
@@ -219,7 +217,6 @@ export class Core {
 			file: STATISTICS_SETTINGS_FILE,
 			onCreate: initialStatisticsSettings,
 			apply: (values) => { this.statistics?.updateOptions(values); },
-			onLoad: (values) => { this.statistics?.updateOptions(values); },
 		});
 
 		// 日志级别是热生效的: 直接改 Logger 的全局最低级别, 无需重启
@@ -227,7 +224,6 @@ export class Core {
 			definition: loggingSettings,
 			file: LOGGING_SETTINGS_FILE,
 			apply: (values) => { setLogLevel(values.level); },
-			onLoad: (values) => { setLogLevel(values.level); },
 		});
 
 		// 损坏的值文件在载入时备份并重建, 真正失败(如备份写不了)仍不阻断其它域

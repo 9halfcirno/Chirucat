@@ -5,7 +5,7 @@ import { requireCore } from "./_shared";
  * 读取全部设置域
  *
  * GET
- * 返回每个域的 `{ id, define, values, setSecrets, restartFields, immutableFields }`。
+ * 返回每个域的 `{ id, define, values }`。
  * `define` 可直接交给前端 config-editor 渲染, `values` 里的敏感字段已脱敏。
  *
  * 与 get_plugin_config 的分工: 那个面向"某个 Bot 的某个插件"、由插件自带 schema 驱动;

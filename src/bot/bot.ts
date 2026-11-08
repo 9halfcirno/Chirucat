@@ -75,7 +75,6 @@ export class Bot extends EventEmitter {
 			// 由 scan 跳过这个目录, 用户修好文件后重启即可。
 			onError: "throw",
 			apply: (values) => { this.syncName(values); },
-			onLoad: (values) => { this.syncName(values); },
 		});
 	}
 

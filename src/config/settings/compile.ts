@@ -85,11 +85,6 @@ export function entriesOf(definition: SettingsDefinition): [string, SettingSpec]
 	return Object.entries(definition.fields);
 }
 
-/** 路径前缀分组名 → 分组元信息 */
-export function groupMetaOf(definition: SettingsDefinition, path: string): GroupMeta | undefined {
-	return definition.groups?.[path];
-}
-
 /* ---------- 值路径读写 ---------- */
 
 /**

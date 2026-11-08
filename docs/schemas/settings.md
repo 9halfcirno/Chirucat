@@ -22,10 +22,10 @@ revision 守卫 + 外部改动监听), 设置域、期望态存储与 `ConfigMan
 三者的差异由传给 store 的选项显式表达: 设置域值文件损坏时备份重建、状态文件回落默认、
 插件配置值文件语法错误照常抛出 —— 不要把这几种容错语义混成一种。
 
-`JsonFileStore` 的**外部改动监听能力不是每个调用方都要开**: 设置域可按 `watchFile`
-开启, Bot / 服务期望态文件靠它收敛启停, 而 `ConfigManager` 刻意不开 —— 插件配置几乎都
-经 WebUI/API 程序化写入, 每份配置挂一个目录 `fs.watch`, 在几十上百个插件同时启用时
-句柄数与事件唤醒会成倍放大。手工编辑插件配置值文件需显式 `load()` 或重启对应插件才生效。
+`JsonFileStore` 的**外部改动监听能力不是每个调用方都要开**: Bot / 服务期望态文件靠它
+收敛启停, 而设置域与 `ConfigManager` 刻意不开 —— 框架设置几乎都经 WebUI/API 写入,
+插件配置更是; 每份配置挂一个目录 `fs.watch`, 在几十上百个插件同时启用时句柄数与事件
+唤醒会成倍放大。手工编辑设置或插件配置的值文件需重启(或显式 `load()`)才生效。
 
 ## 加一个设置项
 
@@ -58,13 +58,12 @@ const domain = core.settings.register<WebUISettings>("webui", {
 	definition: webuiSettings,
 	file: WEBUI_SETTINGS_FILE,
 	apply: (values, changed) => { /* 只需重启的字段不会进来 */ },
-	onLoad: (values) => { /* 载入/外部改动后同步给运行中的对象 */ },
-	watchFile: false,   // 需要响应手工编辑值文件时才开
 });
 await domain.load();
 ```
 
-- `apply` 只收到**本次真正变化**的字段, 且已剔除 `restart` 字段 —— 需要重启才生效的项
+- `apply` 在**落盘成功后**调用, 只收到本次真正变化的字段, 且已剔除 `restart` 字段 ——
+  需要重启才生效的项
   在运行期没有意义, 机制上不让它进热应用。
 - `apply` 抛错不回滚已落盘的值, 而是抛 `SettingsApplyError`(其 `outcome` 已脱敏),
   消息是"已保存, 但热应用失败"。
@@ -121,7 +120,7 @@ WebUI 的全局设置列表里。值文件是 `<Bot目录>/config.json` —— �
 
 - **`secret`**: 只允许用在 `string` 上。对外读取(`read()`)一律脱敏为空串,
   patch 里**空串表示不修改**、**null 表示清除**(回落默认值)。
-  `get()` 与 `watch()` 是明文内部通道, 不得把它们的值写进日志或任何外流结构。
+  `get()` 是明文内部通道, 不得把它的值写进日志或任何外流结构。
 - **`restart`**: 改动会落盘, 但不进 `apply`, 且出现在接口返回的 `restartRequired` 里, 前端据此提示"需重启 Core 后生效"。
   **当前内置的域没有用到它** —— 能热的都做成热的了 (`WebUIServer.relisten` 换监听、`updateSecurity` 换密码与免密、`StatisticsManager.updateOptions` 改统计参数); 机制保留给将来真正无法热更的项(如数据库路径)。
 - **`widget`** (仅 `number`): 缺省规则是"给了 `min` & `max` 就用滑块"; 跨度太大或需要精确输入时显式写 `widget: "input"` —— 端口就是这种情况。
@@ -130,7 +129,7 @@ WebUI 的全局设置列表里。值文件是 `<Bot目录>/config.json` —— �
 
 ## 接口
 
-- `GET /api/get_settings` → `{ domains: [{ id, define, values, setSecrets, restartFields, immutableFields }] }`
+- `GET /api/get_settings` → `{ domains: [{ id, define, values }] }`
 
   `define` 是 **`ConfigRoot`** (`{ controls: [...] }`), 与 `get_plugin_config` 一致 —— 前端
   `createConfigList` 读的就是 `define.controls`, 传裸数组会渲染成空表单 (表现为"一个设置项
