@@ -20,7 +20,7 @@ type SendVariants = {
 };
 
 type ToBlocks<V> = {
-	[K in keyof V]: { type: K } & V[K];
+	[K in keyof V]: { type: K } & V[K] & { extra?: Record<string, any> };
 }[keyof V];
 
 export type MessageBlockReceive = ToBlocks<ReceiveVariants>;

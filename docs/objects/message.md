@@ -78,7 +78,8 @@
 通用结构如下:
 ```ts
 {
-	type: string;
+	type: string;                // 表示块类型
+	extra?: Record<string, any>; // 表示该块携带的额外信息, 逃生舱设计
 	...
 }
 ```
