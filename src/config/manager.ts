@@ -1,278 +1,32 @@
 import path from "node:path";
-import { readProp } from "../utils/readProp";
 import { root } from "../utils/root";
-import {
-	JsonFileStore,
-	cloneValue,
-	deepEqual,
-	isPlainObject,
-	writeJsonFile,
-} from "./store";
-import type { ConfigRoot, Control } from "./types";
+import { ConfigBase, type ConfigValues } from "./base";
+import type { ConfigRoot } from "./types";
 import { validateConfig } from "./validate-config";
 
 /**
- * 一份配置值。
- * 结构与前端 config-editor.js 的 getValues() 一致:
- * `{ 叶子id: 值, groupId: { ... }, tableId: [{ 子id: 值 }] }`
- */
-export type ConfigValues = Record<string, any>;
-
-/* isPlainObject / cloneValue / deepEqual 已下沉到 ./store, 与设置层共用同一套值工具 */
-
-/**
- * 收集发生变化的配置项路径
+ * 插件/服务插件配置管理器: 宽松写入 + 可选的 schema 热更新
  *
- * group 递归下去, 报出变化的那一项; table 的行集合作为整体比较
- * (行内改动只报 table 自身的路径)。
- */
-function collectChangedPaths(
-	controls: readonly Control[],
-	oldValues: unknown,
-	newValues: unknown,
-	prefix: string,
-): string[] {
-	const oldObj = isPlainObject(oldValues) ? oldValues : {};
-	const newObj = isPlainObject(newValues) ? newValues : {};
-	const changed: string[] = [];
-
-	for (const control of controls) {
-		if (control.type === "text") continue;
-		const key = prefix ? `${prefix}.${control.id}` : control.id;
-
-		if (control.type === "group") {
-			changed.push(...collectChangedPaths(control.controls ?? [], oldObj[control.id], newObj[control.id], key));
-		} else if (!deepEqual(oldObj[control.id], newObj[control.id])) {
-			changed.push(key);
-		}
-	}
-	return changed;
-}
-
-/** 配置变更回调: key 为发生变化的配置项路径(点号分隔), 如 "offset" / "pro-group.extra" */
-export type ConfigChangeHandler = (key: string, value: unknown, oldValue: unknown) => void;
-
-/**
- * 配置管理器: 控件定义(schema) + 配置值 + 持久化文件
+ * 存储、默认值、规范化(`coerce`)与逐字段通知都在 `ConfigBase`; 这里只保留
+ * 插件配置特有的语义:
  *
- * 值文件统一交给 `JsonFileStore` —— 与设置域、期望态存储共用同一套原子写、
- * 串行化与 revision 守卫。本类只负责 schema 驱动的规范化(`coerce`)与逐字段
- * 变更通知。
+ * - 写入**不校验**: 未知键丢弃、缺失键保留旧值, 类型检查由 API 层显式调
+ *   `validate()`(框架设置则是校验与写入原子的, 见 `SettingsDomain`);
+ * - 语法错误**抛出**, 不静默覆盖用户值文件;
+ * - 文件缺失时按 schema 默认值建一份;
+ * - `data` 是只读视图, 写入一律走 `update()` / `save()`。
  *
  * **刻意不监听值文件的外部改动**: 插件配置几乎都经 WebUI/API 程序化写入,
  * 而每份配置一个 fs.watch 会让几十上百个插件同时启用时句柄与事件成倍放大。
  * 手工编辑值文件需重启对应插件(或走 `load()` 重新载入)才生效。
- *
- * 三条与设置域不同的语义, 由传入 store 的选项固定下来:
- * - 语法错误**抛出**, 不静默覆盖用户值文件(设置域是备份后重建);
- * - 文件缺失时按 schema 默认值建一份;
- * - `data` 是只读视图, 写入一律走 `update()` / `save()`。
  */
-export class ConfigManager {
-	/** 绑定了值文件时的存储层; 纯内存(未绑定文件)时为 null */
-	private readonly store: JsonFileStore<ConfigValues> | null;
-
-	/** 纯内存模式下的配置值(测试/嵌入式用) */
-	private memoryData: ConfigValues;
-
-	/** 变更监听器 */
-	private readonly watchers = new Set<ConfigChangeHandler>();
-
-	constructor(readonly schema: ConfigRoot, readonly file?: string) {
-		this.memoryData = this.defaults();
-		this.store = file
-			? new JsonFileStore<ConfigValues>(file, {
-				defaults: () => this.defaults(),
-				normalize: (raw) => this.coerce(this.schema?.controls ?? [], raw),
-				onError: "throw",
-				createIfMissing: true,
-			})
-			: null;
-	}
-
-	/**
-	 * 当前配置值的只读视图(深拷贝)
-	 *
-	 * 插件与 WebUI 共享同一个 ConfigManager 实例, 这里永远读到最新值。
-	 * 直接改这份对象不会生效 —— 写入请用 `update()` / `save()`。
-	 */
-	get data(): ConfigValues {
-		return this.store ? this.store.get() : this.memoryData;
-	}
-
-	/* ---------- 默认值 ---------- */
-
-	/**
-	 * 单个控件的默认值。
-	 *
-	 * 必须与前端 config-editor.js 的 defaultValueOf 逐条保持一致,
-	 * 否则前端 reset 出来的值与后端补齐的值会不同。
-	 */
-	private static defaultValueOf(define: Control): unknown {
-		switch (define.type) {
-			case "group":
-				return {};
-			case "table":
-				return [];
-			case "checkbox":
-				return Array.isArray(define.default) ? cloneValue(define.default) : [];
-			case "switch":
-				return define.default === true;
-			case "slider":
-				return typeof define.default === "number" ? define.default : (define.min ?? 0);
-			case "input":
-				// 数值输入没有默认值时不能用空串: 它会被当成"填了个非数字"
-				if (define.valueType === "number") {
-					const num = typeof define.default === "number" ? define.default : Number(define.default);
-					return Number.isFinite(num) ? num : (define.min ?? 0);
-				}
-				return define.default === undefined ? "" : cloneValue(define.default);
-			case "text":
-				return undefined;
-			default:
-				return define.default === undefined ? "" : cloneValue(define.default);
-		}
-	}
-
-	/**
-	 * 按控件类型规范化一个已有值
-	 *
-	 * 目前只有数值输入需要: 数字字符串 -> 数字。无法解析时原样保留,
-	 * 由 `validate()` 报错 —— 插件配置的写入是宽松的, 这里不替用户
-	 * 决定"坏值该变成什么"。
-	 */
-	private static normalizeValue(control: Control, value: unknown): unknown {
-		if (
-			control.type === "input"
-			&& control.valueType === "number"
-			&& typeof value === "string"
-			&& value.trim() !== ""
-		) {
-			const num = Number(value);
-			if (Number.isFinite(num)) return num;
-		}
-		return value;
-	}
-
-	/**
-	 * 按控件定义展开一份默认值
-	 *
-	 * table 的初始行来自控件自身的 default; 未提供 default 时是空表。
-	 */
-	defaults(controls: readonly Control[] = this.schema?.controls ?? []): ConfigValues {
-		const out: ConfigValues = {};
-
-		for (const control of controls) {
-			if (control.type === "text") continue; // text 只作说明, 不产生值
-
-			if (control.type === "group") {
-				out[control.id] = this.defaults(control.controls ?? []);
-			} else if (control.type === "table") {
-				out[control.id] = (control.default ?? []).map((row) =>
-					this.fillRow(control.controls ?? [], isPlainObject(row) ? row : {}),
-				);
-			} else {
-				out[control.id] = ConfigManager.defaultValueOf(control);
-			}
-		}
-		return out;
-	}
-
-	/**
-	 * 用列控件的默认值补全一行
-	 *
-	 * 前端 addRow 只为 default 里给出的键赋值, 其余键在构建控件时写入自身默认值,
-	 * 因此行对象的键总是完整的列集合 —— 这里保持一致。
-	 */
-	private fillRow(columns: readonly Control[], row: Record<string, any>): ConfigValues {
-		const out: ConfigValues = {};
-
-		for (const column of columns) {
-			if (column.type === "text") continue;
-			out[column.id] = ConfigManager.normalizeValue(
-				column,
-				Object.prototype.hasOwnProperty.call(row, column.id)
-					? cloneValue(row[column.id])
-					: ConfigManager.defaultValueOf(column),
-			);
-		}
-		return out;
-	}
-
-	/* ---------- 取值 ---------- */
-
-	/**
-	 * 取某个配置项的值
-	 *
-	 * 支持点号路径, 数组用数字下标: `get("pro-group.group-controls.0.enable")`。
-	 * 依次尝试 当前值 → 默认值 → fallback; 返回的是内部引用, 需要副本请自行拷贝。
-	 *
-	 * @param key 属性路径
-	 * @param fallback 当前值与默认值都未命中时的返回值
-	 */
-	get<T = unknown>(key: string, fallback?: T): T {
-		const value = readProp(this.data, key);
-		if (value !== undefined) return value as T;
-
-		const preset = readProp(this.defaults(), key);
-		return (preset !== undefined ? preset : fallback) as T;
-	}
-
-	/** 当前配置值的一份深拷贝 (供外部安全地读取整份配置) */
-	values(): ConfigValues {
-		return cloneValue(this.data);
-	}
-
-	/* ---------- 变更监听 ---------- */
-
-	/**
-	 * 监听配置变更
-	 *
-	 * `update()` / `updateSchema()` 触发; 一次变更里每个发生变化的配置项
-	 * 调用一次回调, 没有变化就不调用。`load()` 视为载入、不算变更。
-	 * 手工编辑值文件不会触发(见类注释), 需 `load()` 重新载入。
-	 *
-	 * @param handler 变更回调, 参数为 (配置项路径, 新值, 旧值)
-	 * @returns 取消监听
-	 */
-	watch(handler: ConfigChangeHandler): () => void {
-		this.watchers.add(handler);
-		return () => { this.watchers.delete(handler); };
-	}
-
-	/** 对比新旧值, 逐个通知变更; 单个监听器抛错不影响其余监听器与保存流程 */
-	private notifyChanges(oldValues: ConfigValues, newValues: ConfigValues) {
-		if (this.watchers.size === 0) return;
-
-		const keys = collectChangedPaths(this.schema?.controls ?? [], oldValues, newValues, "");
-		for (const key of keys) {
-			const value = readProp(newValues, key);
-			const oldValue = readProp(oldValues, key);
-			for (const handler of [...this.watchers]) {
-				try {
-					handler(key, value, oldValue);
-				} catch (e) {
-					console.error(`ConfigManager: 配置变更回调出错 (key="${key}")`, e);
-				}
-			}
-		}
-	}
-
-	/* ---------- 载入与保存 ---------- */
-
-	/**
-	 * 从文件载入配置值
-	 *
-	 * 文件不存在时按 schema 默认值生成一份(目录一并创建);
-	 * 读到部分值时, 缺失的键回落到默认值, 未知键丢弃。
-	 * 文件存在但解析失败(语法错误、权限等)照常抛出, 不静默覆盖。
-	 *
-	 * @param file 值文件路径, 缺省用构造时传入的 file
-	 */
-	async load(file: string = this.file ?? ""): Promise<ConfigValues> {
-		if (!this.store) return this.data;
-		await this.store.load(file || this.store.file);
-		return this.data;
+export class ConfigManager extends ConfigBase {
+	constructor(schema: ConfigRoot, file?: string) {
+		super(schema, file, {
+			label: "ConfigManager",
+			onError: "throw",
+			createIfMissing: true,
+		});
 	}
 
 	/**
@@ -288,9 +42,7 @@ export class ConfigManager {
 		const before = this.data;
 		const next = this.coerce(this.schema?.controls ?? [], submitted, before);
 
-		if (this.store) await this.store.commit(next);
-		else this.memoryData = next;
-
+		await this.commitValue(next);
 		this.notifyChanges(before, next);
 		return this.data;
 	}
@@ -313,60 +65,11 @@ export class ConfigManager {
 		const next = this.coerce(newSchema?.controls ?? [], oldData);
 
 		// 只改内存: 是否落盘由 saveAfterUpdate 决定, 不能在 commit 里顺手写掉
-		if (this.store) this.store.replace(next);
-		else this.memoryData = next;
+		this.replaceValue(next);
 
 		if (notifyChanges) this.notifyChanges(oldData, next);
 		if (saveAfterUpdate && this.file) await this.save();
 		return this.data;
-	}
-
-	/**
-	 * 以 controls 为骨架规范化一份值
-	 *
-	 * - 只保留 schema 已知的键, 未知键丢弃
-	 * - 键缺失时回落到 fallback 的同路径值, 再回落到控件默认值
-	 * - group 递归; table 整表替换, 行内用列默认值补全
-	 */
-	private coerce(controls: readonly Control[], source?: unknown, fallback?: unknown): ConfigValues {
-		const src = isPlainObject(source) ? source : {};
-		const fb = isPlainObject(fallback) ? fallback : {};
-		const out: ConfigValues = {};
-
-		for (const control of controls) {
-			if (control.type === "text") continue;
-			const id = control.id;
-			const hasSrc = Object.prototype.hasOwnProperty.call(src, id);
-			const hasFb = Object.prototype.hasOwnProperty.call(fb, id);
-
-			if (control.type === "group") {
-				out[id] = this.coerce(
-					control.controls ?? [],
-					hasSrc ? src[id] : undefined,
-					hasFb ? fb[id] : undefined,
-				);
-				continue;
-			}
-
-			if (control.type === "table") {
-				// 行集合以提交值为准; 提交与旧值都没有时回落到控件自身的 default
-				const rows = hasSrc ? src[id] : (hasFb ? fb[id] : control.default ?? []);
-				out[id] = (Array.isArray(rows) ? rows : []).map((row) =>
-					this.fillRow(control.controls ?? [], isPlainObject(row) ? row : {}),
-				);
-				continue;
-			}
-
-			out[id] = ConfigManager.normalizeValue(
-				control,
-				hasSrc
-					? cloneValue(src[id])
-					: hasFb
-						? cloneValue(fb[id])
-						: ConfigManager.defaultValueOf(control),
-			);
-		}
-		return out;
 	}
 
 	/**
@@ -387,12 +90,7 @@ export class ConfigManager {
 	async save(file?: string) {
 		const target = file ?? this.file;
 		if (!target) throw new Error("ConfigManager 未绑定配置文件, 无法保存");
-
-		if (this.store) {
-			await this.store.write(target);
-			return;
-		}
-		await writeJsonFile(target, cloneValue(this.memoryData));
+		await this.writeCurrent(target);
 	}
 
 	/* ---------- 路径约定 ---------- */

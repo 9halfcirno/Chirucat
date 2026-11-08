@@ -1,5 +1,6 @@
 import { readProp } from "../../../utils/readProp";
-import type { ConfigManager, ConfigValues } from "../../../config/manager";
+import type { ConfigValues } from "../../../config/base";
+import type { ConfigManager } from "../../../config/manager";
 import type { PluginConfigAPI, PluginConfigWatcher } from "../types";
 
 /**
