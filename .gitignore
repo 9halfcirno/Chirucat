@@ -7,3 +7,4 @@ dist
 /configs/
 .deepseek/
 .vscode/settings.json
+.workbuddy/
