@@ -8,6 +8,17 @@
 	height: 100%;
 }
 
+/* 连接状态: 状态点用全局 .dot (base.css), 这里只负责把点和文案捏成一个块 ——
+   顶行是 flex/2 列网格, 两个同级元素不包一层就会被当成两件独立的控件排布。
+   必须 flex: .dot 无 display, 只有成为 flex/grid 子项才会被块化, 宽高才生效 */
+.logs-status {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--sp-1);
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+}
+
 /* 顶行: 连接状态 + 过滤控件依次排开, 清理按钮靠最右 */
 .logs-head {
 	display: flex;
@@ -50,6 +61,13 @@
 		align-items: center;
 		column-gap: var(--sp-2);
 		row-gap: var(--sp-2);
+	}
+
+	/* 显式定行: 不写 grid-row 的话自动-placement 会把按钮排到字段之后 */
+	.logs-status {
+		grid-column: 1;
+		grid-row: 1;
+		justify-self: start;
 	}
 
 	.logs-head .icon-btn {

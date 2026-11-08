@@ -62,6 +62,10 @@ export default {
 		const status = document.createElement("span");
 		status.textContent = "连接中";
 
+		// 点和文案捏成一块: 顶行窄屏是 2 列网格, 同级散元素会被拆到不同格子
+		const statusBox = document.createElement("span");
+		statusBox.className = "logs-status";
+		statusBox.append(statusDot, status);
 
 		// 顶行: 连接状态 + 过滤控件, 清理按钮贴右
 		const head = document.createElement("div");
@@ -103,7 +107,7 @@ export default {
 		});
 
 		// 两个筛选控件与"已连接"、清理按钮同级同排, 不单独包卡片
-		head.append(statusDot, status, createField("等级", levelFilter.el), createField("分类", tagFilter.el), clearBtn);
+		head.append(statusBox, createField("等级", levelFilter.el), createField("分类", tagFilter.el), clearBtn);
 
 		// Tag 列表异步补进下拉: SSE 不等它, 过滤只读条目自带的 tag
 		loadTagOptions();
