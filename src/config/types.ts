@@ -1,6 +1,13 @@
 export type Control = InputControl | TextareaControl | SwitchControl | SelectControl | CheckboxControl | SliderControl | GroupControl | TextControl | TableControl;
 
 /**
+ * 一份配置值。
+ * 结构与前端 config-editor.js 的 getValues() 一致:
+ * `{ 叶子id: 值, groupId: { ... }, tableId: [{ 子id: 值 }] }`
+ */
+export type ConfigValues = Record<string, any>;
+
+/**
  * 值产生型控件共有的写入策略标记
  *
  * 这些标记不参与"值是否合法"的判断: 它们约束的是**写入权限与生效时机**,
@@ -130,6 +137,8 @@ export interface SliderControl extends ReadonlyControlPolicy {
 	min: number;
 	max: number;
 	step: number;
+	/** 必须为整数 (前端步进已保证; 这里防手工改坏值文件) */
+	integer?: boolean;
 	default?: number;
 	visible?: Visible;
 	required?: boolean;

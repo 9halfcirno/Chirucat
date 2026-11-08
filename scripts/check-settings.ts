@@ -1,7 +1,7 @@
 /**
  * 设置基础设施自检
  *
- * 覆盖: 定义校验 → 控件投影 → 默认值 → patch 校验/规范化 → 落盘回读 →
+ * 覆盖: schema 校验 → 默认值 → patch 校验/规范化 → 落盘回读 →
  * 敏感字段脱敏 → 热应用钩子 → 并发写 → 值文件容错,
  * 以及 ConfigManager 改用共享存储后的回归。
  *
@@ -16,13 +16,12 @@ import path from "node:path";
 import { inspect } from "node:util";
 
 import { ConfigManager } from "../src/config/manager";
+import { defaultsOf, sanitizeLoaded } from "../src/config/schema";
 import { JsonFileStore } from "../src/config/store";
-import Logger, { defaultLogStream, getLogLevel, setLogLevel } from "../src/utils/logger";
-import { defaultsOf, toControls } from "../src/config/settings/compile";
-import { defineSettings } from "../src/config/settings/define";
+import type { ConfigRoot } from "../src/config/types";
 import { webuiSettings, type WebUISettings } from "../src/config/settings/domains/webui";
 import { SettingsManager } from "../src/config/settings/manager";
-import { normalizeValues } from "../src/config/settings/validate";
+import Logger, { defaultLogStream, getLogLevel, setLogLevel } from "../src/utils/logger";
 
 let passed = 0;
 let failed = 0;
@@ -64,94 +63,82 @@ const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "chirucat-settings-"));
 console.log(`临时目录: ${tmp}\n`);
 
 try {
-	/* ---------- 定义校验 ---------- */
-	console.log("[定义校验]");
-	check("合法定义原样返回",
-		defineSettings({ fields: { a: { type: "string" } } }).fields["a"] !== undefined);
-	check("enum 缺 items 被拒",
-		throws(() => defineSettings({ fields: { a: { type: "enum" } as never } }), "非空的 items"));
-	check("未知类型被拒",
-		throws(() => defineSettings({ fields: { a: { type: "wat" } as never } }), "不受支持"));
-	check("键含空路径段被拒",
-		throws(() => defineSettings({ fields: { "a..b": { type: "string" } } }), "空路径段"));
-	check("键含空白被拒",
-		throws(() => defineSettings({ fields: { "a b": { type: "string" } } }), "不能含空白"));
-	check("默认值不在 items 内被拒",
-		throws(() => defineSettings({
-			fields: { a: { type: "enum", default: "z", items: [{ label: "A", value: "a" }] } },
-		}), "默认值不在 items 中"));
-	check("items 取值重复被拒",
-		throws(() => defineSettings({
-			fields: { a: { type: "enum", items: [{ label: "A", value: "a" }, { label: "B", value: "a" }] } },
-		}), "重复取值"));
-	check("分组无字段被拒",
-		throws(() => defineSettings({ groups: { g: {} }, fields: { a: { type: "string" } } }), "没有任何字段"));
-	check("fields 为空被拒",
-		throws(() => defineSettings({ fields: {} }), "不能为空"));
-	check("数值范围自相矛盾被拒",
-		throws(() => defineSettings({ fields: { n: { type: "number", min: 9, max: 1 } } }), "不能大于"));
-	check("字段互为前缀被拒",
-		throws(() => defineSettings({ fields: { a: { type: "string" }, "a.b": { type: "string" } } }), "互为前缀"));
-	check("secret 用在非字符串上被拒",
-		throws(() => defineSettings({ fields: { n: { type: "number", secret: true } } }), "secret 只能用在 string"));
-
-	/* ---------- 控件投影 ---------- */
-	console.log("\n[控件投影]");
-	const def = defineSettings({
-		groups: { group1: { label: "组一" } },
-		fields: {
-			s: { type: "string", label: "字符串" },
-			multi: { type: "string", multiline: true },
-			secret: { type: "string", secret: true },
-			"group1.slider": { type: "number", min: 0, max: 10, step: 2, default: 4 },
-			"group1.free": { type: "number", default: 5 },
-			"group1.sw": { type: "boolean" },
-			e: { type: "enum", items: [{ label: "A", value: "a" }, { label: "B", value: "b" }] },
-			cb: { type: "stringList", items: [{ label: "X", value: "x" }] },
-			text: { type: "stringList" },
-		},
+	/* ---------- schema 校验 ---------- */
+	console.log("[schema 校验]");
+	let probeSeq = 0;
+	const registerProbe = (schema: ConfigRoot) => new SettingsManager().register(`probe-${++probeSeq}`, {
+		schema,
+		file: path.join(tmp, `probe-${probeSeq}.json`),
 	});
+	check("合法 schema 可注册",
+		registerProbe({ controls: [{ type: "switch", id: "a", label: "A" }] }) !== undefined);
+	check("缺 controls 被拒", throws(() => registerProbe({} as ConfigRoot), "缺少 controls"));
+	check("空 controls 被拒", throws(() => registerProbe({ controls: [] }), "缺少 controls"));
+	check("重复 id 被拒",
+		throws(() => registerProbe({
+			controls: [
+				{ type: "switch", id: "a", label: "A" },
+				{ type: "switch", id: "a", label: "B" },
+			],
+		}), "重复控件"));
+	check("group 内重复 id 被拒",
+		throws(() => registerProbe({
+			controls: [
+				{
+					type: "group", id: "g", label: "G", controls: [
+						{ type: "switch", id: "a", label: "A" },
+						{ type: "switch", id: "a", label: "B" },
+					],
+				},
+			],
+		}), "重复控件"));
+	check("table 被拒",
+		throws(() => registerProbe({
+			controls: [{ type: "table", id: "t", label: "T", controls: [] }],
+		}), "不支持 table"));
 
-	const controls = toControls(def) as any[];
-	const byId = new Map<string, any>(controls.map((c) => [c.id, c]));
-	const group = byId.get("group1")?.controls ?? [];
-
-	check("投影顺序与声明一致",
-		controls.map((c) => c.id).join(",") === "s,multi,secret,group1,e,cb,text",
-		controls.map((c) => c.id).join(","));
-	check("string → input", byId.get("s")?.type === "input");
-	check("multiline → textarea", byId.get("multi")?.type === "textarea");
-	check("secret → 密码输入框",
-		byId.get("secret")?.type === "input" && byId.get("secret")?.attr?.type === "password");
-	check("点号前缀 → group",
-		byId.get("group1")?.type === "group" && byId.get("group1")?.label === "组一");
-	check("有范围的 number → slider",
-		group[0]?.type === "slider" && group[0]?.step === 2 && group[0]?.min === 0);
-	check("无范围的 number → 数字输入框",
-		group[1]?.type === "input" && group[1]?.attr?.inputmode === "numeric");
-	check("boolean → switch", group[2]?.type === "switch");
-	check("enum → select", byId.get("e")?.type === "select");
-	check("stringList(有 items) → checkbox", byId.get("cb")?.type === "checkbox");
-	check("stringList(无 items) → textarea", byId.get("text")?.type === "textarea");
+	/* ---------- schema 直用 ---------- */
+	console.log("\n[schema 直用]");
+	const sampleSchema: ConfigRoot = {
+		version: "1.0.0",
+		controls: [
+			{ type: "input", id: "s", label: "字符串" },
+			{ type: "input", id: "secret", label: "密码", secret: true },
+			{
+				type: "group", id: "g", label: "组", controls: [
+					{ type: "slider", id: "n", label: "数值", min: 0, max: 10, step: 2, default: 4 },
+				],
+			},
+		],
+	};
+	const sampleDomain = new SettingsManager().register("sample", {
+		schema: sampleSchema,
+		file: path.join(tmp, "sample.json"),
+	});
+	await sampleDomain.load();
+	check("read().define 就是 schema 本身", sampleDomain.read().define === sampleSchema);
+	check("控件顺序原样交给前端",
+		sampleDomain.read().define.controls.map((c) => c.id).join(",") === "s,secret,g");
 
 	/* ---------- 默认值 ---------- */
 	console.log("\n[默认值]");
-	const defaults = defaultsOf(def) as any;
-	check("默认值展开成嵌套结构", defaults.group1?.slider === 4);
-	check("number 缺省回落到 min",
-		(defaultsOf(defineSettings({ fields: { n: { type: "number", min: 3, max: 9 } } })) as any).n === 3);
-	check("enum 缺省取首项",
-		(defaultsOf(defineSettings({
-			fields: { e: { type: "enum", items: [{ label: "A", value: "a" }] } },
-		})) as any).e === "a");
-	check("stringList 缺省为空数组", Array.isArray(defaults.text) && defaults.text.length === 0);
+	const defaults = defaultsOf(sampleSchema) as any;
+	check("默认值展开成嵌套结构", defaults.g?.n === 4);
+	check("数值输入缺省回落到 min",
+		(defaultsOf({
+			controls: [{ type: "input", id: "n", label: "N", valueType: "number", min: 3 }],
+		}) as any).n === 3);
+	check("select 默认值原样取用",
+		(defaultsOf({
+			controls: [{ type: "select", id: "e", label: "E", default: "a", items: [{ label: "A", value: "a" }] }],
+		}) as any).e === "a");
 
 	/* ---------- patch: 校验与规范化 ---------- */
 	console.log("\n[patch]");
 	const file = path.join(tmp, "webui.json");
 	const hotChanges: string[][] = [];
 	const domain = new SettingsManager().register<WebUISettings>("webui", {
-		definition: webuiSettings,
+		schema: webuiSettings,
 		file,
 		apply: (_values, changed) => { hotChanges.push(changed); },
 	});
@@ -183,6 +170,13 @@ try {
 	check("热应用收到 hot 字段", hotChanges.flat().includes("frontConfig.enableTestLab"));
 	check("布尔值已落盘", (await fs.readFile(file, "utf-8")).includes("\"enableTestLab\": true"));
 
+	// 兼容旧调用方: patch 也接受点号键
+	await domain.patch({ frontConfig: { enableTestLab: false } });
+	const dotted = await domain.patch({ "frontConfig.enableTestLab": true });
+	check("点号键 patch 与嵌套等价",
+		dotted.changed.join(",") === "frontConfig.enableTestLab", dotted.changed.join(","));
+	await domain.patch({ frontConfig: { enableTestLab: true } });
+
 	/* ---------- 敏感字段 ---------- */
 	console.log("\n[敏感字段]");
 	await domain.patch({ password: "s3cret" });
@@ -203,7 +197,7 @@ try {
 	check("无变化时不重写文件", (await fs.readFile(file, "utf-8")) === snapshot);
 
 	const reloaded = new SettingsManager().register<WebUISettings>("webui", {
-		definition: webuiSettings,
+		schema: webuiSettings,
 		file,
 	});
 	await reloaded.load();
@@ -243,12 +237,12 @@ try {
 	/* ---------- immutable ---------- */
 	console.log("\n[immutable]");
 	const imm = new SettingsManager().register("imm", {
-		definition: defineSettings({
-			fields: {
-				id: { type: "string", default: "a", immutable: true },
-				name: { type: "string", default: "" },
-			},
-		}),
+		schema: {
+			controls: [
+				{ type: "input", id: "id", label: "id", default: "a", immutable: true },
+				{ type: "input", id: "name", label: "name", default: "" },
+			],
+		},
 		file: path.join(tmp, "imm.json"),
 	});
 	await imm.load();
@@ -260,7 +254,7 @@ try {
 	console.log("\n[热应用失败]");
 	const failFile = path.join(tmp, "fail.json");
 	const failDomain = new SettingsManager().register("fail", {
-		definition: webuiSettings,
+		schema: webuiSettings,
 		file: failFile,
 		apply: (_values, changed) => { if (changed.length) throw new Error("模拟热应用失败"); },
 	});
@@ -273,7 +267,7 @@ try {
 	/* ---------- 热应用失败的异常不得携带明文 ---------- */
 	const failSecretFile = path.join(tmp, "fail-secret.json");
 	const failSecretDomain = new SettingsManager().register("fail2", {
-		definition: webuiSettings,
+		schema: webuiSettings,
 		file: failSecretFile,
 		apply: (_values, changed) => { if (changed.length) throw new Error("模拟热应用失败"); },
 	});
@@ -302,7 +296,7 @@ try {
 
 	/* ---------- 值文件容错 ---------- */
 	console.log("\n[值文件容错]");
-	const dirty = normalizeValues(webuiSettings, { port: "abc", unknown: 1, host: "0.0.0.0" });
+	const dirty = sanitizeLoaded(webuiSettings, { port: "abc", unknown: 1, host: "0.0.0.0" });
 	check("未知键被丢弃", !("unknown" in dirty));
 	check("非法值回落默认", dirty["port"] === 7636);
 	check("合法值保留", dirty["host"] === "0.0.0.0");
@@ -336,12 +330,12 @@ try {
 	console.log("\n[restart 机制]");
 	const restartApplied: string[][] = [];
 	const restartDomain = new SettingsManager().register("restart-probe", {
-		definition: defineSettings({
-			fields: {
-				slow: { type: "number", default: 1, min: 0, max: 10, restart: true },
-				fast: { type: "number", default: 1, min: 0, max: 10 },
-			},
-		}),
+		schema: {
+			controls: [
+				{ type: "slider", id: "slow", label: "slow", min: 0, max: 10, step: 1, default: 1, restart: true },
+				{ type: "slider", id: "fast", label: "fast", min: 0, max: 10, step: 1, default: 1 },
+			],
+		},
 		file: path.join(tmp, "restart-probe.json"),
 		apply: (_values, changed) => { restartApplied.push(changed); },
 	});

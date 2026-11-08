@@ -1,6 +1,6 @@
 import type { Core } from "../../../core";
 import type { Bot } from "../../../bot/bot";
-import type { ConfigValues } from "../../../config/base";
+import type { ConfigValues } from "../../../config/types";
 import type { ConfigManager } from "../../../config/manager";
 import type { ConfigRoot } from "../../../config/types";
 import type { PluginStatus } from "../../../plugin/types";

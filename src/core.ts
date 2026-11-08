@@ -194,7 +194,7 @@ export class Core {
 	async initSettings(): Promise<void> {
 		// Core 自身的开关
 		this.settings.register<CoreSettings>(CORE_DOMAIN_ID, {
-			definition: coreSettings,
+			schema: coreSettings,
 			file: CORE_SETTINGS_FILE,
 			onCreate: initialCoreSettings,
 			apply: (values, changed) => this.applyCoreSettings(values, changed),
@@ -202,7 +202,7 @@ export class Core {
 
 		// webui 域始终注册, 不随启动开关走: 模块被关掉时, 更需要能从设置页把它打开
 		this.settings.register<WebUISettings>(WEBUI_DOMAIN_ID, {
-			definition: webuiSettings,
+			schema: webuiSettings,
 			file: WEBUI_SETTINGS_FILE,
 			// 定义里 password 的默认值是空串(运行期语义 = 不鉴权),
 			// 直接由它生成文件会得到裸奔的管理后台 —— 首次内容必须走随机密码
@@ -213,7 +213,7 @@ export class Core {
 
 		// 统计域不随模块启停而注册: 模块被关掉时, 更需要能从设置页把它打开
 		this.settings.register<StatisticsSettings>(STATISTICS_DOMAIN_ID, {
-			definition: statisticsSettings,
+			schema: statisticsSettings,
 			file: STATISTICS_SETTINGS_FILE,
 			onCreate: initialStatisticsSettings,
 			apply: (values) => { this.statistics?.updateOptions(values); },
@@ -221,7 +221,7 @@ export class Core {
 
 		// 日志级别是热生效的: 直接改 Logger 的全局最低级别, 无需重启
 		this.settings.register<LoggingSettings>(LOGGING_DOMAIN_ID, {
-			definition: loggingSettings,
+			schema: loggingSettings,
 			file: LOGGING_SETTINGS_FILE,
 			apply: (values) => { setLogLevel(values.level); },
 		});

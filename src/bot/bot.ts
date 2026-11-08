@@ -68,7 +68,7 @@ export class Bot extends EventEmitter {
 		this.command = new CommandManager({ hookBus: this.core.hooks });
 		this.state = new BotStateManager(path.join(this.path, "state.json"));
 		this.settings = new SettingsDomain<BotSettings>(`bot:${this.id}`, {
-			definition: botSettings,
+			schema: botSettings,
 			file: botSettingsFile(this.path),
 			// 框架域损坏时按默认值重建, Bot 域不行: id 的默认值是空串, 而它同时是
 			// 目录名与索引键 —— 重建会造出一个身份不明的 Bot。损坏就如实抛错,

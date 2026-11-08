@@ -11,6 +11,7 @@
  * 一个 `fs.watch` 会让句柄与事件成倍放大。
  */
 import { readProp } from "../utils/readProp";
+import { coerceValues, defaultsForControls } from "./schema";
 import {
 	JsonFileStore,
 	cloneValue,
@@ -19,14 +20,7 @@ import {
 	writeJsonFile,
 	type LoadOutcome,
 } from "./store";
-import type { ConfigRoot, Control } from "./types";
-
-/**
- * 一份配置值。
- * 结构与前端 config-editor.js 的 getValues() 一致:
- * `{ 叶子id: 值, groupId: { ... }, tableId: [{ 子id: 值 }] }`
- */
-export type ConfigValues = Record<string, any>;
+import type { ConfigRoot, ConfigValues, Control } from "./types";
 
 /** 配置变更回调: key 为发生变化的配置项路径(点号分隔), 如 "offset" / "pro-group.extra" */
 export type ConfigChangeHandler = (key: string, value: unknown, oldValue: unknown) => void;
@@ -114,119 +108,15 @@ export abstract class ConfigBase {
 	/* ---------- 默认值 ---------- */
 
 	/**
-	 * 单个控件的默认值
-	 *
-	 * 必须与前端 config-editor.js 的 defaultValueOf 逐条保持一致,
-	 * 否则前端 reset 出来的值与后端补齐的值会不同。
-	 */
-	protected static defaultValueOf(define: Control): unknown {
-		switch (define.type) {
-			case "group":
-				return {};
-			case "table":
-				return [];
-			case "checkbox":
-				return Array.isArray(define.default) ? cloneValue(define.default) : [];
-			case "switch":
-				return define.default === true;
-			case "slider":
-				return typeof define.default === "number" ? define.default : (define.min ?? 0);
-			case "input":
-				// 数值输入没有默认值时不能用空串: 它会被当成"填了个非数字"
-				if (define.valueType === "number") {
-					const num = typeof define.default === "number" ? define.default : Number(define.default);
-					return Number.isFinite(num) ? num : (define.min ?? 0);
-				}
-				return define.default === undefined ? "" : cloneValue(define.default);
-			case "text":
-				return undefined;
-			default:
-				return define.default === undefined ? "" : cloneValue(define.default);
-		}
-	}
-
-	/**
-	 * 按控件类型规范化一个已有值
-	 *
-	 * 目前只有数值输入需要: 数字字符串 -> 数字。无法解析时原样保留,
-	 * 由校验报错 —— 基类的写入是宽松的, 这里不替用户决定"坏值该变成什么"。
-	 */
-	protected static normalizeValue(control: Control, value: unknown): unknown {
-		if (
-			control.type === "input"
-			&& control.valueType === "number"
-			&& typeof value === "string"
-			&& value.trim() !== ""
-		) {
-			const num = Number(value);
-			if (Number.isFinite(num)) return num;
-		}
-		return value;
-	}
-
-	/**
 	 * 按控件定义展开一份默认值
 	 *
 	 * table 的初始行来自控件自身的 default; 未提供 default 时是空表。
 	 */
 	defaults(controls: readonly Control[] = this.schema?.controls ?? []): ConfigValues {
-		const out: ConfigValues = {};
-
-		for (const control of controls) {
-			if (control.type === "text") continue; // text 只作说明, 不产生值
-
-			if (control.type === "group") {
-				out[control.id] = this.defaults(control.controls ?? []);
-			} else if (control.type === "table") {
-				out[control.id] = (control.default ?? []).map((row) =>
-					this.fillRow(control.controls ?? [], isPlainObject(row) ? row : {}),
-				);
-			} else {
-				out[control.id] = ConfigBase.defaultValueOf(control);
-			}
-		}
-		return out;
-	}
-
-	/**
-	 * 用列控件的默认值补全一行
-	 *
-	 * 前端 addRow 只为 default 里给出的键赋值, 其余键在构建控件时写入自身默认值,
-	 * 因此行对象的键总是完整的列集合 —— 这里保持一致。
-	 */
-	protected fillRow(columns: readonly Control[], row: Record<string, any>): ConfigValues {
-		const out: ConfigValues = {};
-
-		for (const column of columns) {
-			if (column.type === "text") continue;
-			out[column.id] = ConfigBase.normalizeValue(
-				column,
-				Object.prototype.hasOwnProperty.call(row, column.id)
-					? cloneValue(row[column.id])
-					: ConfigBase.defaultValueOf(column),
-			);
-		}
-		return out;
+		return defaultsForControls(controls);
 	}
 
 	/* ---------- 取值 ---------- */
-
-	/**
-	 * 取某个配置项的值
-	 *
-	 * 支持点号路径, 数组用数字下标: `get("pro-group.group-controls.0.enable")`。
-	 * 依次尝试 当前值 → 默认值 → fallback; 返回的是内部引用, 需要副本请自行拷贝。
-	 *
-	 * @param key 属性路径
-	 * @param fallback 当前值与默认值都未命中时的返回值
-	 */
-	get<T = unknown>(key: string, fallback?: T): T {
-		const value = readProp(this.data, key);
-		if (value !== undefined) return value as T;
-
-		const preset = readProp(this.defaults(), key);
-		return (preset !== undefined ? preset : fallback) as T;
-	}
 
 	/** 当前配置值的一份深拷贝 (供外部安全地读取整份配置) */
 	values(): ConfigValues {
@@ -276,9 +166,11 @@ export abstract class ConfigBase {
 	 * 读到部分值时, 缺失的键回落到默认值, 未知键丢弃
 	 * (规范化由子类通过构造选项 `normalize` 决定)。
 	 *
+	 * 子类各自暴露自己的 `load`: 插件配置返回值本身, 框架设置返回载入结果。
+	 *
 	 * @param file 值文件路径, 缺省用构造时传入的 file
 	 */
-	async load(file: string = this.file ?? ""): Promise<ConfigValues> {
+	protected async loadValues(file: string = this.file ?? ""): Promise<ConfigValues> {
 		if (!this.store) return this.data;
 		await this.store.load(file || this.store.file);
 		return this.data;
@@ -326,48 +218,10 @@ export abstract class ConfigBase {
 	/**
 	 * 以 controls 为骨架规范化一份值
 	 *
-	 * - 只保留 schema 已知的键, 未知键丢弃
-	 * - 键缺失时回落到 fallback 的同路径值, 再回落到控件默认值
-	 * - group 递归; table 整表替换, 行内用列默认值补全
+	 * 规则见 `coerceValues`: 只保留已知键、缺失键回落 fallback 再回落默认值、
+	 * table 整表替换。
 	 */
 	protected coerce(controls: readonly Control[], source?: unknown, fallback?: unknown): ConfigValues {
-		const src = isPlainObject(source) ? source : {};
-		const fb = isPlainObject(fallback) ? fallback : {};
-		const out: ConfigValues = {};
-
-		for (const control of controls) {
-			if (control.type === "text") continue;
-			const id = control.id;
-			const hasSrc = Object.prototype.hasOwnProperty.call(src, id);
-			const hasFb = Object.prototype.hasOwnProperty.call(fb, id);
-
-			if (control.type === "group") {
-				out[id] = this.coerce(
-					control.controls ?? [],
-					hasSrc ? src[id] : undefined,
-					hasFb ? fb[id] : undefined,
-				);
-				continue;
-			}
-
-			if (control.type === "table") {
-				// 行集合以提交值为准; 提交与旧值都没有时回落到控件自身的 default
-				const rows = hasSrc ? src[id] : (hasFb ? fb[id] : control.default ?? []);
-				out[id] = (Array.isArray(rows) ? rows : []).map((row) =>
-					this.fillRow(control.controls ?? [], isPlainObject(row) ? row : {}),
-				);
-				continue;
-			}
-
-			out[id] = ConfigBase.normalizeValue(
-				control,
-				hasSrc
-					? cloneValue(src[id])
-					: hasFb
-						? cloneValue(fb[id])
-						: ConfigBase.defaultValueOf(control),
-			);
-		}
-		return out;
+		return coerceValues(controls, source, fallback);
 	}
 }

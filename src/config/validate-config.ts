@@ -233,6 +233,10 @@ function validateControl(
 				pushType(errors, childPath, label, "数字");
 				return;
 			}
+			if (control.integer && !Number.isInteger(value)) {
+				errors.push({ path: childPath, label, message: `${label} 必须是整数` });
+				return;
+			}
 			if (typeof control.min === "number" && value < control.min) {
 				errors.push({ path: childPath, label, message: `${label} 不能小于 ${control.min}` });
 			}

@@ -1,6 +1,5 @@
 import path from "node:path";
-import { defineSettings } from "../define";
-import type { SettingsDefinition } from "../types";
+import type { ConfigRoot } from "../../types";
 
 /**
  * Bot 设置值文件名
@@ -10,14 +9,14 @@ import type { SettingsDefinition } from "../types";
  */
 export const BOT_SETTINGS_FILE_NAME = "config.json";
 
-/** Bot 设置的形状 (运行时由定义保证) */
+/** Bot 设置的形状 (运行时由 schema 保证) */
 export interface BotSettings extends Record<string, unknown> {
 	id: string;
 	name: string;
 }
 
 /**
- * Bot 设置定义
+ * Bot 设置 schema
  *
  * 与 state.json 的边界: 这里只放**用户意图**(身份与展示), 启停期望态
  * (`enable` / `enabledPlugins`) 留在 state.json —— 配置与状态各一份文件,
@@ -27,26 +26,28 @@ export interface BotSettings extends Record<string, unknown> {
  * 路径的基准 (`ConfigManager.fileForPlugin(bot.path, ...)`), 改它等于搬家 +
  * 改 path + 重建索引 + 迁移状态文件, 不是一次"设置保存"该做的事。
  */
-export const botSettings: SettingsDefinition = defineSettings({
+export const botSettings: ConfigRoot = {
 	version: "1.0.0",
-	fields: {
-		id: {
-			type: "string",
+	controls: [
+		{
+			type: "input",
+			id: "id",
+			label: "Bot ID",
 			default: "",
 			required: true,
 			immutable: true,
-			label: "Bot ID",
 			desc: "Bot 的标识, 同时也是它的目录名; 创建后不可更改",
 		},
-		name: {
-			type: "string",
-			default: "",
+		{
+			type: "input",
+			id: "name",
 			label: "Bot 名称",
+			default: "",
 			placeholder: "留空表示不设名称",
 			desc: "仅用于展示, 与 ID 无关",
 		},
-	},
-});
+	],
+};
 
 /** 某个 Bot 的值文件路径 (Bot 目录下的 config.json) */
 export function botSettingsFile(botPath: string): string {

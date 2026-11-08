@@ -1,7 +1,8 @@
 import path from "node:path";
+import { readProp } from "../utils/readProp";
 import { root } from "../utils/root";
-import { ConfigBase, type ConfigValues } from "./base";
-import type { ConfigRoot } from "./types";
+import { ConfigBase } from "./base";
+import type { ConfigRoot, ConfigValues } from "./types";
 import { validateConfig } from "./validate-config";
 
 /**
@@ -27,6 +28,37 @@ export class ConfigManager extends ConfigBase {
 			onError: "throw",
 			createIfMissing: true,
 		});
+	}
+
+	/**
+	 * 取某个配置项的值
+	 *
+	 * 插件配置特有的便利入口: 支持点号路径与数组下标
+	 * (`get("pro-group.group-controls.0.enable")`), 依次尝试
+	 * 当前值 → 默认值 → fallback; 返回的是内部引用, 需要副本请自行拷贝。
+	 *
+	 * @param key 属性路径
+	 * @param fallback 当前值与默认值都未命中时的返回值
+	 */
+	get<T = unknown>(key: string, fallback?: T): T {
+		const value = readProp(this.data, key);
+		if (value !== undefined) return value as T;
+
+		const preset = readProp(this.defaults(), key);
+		return (preset !== undefined ? preset : fallback) as T;
+	}
+
+	/**
+	 * 从文件载入配置值
+	 *
+	 * 文件不存在时按 schema 默认值生成一份(目录一并创建);
+	 * 读到部分值时, 缺失的键回落到默认值, 未知键丢弃。
+	 * 文件存在但解析失败(语法错误、权限等)照常抛出, 不静默覆盖。
+	 *
+	 * @param file 值文件路径, 缺省用构造时传入的 file
+	 */
+	async load(file: string = this.file ?? ""): Promise<ConfigValues> {
+		return this.loadValues(file);
 	}
 
 	/**

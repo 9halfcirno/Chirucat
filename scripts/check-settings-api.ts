@@ -96,7 +96,7 @@ try {
 	core.settings.unregister("webui");
 	const tmpFile = path.join(tmp, "webui.json");
 	const domain = core.settings.register<WebUISettings>("webui", {
-		definition: webuiSettings,
+		schema: webuiSettings,
 		file: tmpFile,
 	});
 	await domain.load();
@@ -126,8 +126,8 @@ try {
 		snap.define.controls.some((c: any) => c.id === "localNoAuth" && c.type === "switch"));
 	check("本机免密默认关闭", snap.values["localNoAuth"] === false);
 	check("快照里的值已脱敏", snap.values["password"] === "");
-	check("快照标出密码为密码框",
-		snap.define.controls.some((c: any) => c.id === "password" && c.attr?.type === "password"));
+	check("快照标出密码为敏感项",
+		snap.define.controls.some((c: any) => c.id === "password" && c.secret === true));
 	check("默认端口来自定义", snap.values["port"] === 7636);
 
 	check("全局列表含 core 域", snapshot.domains.some((d: any) => d.id === "core"));
@@ -196,14 +196,14 @@ try {
 	/* 也把 core / statistics 换成临时文件: 下面的写入用例绝不能落到仓库里 */
 	core.settings.unregister("core");
 	const coreDomain = core.settings.register<CoreSettings>("core", {
-		definition: coreSettings,
+		schema: coreSettings,
 		file: path.join(tmp, "core.json"),
 	});
 	await coreDomain.load();
 
 	core.settings.unregister("statistics");
 	const statsDomain = core.settings.register<StatisticsSettings>("statistics", {
-		definition: statisticsSettings,
+		schema: statisticsSettings,
 		file: path.join(tmp, "statistics.json"),
 	});
 	await statsDomain.load();
@@ -249,8 +249,8 @@ try {
 	const botSnap = await getBotConfig.handler!(req({ id: "probe" }), core) as any;
 	check("get_bot_config 返回该 Bot", botSnap.id === "probe");
 	check("值来自 Bot 自己的 config.json", botSnap.values["name"] === "探针");
-	check("id 控件投影成只读",
-		botSnap.define.controls.some((c: any) => c.id === "id" && c.attr?.disabled === "true"));
+	check("id 控件标为不可修改",
+		botSnap.define.controls.some((c: any) => c.id === "id" && c.immutable === true));
 	check("Bot 域不出现在全局设置列表里",
 		!(await getSettings.handler!(req(), core) as any).domains.some((d: any) => d.id.startsWith("bot:")));
 
