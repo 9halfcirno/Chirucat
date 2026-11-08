@@ -121,9 +121,15 @@ const bot = {
 	setPluginEnabled: async (id: string, state: boolean) => {
 		toggled = { id, state };
 		const status: PluginStatus = state ? "enabled" : "disabled";
+		// 真实宿主只把"本次真的变了"的连带插件计入 affected: 本来就关着的依赖者
+		// 不该出现, 目标自身由 enabled 字段表达
+		const affected = allPluginEntities()
+			.filter((e) => e.id !== id && cascade?.includes(e.id) && e.status !== status)
+			.map((e) => e.id);
 		for (const entity of allPluginEntities()) {
-			if (entity.id === id || cascade?.includes(entity.id)) entity.status = status;
+			if (entity.id === id || affected.includes(entity.id)) entity.status = status;
 		}
+		return { id, enabled: status === "enabled", affected };
 	},
 } as unknown as Bot;
 

@@ -1,5 +1,5 @@
 import path from "path";
-import { PluginManager } from "../plugin/manager";
+import { PluginManager, type PluginToggleResult } from "../plugin/manager";
 import { BotStateManager } from "./state-manager";
 import { SettingsDomain } from "../config/settings/manager";
 import { botSettings, botSettingsFile, type BotSettings } from "../config/settings/domains/bot";
@@ -159,17 +159,18 @@ export class Bot extends EventEmitter {
 	/**
 	 * 设置单个插件的期望启用状态
 	 *
-	 * 与 setEnable 一致: 先收敛(加载/卸载)成功, 再写入偏好。
+	 * 与 setEnable 一致: 先收敛(加载/卸载)成功, 再写入偏好; 依赖连带改变的
+	 * 插件一并落盘(见 `PluginManager.setEnabled`)。
 	 * 插件只能在 Bot 运行时加载, 因此 Bot 未运行时无法更改。
 	 * @param id 插件 id
 	 * @param enabled 是否启用
+	 * @returns 目标插件收敛后的运行态与被连带改变的插件 id
 	 */
-	async setPluginEnabled(id: string, enabled: boolean) {
-		await this.serialize(async () => {
+	async setPluginEnabled(id: string, enabled: boolean): Promise<PluginToggleResult> {
+		return this.serialize(async () => {
 			if (!this.running) throw new StateError(`Bot ${this.id} 未运行, 无法更改插件状态`);
 
-			enabled ? await this.plugin.load(id) : await this.plugin.unload(id);
-			await this.state.setPluginEnabled(id, enabled);
+			return this.plugin.setEnabled(id, enabled);
 		});
 	}
 
@@ -184,7 +185,7 @@ export class Bot extends EventEmitter {
 	private async dropUnstartable(failed: readonly string[]) {
 		if (!failed.length) return;
 
-		const dropped = await this.state.disablePlugins(failed);
+		const dropped = await this.state.setEnabledMany(failed, false);
 		if (dropped) this.logger.warn(`已从期望启用列表移除起不来的插件: ${failed.join(", ")}`);
 	}
 

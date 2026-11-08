@@ -214,8 +214,10 @@ opt-out 黑名单确实是两份显式分开的策略(不是布尔开关切出�
 
 第 3 批把 `Plugin`/`Service` 合流到 `ManagedEntity`(`src/plugin/managed-entity.ts`)、
 把 `PluginManager`/`ServiceHost` 合流到 `ManagedHostBase`(`src/plugin/managed-host.ts`)。
-两个子类只剩差异策略与各自的编排层: 服务宿保留期望态/串行队列/依赖连带/释放流程,
-插件宿保留双目录扫描与适配器动作派发。`npm run check:managed-host` 用探针宿主直接验
+两个子类只剩差异策略与各自的编排层: 服务宿保留期望态/串行队列/释放流程,
+插件宿保留双目录扫描与适配器动作派发; 启停的依赖连带两侧都有(`ServiceHost.setEnabled` 与
+`PluginManager.setEnabled` 共用基类的图遍历), 差别只在把连带结果写进黑名单还是移出白名单。
+`npm run check:managed-host` 用探针宿主直接验
 基类契约(36 项): 双表迭代与查找顺序、依赖图(缺失/豁免/环/按序)、load 调用链与失败回滚、
 Hook 取消、递归卸载、`convergeState` 先卸后装与 `failed[]`、扫描对账、配置装配与事件派发。
 

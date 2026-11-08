@@ -1,5 +1,6 @@
+import { StateError } from "../../../errors/state-error";
 import type { WebUIAPI } from "../types";
-import { changedPluginIds, fail, requireRunningBot, requireCore, snapshotEnabledPlugins } from "./_shared";
+import { fail, requireRunningBot, requireCore } from "./_shared";
 
 /**
  * 设置Bot的插件状态
@@ -13,6 +14,9 @@ import { changedPluginIds, fail, requireRunningBot, requireCore, snapshotEnabled
  * 返回收敛后的运行态, 以及依赖连带导致状态变化的插件 id(`affected`)。
  * 启用会连带拉起它依赖的插件, 停用会连带卸载依赖它的插件 —— 前端据此
  * 逐个对齐那些卡片的开关, 不必重新扫描目录或重绘整页。
+ *
+ * `affected` 直接取宿主 `setEnabled` 的回报: 它算的就是本次真的被改变的插件,
+ * 与写进 state.json 的是同一批 id, 界面与文件不会各说各话。
  */
 
 export default {
@@ -28,20 +32,21 @@ export default {
 
 		const state = !!req.body.state; // 转布尔
 
-		const before = snapshotEnabledPlugins(bot.plugin);
+		let result;
 		try {
-			// setPluginEnabled 先加载/卸载(含依赖连带), 成功后才把偏好写入 state.json
-			await bot.setPluginEnabled(id, state);
+			// 先加载/卸载(含依赖连带), 成功后才把偏好连同连带结果写入 state.json
+			result = await bot.setPluginEnabled(id, state);
 		} catch (e) {
+			if (e instanceof StateError) fail(409, (e as Error).message);
 			fail(500, `更改插件状态失败: ${(e as Error).message}`);
 		}
 
 		return {
 			success: true,
-			// 回传收敛后的运行态: 与 set_bot_state 一致, 前端据此对齐开关
-			state: bot.plugin.resolve(id)?.status === "enabled",
+			/** 目标插件收敛后的运行态: 与 set_bot_state 一致, 前端据此对齐开关 */
+			state: result.enabled,
 			/** 本次被依赖连带改变的插件 id; 前端按 data.state 逐个对齐 */
-			affected: changedPluginIds(before, snapshotEnabledPlugins(bot.plugin), id),
+			affected: result.affected,
 		};
 	},
 } as WebUIAPI;

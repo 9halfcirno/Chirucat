@@ -20,7 +20,10 @@
  * | `acceptManifest` / `onReadError` | 跳过 service 类型 | 只收 service 类型 |
  *
  * **刻意留在子类的编排层**: 服务宿的 `state` / `serialize` / `released` 栅栏 /
- * `setEnabled` 依赖连带 / `dispose`, 以及插件宿的 `scan` 双目录 / `handleAction`。
+ * `dispose`, 以及两个宿主各自的 `setEnabled` —— 依赖连带要算哪些 id(基类的
+ * `collectDependents` / `collectDependencies` / `statusesOf`)是共通流程, 连带
+ * 结果写到哪儿(白名单 vs 黑名单)是子类的事。还有插件宿的 `scan` 双目录 /
+ * `handleAction`。
  * 尤其"期望名单在哪里求解": 插件宿在调用点读白名单, 服务宿必须在串行队列
  * **内部**读黑名单(排队期间用户可能刚改过状态) —— 基类只提供 `convergeState`,
  * 由两个子类各自保留 `syncState` 外壳, 不统一时机。
@@ -168,6 +171,56 @@ export abstract class ManagedHostBase<
 	/** 依赖指定实体的实体(跨全部注册表) */
 	protected getDependents(id: string): E[] {
 		return this.allEntities().filter((e) => e.manifest.dependencies?.[id]);
+	}
+
+	/**
+	 * 依赖指定实体的全部实体 id(含传递依赖者), 不含自身
+	 *
+	 * 停用一个实体时这些会被 `unloadTree` 递归卸载, 所以连带名单要按同一口径
+	 * 算出来 —— 宿主只写目标自身的期望态, 重启后依赖树就会把它重新拉起。
+	 */
+	protected collectDependents(id: string): string[] {
+		// 根部先算已访问: 自依赖/成环时不把自己当成自己的依赖者
+		const seen = new Set<string>([id]);
+		const queue: string[] = [id];
+
+		while (queue.length) {
+			for (const dependent of this.getDependents(queue.shift()!)) {
+				if (seen.has(dependent.id)) continue;
+				seen.add(dependent.id);
+				queue.push(dependent.id);
+			}
+		}
+
+		// 去掉根部自身: seen 里带上它只是为了防环
+		seen.delete(id);
+		return [...seen];
+	}
+
+	/** 指定实体依赖的全部实体 id(含传递依赖), 不含自身 */
+	protected collectDependencies(id: string): string[] {
+		// 根部先算已访问: 依赖环里不把自己当成自己的依赖
+		const seen = new Set<string>([id]);
+		const queue: string[] = [id];
+
+		while (queue.length) {
+			const entity = this.resolve(queue.shift()!);
+			if (!entity) continue;
+
+			for (const depId of Object.keys(entity.manifest.dependencies ?? {})) {
+				if (seen.has(depId)) continue;
+				seen.add(depId);
+				queue.push(depId);
+			}
+		}
+
+		seen.delete(id);
+		return [...seen];
+	}
+
+	/** 取一组实体的当前运行状态; 连带落盘要用它对比一次操作前后各自变没变 */
+	protected statusesOf(ids: readonly string[]): Map<string, PluginStatus> {
+		return new Map(ids.map(id => [id, this.resolve(id)?.status ?? "registered"]));
 	}
 
 	/** 全图循环检测: 以每个实体为根跑一次 dfs, 发现环只告警不阻断 */

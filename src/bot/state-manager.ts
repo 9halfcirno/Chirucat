@@ -84,29 +84,37 @@ export class BotStateManager extends DesiredStateStore<BotState> {
 	 * @param enabled 是否期望启用; false 时从列表中移除
 	 */
 	async setPluginEnabled(id: string, enabled: boolean): Promise<void> {
-		const current = this.get();
-		const ids = new Set(current.enabledPlugins);
-		enabled ? ids.add(id) : ids.delete(id);
-		await this.commit({ enable: current.enable, enabledPlugins: [...ids] });
+		await this.setEnabledMany([id], enabled);
 	}
 
 	/**
-	 * 批量移出期望启用列表(不在列表里的 id 忽略)
+	 * 批量设置一组插件的期望启用状态
 	 *
-	 * 供"插件运行态收敛失败"后清理期望: 运行态给不出来的插件不留在文件里。
-	 * 列表没有实际变化时不写盘。
-	 * @param ids 要移除的插件 id
+	 * 用于依赖连带: 停用被依赖的插件时, 被它牵连卸载的依赖者要一并移出白名单,
+	 * 否则重启后仍在名单里的依赖者会沿加载递归把整棵依赖树重新拉起。名单没有
+	 * 实际变化时不写盘。
+	 * @param ids 插件 id
+	 * @param enabled 是否期望启用; false 时从列表中移除
 	 * @returns 是否真的发生了改动
 	 */
-	async disablePlugins(ids: readonly string[]): Promise<boolean> {
-		const drop = new Set(ids);
-		if (drop.size === 0) return false;
-
+	async setEnabledMany(ids: readonly string[], enabled: boolean): Promise<boolean> {
 		const current = this.get();
-		const kept = current.enabledPlugins.filter((id) => !drop.has(id));
-		if (kept.length === current.enabledPlugins.length) return false;
+		const wanted = new Set(current.enabledPlugins);
+		let changed = false;
 
-		await this.commit({ enable: current.enable, enabledPlugins: kept });
+		for (const id of ids) {
+			if (!id) continue;
+			const had = wanted.has(id);
+			if (enabled) {
+				if (!had) { wanted.add(id); changed = true; }
+			} else if (had) {
+				wanted.delete(id); changed = true;
+			}
+		}
+
+		if (!changed) return false;
+
+		await this.commit({ enable: current.enable, enabledPlugins: [...wanted] });
 		return true;
 	}
 }

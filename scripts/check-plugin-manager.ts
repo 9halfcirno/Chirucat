@@ -8,6 +8,8 @@
  *      依赖环与缺失依赖预检、服务依赖豁免、递归加载顺序、load/unload 幂等、
  *      Hook 取消、加载失败回滚、syncState 先卸后装与 failed[]、以及配置值文件
  *      **不做外部监听**(手工编辑不自动生效, 显式 load() 才重读)这一性能取舍。
+ *      末两批补上启停连带落盘: 停用被依赖的插件时, 被连带卸载的依赖者要一并
+ *      移出白名单(只写目标自身会让重启把整棵依赖树复活), 隐式拉起的依赖不进名单。
  *
  * 用法:
  *   npx tsx scripts/check-plugin-manager.ts
@@ -233,6 +235,77 @@ try {
 	await scan();
 	check("目录中消失的非活跃条目被清理", !pm.globalPlugins.has("cyc-x"));
 	check("悬空清理不动已启用实例", pm.resolve("a")?.status === "enabled");
+
+	/* ---------- 6. 启停连带落盘: 关的是一棵树而不是一个插件 ---------- */
+	console.log("\n[启停连带落盘]");
+	const stateFile = path.join(botDir, "state.json");
+	/** 直接读盘核对期望名单: 连带有没有落盘, 只看文件 */
+	const wanted = async (): Promise<string[]> => {
+		const raw = JSON.parse(await fs.readFile(stateFile, "utf-8")) as { enabledPlugins?: string[] };
+		return [...(raw.enabledPlugins ?? [])];
+	};
+
+	await pm.syncState([]);
+	await bot.state.setState({ enable: true, enabledPlugins: [] });
+
+	// b 依赖 a: 用户启用 b, a 被隐式拉起
+	const onB = await pm.setEnabled("b", true);
+	check("启用 b 连带拉起依赖 a",
+		onB.enabled === true && onB.affected.includes("a") && pm.resolve("a")?.status === "enabled",
+		JSON.stringify(onB));
+	check("隐式拉起的依赖不进白名单", (await wanted()).join(",") === "b", JSON.stringify(await wanted()));
+
+	// 关掉被依赖的 a: 连带卸载 b, b 的期望必须一并落盘 —— 只写 a 的话,
+	// 重启后仍在名单里的 b 会沿加载递归把整棵树重新拉起
+	const offA = await pm.setEnabled("a", false);
+	check("停用 a 连带卸载依赖者 b",
+		offA.enabled === false && offA.affected.includes("b") && pm.resolve("b")?.status !== "enabled",
+		JSON.stringify(offA));
+	check("连带卸载的依赖者一并移出白名单", (await wanted()).length === 0, JSON.stringify(await wanted()));
+
+	// 重启口径: 期望态从盘上读回来再收敛, 整棵树不该复活
+	await bot.state.load();
+	const failedRestart = await pm.syncState();
+	check("重启后依赖树不会被仍在名单里的插件拉起",
+		failedRestart.length === 0 && pm.enabledPlugins.length === 0,
+		JSON.stringify({ failedRestart, enabled: pm.enabledPlugins.map((p) => p.id) }));
+
+	// 本来就关着的依赖者不构成本次变化: 它的期望是它自己的事
+	await pm.load("b");
+	await pm.unload("b");
+	await bot.state.setState({ enable: true, enabledPlugins: ["b"] });
+	const offBase = await pm.setEnabled("a", false);
+	check("关着的依赖者不进 affected", offBase.affected.length === 0, offBase.affected.join(","));
+	check("关着的依赖者不动它自己的期望", (await wanted()).join(",") === "b", JSON.stringify(await wanted()));
+	await pm.syncState([]);
+
+	/* ---------- 7. Bot 级入口(WebUI 走这条路): 关一次就该关住整棵树 ---------- */
+	console.log("\n[Bot 级启停落盘]");
+	// `Bot.start()` 的 global 目录固定是项目根的 plugins, 夹具因此放私有目录
+	await makePlugin(botPluginDir, "cascade-base");
+	await makePlugin(botPluginDir, "cascade-leaf", { dependencies: { "cascade-base": "any" } });
+	await bot.state.setState({ enable: true, enabledPlugins: ["cascade-leaf"] });
+	await bot.start();
+	check("启动按白名单跑起依赖者并隐式拉起依赖",
+		pm.resolve("cascade-leaf")?.status === "enabled" && pm.resolve("cascade-base")?.status === "enabled",
+		`${pm.resolve("cascade-leaf")?.status}/${pm.resolve("cascade-base")?.status}`);
+
+	// 用户关的是被依赖的那个: 运行态连带卸载依赖者, 期望名单要一起收回去
+	const offCascade = await bot.setPluginEnabled("cascade-base", false);
+	check("Bot.setPluginEnabled 回报被连带的依赖者",
+		offCascade.enabled === false && offCascade.affected.includes("cascade-leaf"),
+		JSON.stringify(offCascade));
+	check("Bot.setPluginEnabled 把依赖者一并移出白名单",
+		(await wanted()).length === 0, JSON.stringify(await wanted()));
+
+	// 重启: 名单里再没有这棵树的任何节点, 它就该安静待着
+	await bot.stop();
+	await bot.state.load();
+	await bot.start();
+	check("Bot 重启后整棵依赖树保持关闭",
+		pm.resolve("cascade-base")?.status !== "enabled" && pm.resolve("cascade-leaf")?.status !== "enabled",
+		`${pm.resolve("cascade-base")?.status}/${pm.resolve("cascade-leaf")?.status}`);
+	await bot.stop();
 } finally {
 	if (bot) {
 		await bot.plugin.syncState([]).catch(() => {});

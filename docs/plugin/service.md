@@ -32,8 +32,10 @@
 上下文侧刻意留在子类的域能力: 普通插件的 `bot` / `user` / `session` / `action` /
 `require` / `adapterEscape`, 服务插件的 `event` / `hook` / 框架设施视图 / `provide`。
 
-刻意留在 `ServiceHost` 子类的编排层是: 持久化期望态、启停串行队列、`setEnabled` 的依赖连带、
-以及释放流程 —— 这些在 `PluginManager` 里没有对应物。尤其**期望名单的求解时机**:
+刻意留在 `ServiceHost` 子类的编排层是: 持久化期望态、启停串行队列、`setEnabled` 把依赖连带
+写进黑名单、以及释放流程。连带要算哪些 id(`collectDependents` / `collectDependencies` /
+`statusesOf`)是共通的图遍历, 抽在基类, 插件宿的 `setEnabled` 共用同一套 —— 差别只在把连带
+结果写进黑名单还是移出白名单。尤其**期望名单的求解时机**:
 服务宿必须在串行队列内部读黑名单(排队期间用户可能刚改过状态), 插件宿在调用点读白名单,
 两者不能统一, 因此基类只提供 `convergeState`, 由两个子类各自保留 `syncState` 外壳。
 

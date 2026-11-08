@@ -132,7 +132,7 @@ export class ServiceHost extends ManagedHostBase<Service, ServiceContext> {
 
 	/** 依赖闭包里有显式停用的服务时, 收敛阶段跳过该服务且不写盘 */
 	protected preLoadIssues(id: string): string[] {
-		return this.stoppedDependencies(id);
+		return this.collectDependencies(id).filter(depId => this.state.isDisabled(depId));
 	}
 
 	/* ---------- 状态文件与生命周期 ---------- */
@@ -276,11 +276,6 @@ export class ServiceHost extends ManagedHostBase<Service, ServiceContext> {
 		});
 	}
 
-	/** 取一组服务的当前运行状态 */
-	private statusesOf(ids: readonly string[]): Map<string, PluginStatus> {
-		return new Map(ids.map(id => [id, this.registry.get(id)?.status ?? "registered"]));
-	}
-
 	/**
 	 * 把一批服务的期望态对齐到本次操作**真正改变**的那些
 	 *
@@ -292,13 +287,14 @@ export class ServiceHost extends ManagedHostBase<Service, ServiceContext> {
 	 * 用户的偏好。对齐失败只记日志: 这是补救, 不该再把原始错误盖掉。
 	 */
 	private async alignStateWithRuntime(ids: readonly string[], before: Map<string, PluginStatus>): Promise<void> {
+		const now = this.statusesOf(ids);
 		const on: string[] = [];
 		const off: string[] = [];
 
 		for (const id of ids) {
-			const now = this.registry.get(id)?.status ?? "registered";
-			if (before.get(id) === now) continue; // 本次没动它
-			(now === "enabled" ? on : off).push(id);
+			const status = now.get(id) ?? "registered";
+			if (before.get(id) === status) continue; // 本次没动它
+			(status === "enabled" ? on : off).push(id);
 		}
 
 		if (!on.length && !off.length) return;
@@ -327,68 +323,6 @@ export class ServiceHost extends ManagedHostBase<Service, ServiceContext> {
 		});
 		this.toggling = run.then(() => undefined, () => undefined);
 		return run;
-	}
-
-	/** 依赖闭包里被显式停用的服务 id(含传递依赖); 不含自身 */
-	private stoppedDependencies(id: string): string[] {
-		const seen = new Set<string>([id]);
-		const stopped = new Set<string>();
-		const queue: string[] = [id];
-
-		while (queue.length) {
-			const service = this.registry.get(queue.shift()!);
-			if (!service) continue;
-
-			for (const depId of Object.keys(service.manifest.dependencies ?? {})) {
-				if (seen.has(depId)) continue;
-				seen.add(depId);
-				if (this.state.isDisabled(depId)) stopped.add(depId);
-				queue.push(depId);
-			}
-		}
-
-		return [...stopped];
-	}
-
-	/** 依赖指定服务的全部服务(含传递依赖者), 停用时用于连带; 不含自身 */
-	private collectDependents(id: string): string[] {
-		// 根部先算已访问: 自依赖/成环时不把自己当成自己的依赖者
-		const seen = new Set<string>([id]);
-		const queue: string[] = [id];
-
-		while (queue.length) {
-			for (const dependent of this.getDependents(queue.shift()!)) {
-				if (seen.has(dependent.id)) continue;
-				seen.add(dependent.id);
-				queue.push(dependent.id);
-			}
-		}
-
-		// 去掉根部自身: seen 里带上它只是为了防环
-		seen.delete(id);
-		return [...seen];
-	}
-
-	/** 指定服务依赖的全部服务(含传递依赖), 启用时用于连带; 不含自身 */
-	private collectDependencies(id: string): string[] {
-		// 根部先算已访问: 依赖环里不把自己当成自己的依赖
-		const seen = new Set<string>([id]);
-		const queue: string[] = [id];
-
-		while (queue.length) {
-			const service = this.registry.get(queue.shift()!);
-			if (!service) continue;
-
-			for (const depId of Object.keys(service.manifest.dependencies ?? {})) {
-				if (seen.has(depId)) continue;
-				seen.add(depId);
-				queue.push(depId);
-			}
-		}
-
-		// 去掉根部自身: seen 里带上它只是为了防环
-		seen.delete(id);
-		return [...seen];
 	}
 
 	/**

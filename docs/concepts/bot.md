@@ -72,7 +72,7 @@ JsonFileStore           原子写 / 串行队列 / revision 守卫 / 外部监�
 | --- | --- |
 | Core 启动 / BotManager 批量 | `Bot.syncState()` → `state.load()` → `applyDesired()` → `converge()`(`src/bot/bot.ts:258-261, 234-253`) |
 | `Bot.start()` | 扫描插件 → `plugin.syncState()` 按白名单加载 → `dropUnstartable()` 清理起不来的 id(`:116-130`) |
-| WebUI 开关 | `setEnable` / `setPluginEnabled` **先加载或卸载成功, 再写入期望态**(`:153-175`); 服务侧 `setEnabled` 还会连带启用依赖、停用依赖者 |
+| WebUI 开关 | `setEnable` / `setPluginEnabled` **先加载或卸载成功, 再写入期望态**(`:153-175`); 两侧的 `setEnabled` 都按依赖连带一并落盘 —— 停用把被连带卸载的依赖者一起移出白名单, 服务侧则是写进黑名单 |
 | 手工编辑 `state.json` | `initState()` 注册 `state.watch` → `applyDesired()`(`:93-107`), 与 WebUI 操作排进同一条串行队列 |
 | 服务插件目录刷新 | `ServiceHost.scan()` + `syncState()`; 期望名单在**串行队列内部**求解, 避免把排队期间的 `setEnabled` 反向拉回 |
 
@@ -84,6 +84,6 @@ JsonFileStore           原子写 / 串行队列 / revision 守卫 / 外部监�
 
 WebUI 只拿到**运行态**: `PluginPayload` 是 `{ running, plugins: { global, bot } }`, `ServicePayload` 是 `{ plugins: [...] }`(形状刻意不同, 前端分别消费)。期望态不往前端漏, 因此不会出现"文件说开着、界面说关着"(`src/webui/server/plugin-view.ts:48-58`)。`registered` / `disabled` 都收敛成 `disabled`, 切换中显示 `loading` / `unloading`。
 
-服务侧的开关会回传**完整列表**与 `affected`, 前端整块重绘。插件侧刻意不回完整列表: `set_plugin_state` 只回 `state` 与 `affected`(本次被依赖连带改变的插件 id), 由端点在启停前后各取一次**内存快照**算差值 —— 不扫描目录、不重新构造整份视图。前端按 id 找到关联卡片, 同步徽章与开关(含 `dot-switch` 的内部状态闭包)逐个对齐; 请求失败时改用只读的 `get_plugin_list` 把可能已跑了一半的连带状态拉回界面。
+服务侧的开关会回传**完整列表**与 `affected`, 前端整块重绘。插件侧刻意不回完整列表: `set_plugin_state` 只回 `state` 与 `affected`, 直接取宿主 `PluginManager.setEnabled` 的回报 —— 那批 id 就是它写进 `state.json` 的同一批, 界面与文件不会各说各话, 也不必在端点前后各取一次快照。前端按 id 找到关联卡片, 同步徽章与开关(含 `dot-switch` 的内部状态闭包)逐个对齐; 请求失败时改用只读的 `get_plugin_list` 把可能已跑了一半的连带状态拉回界面。
 
-> `affected` 只反映本次运行态变化, **不改变 `state.json` 的白名单语义**: 依赖插件仍是被隐式连带拉起的, 不在 `enabledPlugins` 里; 下次按期望态收敛(如 Bot 启动)时, 只有白名单里的插件会保持启用。这与服务插件把连带结果一并写进黑名单的语义不同, 是两侧 opt-in / opt-out 模型本身的差异。
+> 白名单只登记**用户自己决定要开**的插件: 启用一个插件时它依赖的插件是被隐式拉起的, 不进 `enabledPlugins`。但停用方向的连带**必须落盘** —— 只写目标自身一个 id 时, 重启后仍在白名单里的依赖者会沿 `load` 的递归把整棵依赖树重新拉起, 用户只能从叶子往上逐个关才关得干净。因此停用会把被连带卸载的依赖者一并移出名单(`src/plugin/manager.ts` 的 `setEnabled`), 这与服务插件把连带结果一并写进黑名单是同一口径, 差别只剩 opt-in / opt-out 的写法。

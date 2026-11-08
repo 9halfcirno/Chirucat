@@ -3,7 +3,6 @@ import type { Bot } from "../../../bot/bot";
 import type { ConfigValues } from "../../../config/types";
 import type { ConfigManager } from "../../../config/manager";
 import type { ConfigRoot } from "../../../config/types";
-import type { PluginStatus } from "../../../plugin/types";
 import type { UserManager } from "../../../internal/user-manager";
 import { SettingsApplyError } from "../../../config/settings/manager";
 import { SettingsError } from "../../../config/settings/types";
@@ -111,31 +110,6 @@ export async function requirePluginConfig<T extends ConfigTarget>(
 	const config = entity.config;
 	if (!config) fail(404, `${label} ${entity.id} 没有可用的配置`);
 	return { config, define: entity.configSchema };
-}
-
-/**
- * 记录一次插件运行态快照(只读内存, 不扫描目录)
- *
- * 启停一个插件会连带加载它依赖的插件、卸载依赖它的插件(`ManagedHostBase`
- * 的 `load` / `unloadTree`)。宿主本身不返回"谁被连带改了", 端点在调用前后
- * 各取一次快照来算 —— 比重新扫描目录或回传整份列表都便宜, 且只反映
- * **本次真的发生变化**的插件。
- */
-export function snapshotEnabledPlugins(
-	host: { allEntities(): readonly { id: string; status: PluginStatus }[] },
-): Map<string, boolean> {
-	return new Map(host.allEntities().map((e) => [e.id, e.status === "enabled"]));
-}
-
-/** 对比两次快照, 取本次状态真的变了插件 id; 目标自身由 state 字段表达, 可排除 */
-export function changedPluginIds(
-	before: Map<string, boolean>,
-	after: Map<string, boolean>,
-	excludeId?: string,
-): string[] {
-	return [...after]
-		.filter(([id, on]) => id !== excludeId && (before.get(id) ?? false) !== on)
-		.map(([id]) => id);
 }
 
 /**

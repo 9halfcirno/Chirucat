@@ -5,6 +5,7 @@
  * - 文件缺失 / 损坏时的回退
  * - 旧格式 `{ plugins: {...} }` 的兼容读取
  * - setter 的落盘先于 resolve
+ * - 批量 setter(依赖连带)一次写全名单, 且名单没变化时不写盘
  * - 外部改动触发监听, 而自身写入不触发(防回环)
  * - 并发写入不丢更新, 且内存与磁盘一致
  * - close 后不再响应
@@ -99,6 +100,39 @@ console.log(`临时目录: ${dir}\n`);
 
 	await manager.setEnable(false);
 	check("setEnable 落盘", (await onDisk()).enable === false);
+	manager.close();
+}
+
+/* ---------- 3.5 批量 setter: 依赖连带要一次写全 ---------- */
+{
+	await fs.writeFile(file, JSON.stringify({ enable: true, enabledPlugins: ["leaf", "branch"] }));
+	const manager = new BotStateManager(file);
+	await manager.load();
+
+	const dropped = await manager.setEnabledMany(["branch", "trunk"], false);
+	check(
+		"批量移出把连带到的依赖者一并写出(不存在的 id 忽略)",
+		dropped === true && (await onDisk()).enabledPlugins.join(",") === "leaf",
+		JSON.stringify(await onDisk()),
+	);
+	check("名单没变化时不写盘", (await manager.setEnabledMany(["branch"], false)) === false);
+
+	const added = await manager.setEnabledMany(["x", "y", "x"], true);
+	check(
+		"批量加入保序且去重",
+		added === true && (await onDisk()).enabledPlugins.join(",") === "leaf,x,y",
+		JSON.stringify(await onDisk()),
+	);
+	check("已在名单里时不写盘", (await manager.setEnabledMany(["x"], true)) === false);
+	check("空名单与空 id 不改名单",
+		(await manager.setEnabledMany([], false)) === false
+		&& (await manager.setEnabledMany([""], true)) === false
+		&& (await onDisk()).enabledPlugins.join(",") === "leaf,x,y");
+
+	// 单个 setter 与批量 setter 走同一条落盘路径
+	await manager.setPluginEnabled("leaf", false);
+	check("setPluginEnabled 等价于批量 setter 的单元素调用",
+		(await onDisk()).enabledPlugins.join(",") === "x,y", JSON.stringify(await onDisk()));
 	manager.close();
 }
 
