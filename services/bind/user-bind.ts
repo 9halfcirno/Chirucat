@@ -4,7 +4,7 @@
 
 import { TTLMap } from "./ttl-map";
 import { uuid } from "./uuid";
-import type { UserAPI } from "../../src/plugin/services/apis/core";
+import type { UserAPI } from "../../src/plugin/services/apis/facilities";
 
 export class UserBind {
 	/** token -> aid 映射 */

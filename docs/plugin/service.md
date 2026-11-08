@@ -12,20 +12,25 @@
 - **作用域**: 全局单例。普通插件(即使放在全局 `plugins/` 目录)也是每个 Bot 各实例化一份, 这正是服务插件要解决的问题。
 - **托管方**: 由核心(Core)持有的 `ServiceHost` 管理 —— 启动时先于所有 Bot 加载, 关闭时后于所有 Bot 卸载。
 - **导入**: 不限制模块。`services/` 里的代码属于框架级可信代码, 可以导入 `fs`、`child_process`、`net` 等被普通插件禁止的内置模块。
-- **上下文**: 提供与普通插件同名的能力, 但**作用域是全局的** —— 注册的指令、消息回调与事件过滤器对所有 Bot 生效; 核心也由收窄过的 `ctx.core` 视图提供, 而不是 `Core` 实例本身。详见[服务插件上下文](contexts/service.md)。
+- **上下文**: 提供与普通插件同名的能力, 但**作用域是全局的** —— 注册的指令、消息回调与事件过滤器对所有 Bot 生效; 核心设施经扁平入口(`ctx.user` / `ctx.bots` / `ctx.webui` ...)提供, 而不是 `Core` 实例本身。详见[服务插件上下文](contexts/service.md)。
 - **模块契约**: 入口默认导出的 `{ init(ctx), unload?(ctx), error?(err) }` 与普通插件完全一致。
 
 放错地方的插件会被跳过并告警: `services/` 里只收 `type: "service"`; 反过来, Bot 插件目录里出现 `type: "service"` 的插件也会被跳过。
 
 ## 与普通插件共用的实现
 
-服务插件与普通插件的**实体状态机**与**宿主流程**其实是同一套代码: `src/plugin/managed-entity.ts`
-的 `ManagedEntity` 承载 enable/disable 与配置/模块生命周期, `src/plugin/managed-host.ts`
-的 `ManagedHostBase` 承载注册表、依赖图、扫描对账、按依赖顺序加载、递归卸载与状态收敛。
+服务插件与普通插件的**实体状态机**、**宿主流程**与**运行上下文**其实是同一套代码:
+`src/plugin/managed-entity.ts` 的 `ManagedEntity` 承载 enable/disable 与配置/模块生命周期,
+`src/plugin/managed-host.ts` 的 `ManagedHostBase` 承载注册表、依赖图、扫描对账、按依赖顺序加载、
+递归卸载与状态收敛, `src/plugin/managed-context.ts` 的 `ManagedContextBase` 承载日志、消息回调、
+平台事件订阅、指令登记、导出代理、配置与 KV 生命周期, 以及固定的释放顺序。
 
-差异全部由两个子类显式覆写的策略方法给出, 基类里没有布尔开关:
-单表 vs 双表(及查找优先顺序)、`ServiceContext` vs `PluginContextFactory`、Hook 名、
+差异全部由子类显式覆写的策略方法或构造选项给出, 基类里没有布尔开关:
+单表 vs 双表(及查找优先顺序)、数据目录与指令表、导出注册表与 Cron 来源、Hook 名、
 配置值文件路径、加载器的受限策略、清单过滤规则、关态实例是否重建、依赖豁免与跳过理由。
+
+上下文侧刻意留在子类的域能力: 普通插件的 `bot` / `user` / `session` / `action` /
+`require` / `adapterEscape`, 服务插件的 `event` / `hook` / 框架设施视图 / `provide`。
 
 刻意留在 `ServiceHost` 子类的编排层是: 持久化期望态、启停串行队列、`setEnabled` 的依赖连带、
 以及释放流程 —— 这些在 `PluginManager` 里没有对应物。尤其**期望名单的求解时机**:
@@ -90,15 +95,15 @@ WebUI 的读取与改动都走 `ServiceHost`, 不会绕过期望态直接启停�
 
 | 内容 | 位置 | 谁来挂 |
 | --- | --- | --- |
-| HTTP 端点 | `/service/<插件id>/api/<路径>` | 插件在 `init` 里 `ctx.core.webui?.register({ path, method, auth?, handler })` |
+| HTTP 端点 | `/service/<插件id>/api/<路径>` | 插件在 `init` 里 `ctx.webui?.register({ path, method, auth?, handler })` |
 | 静态资源 | `/service/<插件id>/public` | 框架: 插件代码目录下的 `public/` 自动挂载 |
-| 一级导航页面 | 活动栏 | 插件在 `init` 里 `ctx.core.webui?.pages.register({ id, title, module, ... })` |
-| Bot 窗口页面 | Bot 详情窗口的二级导航 | 插件在 `init` 里 `ctx.core.webui?.bot.pages.register({ id, title, module, ... })` |
+| 一级导航页面 | 活动栏 | 插件在 `init` 里 `ctx.webui?.pages.register({ id, title, module, ... })` |
+| Bot 窗口页面 | Bot 详情窗口的二级导航 | 插件在 `init` 里 `ctx.webui?.bot.pages.register({ id, title, module, ... })` |
 
 ```js
 export default {
 	init(ctx) {
-		ctx.core.webui?.register({
+		ctx.webui?.register({
 			path: "filter_list",
 			method: "POST",
 			auth: true,            // 缺省 true
@@ -106,11 +111,11 @@ export default {
 		});
 
 		// 管理界面: 页面模块与样式都在本插件 public/ 下
-		ctx.core.webui?.pages.register({
+		ctx.webui?.pages.register({
 			id: "global", title: "黑白名单", icon: "shield.svg",
 			module: "global.js", styles: ["filters.css"], order: 50,
 		});
-		ctx.core.webui?.bot.pages.register({
+		ctx.webui?.bot.pages.register({
 			id: "filter", title: "名单", icon: "shield.svg",
 			module: "bot.js", styles: ["filters.css"], order: 30,
 		});
@@ -123,10 +128,10 @@ export default {
 - 端点、静态资源与页面都落在**本插件自己的命名空间**里, 与核心的 `/api/*`、其它插件的端点完全隔离;
 - 端点默认**要求鉴权**(与核心 API 同一套密码 / 本机免密 / Cookie), 静态资源不鉴权;
 - 服务被停用后, 端点返回 503("服务插件 xxx 未启用"), 静态资源回到 404, **注册的页面从导航里消失**(已经打开的 Bot 详情窗口也会当场去掉那一项);
-- WebUI 未启用时 `ctx.core.webui` 为 `null`, 跳过注册即可, 服务的本职工作(如消息过滤)不受影响;
+- WebUI 未启用时 `ctx.webui` 为 `null`, 跳过注册即可, 服务的本职工作(如消息过滤)不受影响;
 - 上下文释放时框架会自动注销这些注册, 插件不必自己记。
 
-完整 API、页面模块的写法与缓存注意事项见[服务插件上下文](contexts/service.md#corewebui对象)与[自带静态资源](contexts/service.md#自带静态资源)、[WebUI 前端 SPA](../webui/spa.md)。
+完整 API、页面模块的写法与缓存注意事项见[服务插件上下文](contexts/service.md#webui对象)与[自带静态资源](contexts/service.md#自带静态资源)、[WebUI 前端 SPA](../webui/spa.md)。
 
 ## 清单
 

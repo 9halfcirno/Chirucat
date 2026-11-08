@@ -46,14 +46,14 @@ export type PluginMenuItem = ServiceMenuItemDef;
  *
  * ```ts
  * // 活动栏一级导航
- * ctx.core.webui?.pages.register({
+ * ctx.webui?.pages.register({
  *   id: "global", title: "黑白名单", icon: "shield.svg", order: 50,
  *   module: "page/global.js",
  *   menu: [{ title: "全局名单", module: "page/global.js" }],
  * });
  *
  * // Bot 详情窗口里的二级导航
- * ctx.core.webui?.bot.pages.register({
+ * ctx.webui?.bot.pages.register({
  *   id: "filter", title: "名单", icon: "shield.svg", order: 30,
  *   module: "page/bot.js",
  * });
@@ -82,7 +82,7 @@ function registerPage(
 }
 
 /**
- * 一级导航页面注册 (`ctx.core.webui.pages`)
+ * 一级导航页面注册 (`ctx.webui.pages`)
  *
  * 注册的页面进活动栏, 与核心页面平级; 页面模块由浏览器按需 `import()`,
  * 默认导出可以是 `{ render(container, app) { ... } }` 页面对象。
@@ -110,7 +110,7 @@ export class WebUIPagesAPI {
 }
 
 /**
- * Bot 详情窗口的页面注册 (`ctx.core.webui.bot.pages`)
+ * Bot 详情窗口的页面注册 (`ctx.webui.bot.pages`)
  *
  * 注册的页面进 Bot 详情窗口左侧那排图标按钮, 与"信息 / 插件 / 设置"平级;
  * 页面模块的 `render(container, bot, app)` 会拿到**当前 Bot** —— 同一份代码服务
@@ -166,7 +166,7 @@ export class WebUIBotAPI {
  * 也看不见别的插件的端点。注册返回的注销函数由上下文在释放时统一调用, 之后该路径
  * 返回 503("服务插件 xxx 未启用")而不是 404, 前端能拿到明确原因。
  *
- * WebUI 未启用时 `ctx.core.webui` 为 `null`, 插件据此跳过注册(能力不存在,
+ * WebUI 未启用时 `ctx.webui` 为 `null`, 插件据此跳过注册(能力不存在,
  * 而不是注册失败)。
  *
  * 服务器句柄用 `#server`(ECMAScript 私有)持有: 将来在这里加方法时, 内部句柄

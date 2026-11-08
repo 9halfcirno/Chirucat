@@ -1,167 +1,166 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Bot } from "../../bot/bot";
-import type { Core } from "../../core";
 import type { CommandManager } from "../../command/manager";
-import type { Command } from "../../command/types";
-import { Message } from "../../entity/message";
+import type { Core } from "../../core";
 import { StateError } from "../../errors/state-error";
 import type { BotEventMeta, BotEvents } from "../../protocols/events";
-import Logger from "../../utils/logger";
 import { root } from "../../utils/root";
-import type { PluginExports } from "../exports";
-import { PluginConfig } from "../contexts/apis/config";
 import { EventAPI, type EventObserverEntry } from "../contexts/apis/event";
-import { FileSystemAPI } from "../contexts/apis/fs";
-import { HooksAPI } from "./apis/hooks";
-import { KVStore } from "../contexts/apis/kv";
-import { MessageAPI } from "../contexts/apis/message";
 import type {
-	MessageCallbackEntry,
-	PlatformEventCallback,
-	PluginCommandAPI,
-	PluginConfigAPI,
-	PluginCronAPI,
 	PluginEventAPI,
 	PluginEventFilter,
-	PluginEventObserver,
-	PluginFileSystemAPI,
 	PluginHookAPI,
-	PluginKVAPI,
-	PluginMessageAPI,
-	ReadonlyFsAPI,
 } from "../contexts/types";
-import { CronScope } from "../contexts/apis/cron";
-import type { PluginManifest } from "../types";
-import { CoreAPI } from "./apis/core";
+import type { PluginExports } from "../exports";
+import { ManagedContextBase } from "../managed-context";
+import { BotAPI } from "./apis/bot";
+import {
+	createProfileAPI,
+	createSessionAPI,
+	createStatisticsAPI,
+	createUserAPI,
+	type ProfileAPI,
+	type SessionAPI,
+	type StatisticsAPI,
+	type UserAPI,
+} from "./apis/facilities";
+import { HooksAPI } from "./apis/hooks";
+import { ServiceAPI } from "./apis/service";
+import { WebUIAPI } from "./apis/webui";
 import type { Service } from "./service";
 
 /**
  * 服务插件运行上下文
  *
- * 与 `PluginContext` 的公共能力(message / command / fs / kv / config / exports)保持一致,
- * 但作用域是全局而非某个 Bot:
+ * 形状与其他上下文一致: 能力直接挂在 ctx 上, 没有 `core` 这一层嵌套。
+ * 日志、消息回调、平台事件订阅、指令登记、配置与 KV 生命周期、释放流程都在
+ * `ManagedContextBase`; 这里只放服务插件独有的部分 —— 全局作用域的事件过滤/Hook、
+ * 框架设施视图, 以及全局静态资源挂载。
  *
  * - `command` 注册进全局指令表, 由 Bot 收到消息后转发匹配(见 MessageHandler);
  * - `message` 注册的全局回调同样经 Bot 转发;
  * - 数据目录独立于 Bot: `data/services/<插件id>`;
- * - `core` 是收窄过的核心视图(见 `CoreAPI`): services/ 里的代码属于框架级可信插件,
- *   需要拿到用户/会话/统计等全局设施与 Bot 启停, 但拿不到 `Core` 实例本身 ——
- *   `init` / `close` / `settings` 这类启动与释放流程不外放。普通插件没有这个入口,
- *   仍只能通过 Bot 只读视图访问。该视图的 `webui` 还允许服务插件在运行期注册自己的
- *   HTTP 端点(`core.webui.register`), 注册产生的注销由本上下文在释放时代管。
+ * - `user` / `session` / `profile` / `statistics` / `bots` / `services` / `webui`
+ *   是框架设施的入口。services/ 属于框架级可信代码, 读写都开放, 但入口是**普通
+ *   包装对象**(见 `apis/facilities.ts`): 只列出业务方法, `init` / `close` /
+ *   `settings` / `internalDB` 这类启动与释放流程根本不在对象上。
  *
- * 不提供 message/command 之外的 Bot 维度 API(action / 当前 Bot 视图等):
- * 服务插件不属于任何 Bot, 给了也只能是假的。
+ * 不提供 Bot 维度 API(action / 当前 Bot 视图等): 服务插件不属于任何 Bot,
+ * 给了也只能是假的。
  */
-export class ServiceContext {
-	protected _manifest: PluginManifest;
+export class ServiceContext extends ManagedContextBase {
+	/** 框架核心实例; `#core` 是真私有字段, 运行期也拿不到(交付给插件的是下面的包装对象) */
+	readonly #core: Core;
 
-	/** 框架核心的安全视图; 服务插件为可信插件, 拿到收窄后的设施入口 */
-	readonly core: CoreAPI;
+	/** 用户标识视图: 查询、绑定关系与列表 */
+	readonly user: UserAPI;
+	/** 会话标识视图: 查询、绑定关系与成员 */
+	readonly session: SessionAPI;
+	/** 用户档案视图: 昵称等展示信息 */
+	readonly profile: ProfileAPI;
+	/** Bot 注册表: 只读快照与启停 */
+	readonly bots: BotAPI;
+	/** 服务插件注册表: 只读快照 */
+	readonly services: ServiceAPI;
+	/** 统计查询视图的实现; 对外经 getter 按模块启停决定给不给 */
+	readonly #statisticsAPI: StatisticsAPI;
+	/** WebUI 注册入口的实现; 懒建, 未启用 WebUI 时 getter 返回 null */
+	#webuiAPI: WebUIAPI | null = null;
 
-	logger: Logger;
-	message: PluginMessageAPI;
 	/** 事件过滤器与观察回调: 作用于事件传播本身, 而非消息处理 */
 	event: PluginEventAPI;
 	/** Hook 注册入口: 作用于框架内部流程节点(消息/指令/启停), 可取消动作 */
 	hook: PluginHookAPI;
-	fs: PluginFileSystemAPI;
-	/** 插件代码根目录的只读文件访问 */
-	plugin: ReadonlyFsAPI;
-	kv: PluginKVAPI;
-	/** 插件配置(只读), 未声明 manifest.config 时为空配置 */
-	config: PluginConfigAPI;
-	/** 定时任务: 与其他上下文共用同一套登记与释放规则 */
-	cron: PluginCronAPI;
-	/** 定时任务实现, 供 dispose 停止并等待 */
-	private readonly _cronScope: CronScope;
-	/** 插件相关路径 */
-	path: {
-		/** 插件代码根目录 */
-		plugin: string;
-		/** 插件数据根目录: data/services/<插件id> */
-		data: string;
-	};
 
-	/** 内部持有的配置视图, 供 dispose 注销监听 */
-	private _config: PluginConfig;
-	/** 内部持有的 KV 存储实例, 供 dispose 关闭连接 */
-	private _kv: KVStore;
-	/** 框架核心实例, 取 Cron 调度器用; 对外只暴露收窄后的 CoreAPI */
-	private readonly _core: Core;
-
-	private _onMessageCallback: MessageCallbackEntry[] = [];
-
-	/** 平台原生事件订阅: 适配器插件id -> 回调 (dispose 时清空) */
-	private _platformEventSubs = new Map<string, PlatformEventCallback[]>();
-
-	/** 事件过滤器与观察回调 (dispose 时清空) */
+	/** 事件过滤器与观察回调 (释放时清空) */
 	private _filters: PluginEventFilter[] = [];
 	private _observers: EventObserverEntry[] = [];
 
-	/** 本上下文注册的 Hook 注销函数 (dispose 时统一调用) */
+	/** 本上下文注册的 Hook 注销函数 (释放时统一调用) */
 	private _hookDisposers: Array<() => void> = [];
 
-	private _commands = new Set<Command>();
-
-	/** 本上下文注册的 WebUI 路由与页面注销函数 (dispose 时统一注销) */
+	/** 本上下文注册的 WebUI 路由与页面注销函数 (释放时统一注销) */
 	private _webuiDisposers: (() => void)[] = [];
 
-	/** 本上下文的导出 */
+	/** 本上下文在额外键名下导出的条目 (释放时统一注销) */
 	private _provideIds = new Set<string>();
 
-	/** 本上下文挂载的插件静态目录注销函数 (dispose 时注销) */
+	/** 本上下文挂载的插件静态目录注销函数 (释放时注销) */
 	private _unmountPublic: (() => void) | null = null;
-
-	/** dispose 幂等标记: enable失败/卸载/注册表丢弃都可能重复触发释放 */
-	protected _disposed = false;
 
 	constructor(
 		service: Service,
-		private readonly _serviceExports: PluginExports,
-		private readonly _commandManager: CommandManager,
+		serviceExports: PluginExports,
+		commandManager: CommandManager,
 	) {
-		// WebUI 路由与页面的注销函数记在上下文里: 插件在 init 里注册后不用自己记住,
-		// 卸载时统一注销, 避免"服务停了端点还活着/导航里还留着它注册的页面"
-		this.core = new CoreAPI(service.core, service.id, (dispose) => {
-			this._webuiDisposers.push(dispose);
+		super({
+			manifest: service.manifest,
+			loggerName: "Service",
+			storageRoot: path.resolve(root, "data", "services", service.manifest.id),
+			config: service.config,
+			// 服务插件的导出表只有一张: 既是自己的 `exports`, 也是 `ctx.service` 的来源
+			ownExports: serviceExports,
+			serviceExports,
+			commands: commandManager,
+			cron: () => service.core.cron,
 		});
-		this._manifest = service.manifest;
-		this._core = service.core;
+		this.#core = service.core;
 
-		this.logger = new Logger(`Service ${this._manifest.id}`);
-		this.message = new MessageAPI((entry) => {
-			this._onMessageCallback.push(entry);
-		});
+		// 设施视图只做委托: 每次调用才解析实例, 因此插件可以安全地把它存下来
+		// (`const u = ctx.user`), 不必为了"视图不能缓存"写 getter。
+		this.user = createUserAPI(() => this.facility(this.#core.user, "user"));
+		this.session = createSessionAPI(() => this.facility(this.#core.session, "session"));
+		this.profile = createProfileAPI(() => this.facility(this.#core.profile, "profile"));
+		this.#statisticsAPI = createStatisticsAPI(() => this.facility(this.#core.statistics, "statistics"));
+		this.bots = new BotAPI(this.#core.bot);
+		this.services = new ServiceAPI(this.#core.services);
+
 		this.event = new EventAPI(
 			(filter) => { this._filters.push(filter); },
 			(observer) => { this._observers.push(observer); },
 		);
-		this.hook = new HooksAPI(service.core.hooks, (dispose) => {
+		this.hook = new HooksAPI(this.#core.hooks, (dispose) => {
 			this._hookDisposers.push(dispose);
 		});
 
-		const storageRoot = path.resolve(root, "data", "services", this._manifest.id);
-		this.fs = new FileSystemAPI(storageRoot);
-		// 插件代码目录只读: 允许读自带资源, 不允许改写安装目录
-		this.plugin = new FileSystemAPI(path.resolve(root, this._manifest.path), { writable: false });
-		this._kv = new KVStore(path.join(storageRoot, ".kv.db"));
-		this.kv = this._kv;
-		this._config = new PluginConfig(service.config);
-		this.config = this._config;
-		this._cronScope = new CronScope(
-			(action) => this.assertAlive(action),
-			() => this._core.cron,
-		);
-		this.cron = this._cronScope;
-
-		this.path = {
-			plugin: this._manifest.path,
-			data: storageRoot
-		};
-
 		this.mountServicePublic(service);
+	}
+
+	/**
+	 * WebUI 注册入口; 未启用 WebUI 时为 null
+	 *
+	 * 只开放注册自己的端点与页面(见 `WebUIAPI`); 注册出的路由/页面由本上下文统一
+	 * 注销, 插件在 `unload` 里不用管。头一次访问时创建并缓存 —— 服务器实例在运行期
+	 * 不换(换监听是 `relisten`, 不是换对象), Core 释放后这里直接返回 null。
+	 */
+	get webui(): WebUIAPI | null {
+		const server = this.#core.webui;
+		if (!server) return null;
+		// 注销函数记在上下文里: 服务停了, 它注册的端点与导航入口随 dispose 一起消失
+		return (this.#webuiAPI ??= new WebUIAPI(server, this._manifest.id, (dispose) => {
+			this._webuiDisposers.push(dispose);
+		}));
+	}
+
+	/**
+	 * 统计查询视图; 统计模块未开启(或被设置页关掉)时为 null
+	 *
+	 * 模块可随设置热开关, 因此每次访问都看一次当前实例, 不缓存"有没有"。
+	 */
+	get statistics(): StatisticsAPI | null {
+		return this.#core.statistics ? this.#statisticsAPI : null;
+	}
+
+	/**
+	 * 取一个随 Core.init 建立的设施
+	 * @param value 设施实例; Core 尚未初始化或已释放时为 null
+	 * @param name 设施名, 用于报错
+	 * @throws 设施不可用时抛出 StateError
+	 */
+	private facility<T>(value: T | null, name: string): T {
+		if (!value) throw new StateError(`Core 的 ${name} 设施不可用(尚未初始化或已释放)`);
+		return value;
 	}
 
 	/**
@@ -188,26 +187,6 @@ export class ServiceContext {
 		}
 	}
 
-	/** 全局指令: 注册进 ServiceHost 的共享指令表, 由各个 Bot 的消息处理转发匹配 */
-	command: PluginCommandAPI = {
-		register: (name, handler) => {
-			this.assertAlive("注册指令");
-			const command: Command = { name, handler };
-
-			this._commands.add(command);
-			this._commandManager.register(command);
-			return command;
-		},
-		unregister: (command) => {
-			this._commands.delete(command);
-			this._commandManager.unregister(command);
-		},
-		exec: (message: Message | string, args?: (string | number)[]) => {
-			this.assertAlive("触发指令");
-			return message instanceof Message ? this._commandManager.exec(message) : this._commandManager.exec(message, args || []);
-		}
-	}
-
 	/**
 	 * 导入其他服务插件的导出
 	 *
@@ -217,10 +196,10 @@ export class ServiceContext {
 	 * @throws 目标服务当前没有导出(未加载/未导出/已卸载)时抛出 StateError
 	 */
 	require<T = any>(id: string): T {
-		if (this._serviceExports.hasExports(id)) {
-			return this._serviceExports.getExports(id) as T;
+		if (this._ownExports.hasExports(id)) {
+			return this._ownExports.getExports(id) as T;
 		}
-		const available = this._serviceExports.ids();
+		const available = this._ownExports.ids();
 		throw new StateError(
 			`服务插件 ${this._manifest.id} 导入失败: 服务插件 ${id} 当前没有导出` +
 			(available.length ? `(当前可导入: ${available.join(", ")})` : "(当前没有任何服务插件提供导出)")
@@ -228,42 +207,17 @@ export class ServiceContext {
 	}
 
 	/**
-	 * 其他服务插件的导出，由服务插件注入
-	 * 
-	 * 本质为对ServiceExports的代理包装，在清单里还是要声明依赖
-	 */
-	service: Record<string, unknown> = new Proxy({}, {
-		get: (_, key) => {
-			if (typeof key !== "string") return undefined;
-			return this._serviceExports?.getExports(key);
-		}
-	})
-
-	/**
-	 * 导出服务插件的对象，供外部调用
-	 * @param key 服务的键名，如`"permission"`, `"filter"`
+	 * 导出服务插件的对象, 供外部调用
+	 *
+	 * 与 `exports` 的差别只在键名: `exports` 用本插件 id, 这里可用任意键
+	 * (如 `"permission"` / `"filter"`), 方便消费方按能力而不是按插件名取用。
+	 * @param key 服务的键名
 	 * @param service 导出的对象, 供外部使用的接口
 	 */
 	provide(key: string, service: unknown) {
 		this.assertAlive("注入服务");
 		this._provideIds.add(key);
-		this._serviceExports.setExports(key, service, this);
-	}
-
-	/**
-	 * 对外暴露的导出, 与 `PluginContext.exports` 同语义。
-	 *
-	 * 键为本插件自己的 id, 因此其它插件用 `ctx.service[<本插件id>]` 就能拿到;
-	 * 需要在别的键名下再暴露一份时用 {@link provide}。
-	 * 写入同样登记归属上下文, 卸载时由 `dispose` 连同释放。
-	 */
-	set exports(value: unknown) {
-		this.assertAlive("设置服务导出");
-		this._serviceExports.setExports(this._manifest.id, value, this);
-	}
-
-	get exports(): unknown {
-		return this._serviceExports.getExports(this._manifest.id);
+		this._ownExports.setExports(key, service, this);
 	}
 
 	/**
@@ -316,108 +270,32 @@ export class ServiceContext {
 	}
 
 	/**
-	 * 触发本服务插件的全局消息回调: 按注册顺序依次匹配, 错误不阻断后续, 期约不等待
-	 * @param msg 框架消息
-	 */
-	handleMessage(msg: Message) {
-		if (this._disposed) return;
-
-		for (const entry of this._onMessageCallback) {
-			try {
-				if (!entry.matcher(msg)) continue;
-				const result = entry.handler(msg);
-				if (result instanceof Promise) {
-					// 期约同步抛出, 不等待; 仅吞掉 rejection 防止 unhandledRejection
-					result.catch((e) => this.logger.error("Service message callback error:", e));
-				}
-			} catch (e) {
-				this.logger.error("Service message callback error:", e);
-			}
-		}
-	}
-
-	/**
-	 * 订阅某适配器派发的平台原生事件(逃生舱), 语义与 `PluginContext.onPlatformEvent` 一致
-	 *
-	 * 服务插件是全局的: 任何 Bot 上该适配器派发的原生事件都会回调, 用 `meta.bot`
-	 * 区分来源。只收 `adapterId` 派发的事件; 重复登记同一处理器会被忽略;
-	 * 随上下文释放自动注销 —— 适配器卸载/重载不影响订阅者。
-	 * @param adapterId 来源适配器插件id
-	 * @param handler 事件回调, 返回值不被等待
-	 */
-	onPlatformEvent(adapterId: string, handler: PlatformEventCallback) {
-		this.assertAlive("订阅平台原生事件");
-		const entries = this._platformEventSubs.get(adapterId) ?? [];
-		if (!entries.includes(handler)) {
-			entries.push(handler);
-			this._platformEventSubs.set(adapterId, entries);
-		}
-	}
-
-	/**
 	 * 取指定 Bot 上某适配器发布的逃生舱导出(与 `Entity.escape` 同一注册表)
 	 *
-	 * 服务插件拿不到 Bot 实例(见 `core.bot` 视图边界), 这里只交出发布值本身。
+	 * 服务插件拿不到 Bot 实例(见 `ctx.bots` 快照边界), 这里只交出发布值本身。
 	 * 每次调用实时查询, **不要缓存返回值**; Bot/适配器不存在或未发布返回 null。
 	 * @param botId 目标 Bot id(平台原生事件的 `meta.bot`)
 	 * @param adapterId 适配器插件id(平台原生事件的 `meta.adapter`)
 	 */
 	adapterEscape<T = any>(botId: string, adapterId: string): T | null {
-		const bot = this._core.bot.bots.get(botId);
+		const bot = this.#core.bot.bots.get(botId);
 		if (!bot) return null;
 		return bot.adapterExports.getExports(adapterId) ?? null;
 	}
 
 	/**
-	 * 将平台原生事件投递给订阅了该来源的服务回调: 错误不阻断后续, 期约不等待
-	 * @param event 平台原生事件
-	 * @param meta 事件元信息, 携带来源适配器与 Bot id
-	 */
-	handlePlatformEvent(event: Record<string, any>, meta: BotEventMeta) {
-		if (this._disposed) return;
-
-		for (const handler of this._platformEventSubs.get(meta.adapter) ?? []) {
-			try {
-				const result = handler(event, meta);
-				if (result instanceof Promise) {
-					// 期约同步抛出, 不等待; 仅吞掉 rejection 防止 unhandledRejection
-					result.catch((e) => this.logger.error("Service platform event callback error:", e));
-				}
-			} catch (e) {
-				this.logger.error("Service platform event callback error:", e);
-			}
-		}
-	}
-
-	/**
-	 * 断言上下文仍可用
-	 * @param action 被拒绝的操作名, 用于报错
-	 * @throws 上下文已释放时抛出 StateError
-	 */
-	protected assertAlive(action: string): void {
-		if (this._disposed) throw new StateError(`Context已释放, 无法${action}`);
-	}
-
-	/**
-	 * 清理服务插件副作用(含对外导出)
+	 * 释放服务插件独有的资源
 	 *
-	 * 幂等: enable 失败 / 卸载 / 注册表丢弃都会调用它。
-	 * 释放导出放在最前, 后续清理即便失败也不会让导出残留在注册表里。
+	 * 导出放在最前: 后续清理即便失败, 也不会让导出残留在注册表里。
+	 * 公共资源(指令 / 消息回调 / 平台事件订阅 / Cron / 配置 / KV)由基类接手。
 	 */
-	async dispose() {
-		if (this._disposed) return;
-		this._disposed = true;
-
-		// 释放本服务插件导出(归属校验为当前上下文, 不会误删重新加载后的新条目)
-		this._serviceExports.releaseExports(this._manifest.id, this);
-		for (let key of this._provideIds) {
-			this._serviceExports.releaseExports(key, this);
+	protected releaseOwned(): void {
+		// 归属校验为当前上下文, 不会误删重新加载后的新条目
+		this._ownExports.releaseExports(this._manifest.id, this);
+		for (const key of this._provideIds) {
+			this._ownExports.releaseExports(key, this);
 		}
 
-		this._onMessageCallback = []; // 置空;
-		this._platformEventSubs.clear(); // 平台事件订阅随上下文释放
-		this._filters = [];
-		this._observers = [];
 		// 注销本上下文注册的 Hook: 不注销会让已卸载的服务继续干涉框架流程
 		for (const disposer of this._hookDisposers) {
 			try {
@@ -427,13 +305,7 @@ export class ServiceContext {
 			}
 		}
 		this._hookDisposers = [];
-		// 清理全局指令
-		for (const com of this._commands.values()) {
-			this._commandManager.unregister(com)
-		}
-		this._commands.clear();
-		// 停止本上下文创建的调度, 并等待运行中的 handler 收尾
-		await this._cronScope.stopAll(this.logger);
+
 		// 注销本上下文注册的 WebUI 路由与页面: 之后该路径返回 503(服务未启用)而不是 404,
 		// 页面则从导航清单里消失(前端下一次对账就会摘掉它)
 		for (const disposeWebUI of this._webuiDisposers) {
@@ -444,6 +316,7 @@ export class ServiceContext {
 			}
 		}
 		this._webuiDisposers = [];
+
 		// 注销插件静态目录挂载: 服务停了, 它的前端资源也不再对外提供
 		try {
 			this._unmountPublic?.();
@@ -451,14 +324,8 @@ export class ServiceContext {
 			this.logger.error("Service context dispose: 注销插件静态目录失败:", e);
 		}
 		this._unmountPublic = null;
-		// 注销配置变更监听
-		this._config.dispose();
-		// 关闭 KV 连接(插件可能从未使用 KV, 未初始化时不应视为异常);
-		// 清理异常不应阻断上下文释放
-		try {
-			this._kv.close();
-		} catch (e) {
-			this.logger.error("Service context dispose: 关闭 KV 失败:", e);
-		}
+
+		this._filters = [];
+		this._observers = [];
 	}
 }

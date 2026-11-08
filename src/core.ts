@@ -121,7 +121,7 @@ export class Core {
 		this.session = new SessionManager(this.internalDB);
 		this.profile = new UserProfileManager(this.internalDB);
 
-		// 顺序要求: 这些设施必须先于服务插件就绪 —— 服务插件的 ctx.core.user / session 等
+		// 顺序要求: 这些设施必须先于服务插件就绪 —— 服务插件的 ctx.user / session 等
 		// 直接依赖它们(见下面对 services 的加载), 这里往前挪一步就会让依赖设施的插件起不来。
 
 		this.user.init()
@@ -363,7 +363,7 @@ export class Core {
 		} finally {
 			this.cron = null;  // 不再暴露Cron
 			this.webui = null; // 释放后不再把已停止的服务器给出去
-			this.statistics = null; // 置空后 ctx.core.statistics 才如实返回 null, 而不是已关闭的实例
+			this.statistics = null; // 置空后 ctx.statistics 才如实返回 null, 而不是已关闭的实例
 			this.session = null;
 			this.user = null;
 			this.profile = null;

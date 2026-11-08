@@ -128,7 +128,7 @@ const logs: string[] = [];
 const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "chirucat-filter-"));
 const pluginDir = path.resolve("services", "filter");
 
-/** ctx.core.webui 的替身: 与真实 WebUIAPI 的三个注册入口同形 */
+/** ctx.webui 的替身: 与真实 WebUIAPI 的三个注册入口同形 */
 function createWebUIStub() {
 	return {
 		register: (route: PluginWebUIRoute) => {
@@ -164,15 +164,12 @@ const ctx = {
 		filter: (fn: (event: unknown, bot: { id: string }) => boolean) => { eventFilter = fn; },
 		observe: () => { /* 本插件不用 */ },
 	},
-	core: {
-		webui: createWebUIStub(),
-		user,
-		session,
-		profile,
-		bot: bots,
-	},
+	webui: createWebUIStub(),
+	user,
+	session,
+	profile,
+	bots,
 } as any;
-
 /** 一条消息事件 */
 function message(senderId: string, sessionId: string): MessageCreateEvent {
 	return {
@@ -384,8 +381,8 @@ check("非 message.create 事件一律放行", allow({ type: "notice.create", ti
 
 console.log("-- 管理端点 (/service/chirucat-filter/api/filter_list) --");
 
-const ctxUser = ctx.core.user as UserStub;
-const ctxSession = ctx.core.session as SessionStub;
+const ctxUser = ctx.user as UserStub;
+const ctxSession = ctx.session as SessionStub;
 
 const added = callAPI({
 	action: "add", scope: "global", kind: "black", targetType: "user",
@@ -510,7 +507,7 @@ check("unload 关闭名单库(端点不再可用)", (() => {
 	}
 })());
 
-const reopenCtx = { ...ctx, core: { ...ctx.core, webui: createWebUIStub() } } as any;
+const reopenCtx = { ...ctx, webui: createWebUIStub() } as any;
 filterModule.init(reopenCtx);
 const reopened = reopenCtx.exports as typeof exported;
 const afterReopen = reopened.list("global", "");

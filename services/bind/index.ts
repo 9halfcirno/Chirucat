@@ -29,8 +29,8 @@ let unwatch: (() => void) | null = null;
 
 export default {
 	init(ctx) {
-		const ubm = new UserBind(ctx.core.user); // 服务插件加载时 Core 已 init, user 必然就绪
-		const sbm = new SessionBind(ctx.core.session);
+		const ubm = new UserBind(ctx.user); // 服务插件加载时 Core 已 init, user 必然就绪
+		const sbm = new SessionBind(ctx.session);
 		sessionBind = sbm;
 
 		// 内部握手指令: 只有持有 bindId 的对端才会真正消费, 其余消息静默忽略

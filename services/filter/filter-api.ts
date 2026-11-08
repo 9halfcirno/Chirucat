@@ -1,4 +1,5 @@
-import type { SessionType } from "../../src/entity/session";
+import type { BotAPI } from "../../src/plugin/services/apis/bot";
+import type { ProfileAPI, SessionAPI, UserAPI } from "../../src/plugin/services/apis/facilities";
 import type { FilterManager } from "./filter-manager";
 import type { FilterEntry, FilterKind, FilterMode, FilterScope, FilterTargetType } from "./types";
 
@@ -34,24 +35,12 @@ import type { FilterEntry, FilterKind, FilterMode, FilterScope, FilterTargetType
  * 改动**立即生效**: 名单/模式落在本插件的库与内存判定层里, 不需要通知任何 Bot 重新装载。
  */
 
-/** 端点用到的框架设施视图(由 `ctx.core` 提供, 每次请求重新取) */
-export type FilterCoreViews = {
-	user: {
-		/** 取或建: 平台账号 -> 账号 UUID */
-		get(platform: string, id: string): string;
-		queryMany(ids: string[]): Map<string, { id: string; platform: string }>;
-	};
-	session: {
-		/** 取或建: 平台会话 -> 会话 UUID */
-		get(platform: string, type: SessionType, id: string): string;
-		queryMany(ids: string[]): Map<string, { id: string; platform: string; type: string }>;
-	};
-	profile: {
-		getMany(ids: string[]): Map<string, { name: string }>;
-	};
-	bot: {
-		has(id: string): boolean;
-	};
+/** 端点用到的框架设施视图 */
+export type FilterViews = {
+	user: Pick<UserAPI, "get" | "queryMany">;
+	session: Pick<SessionAPI, "get" | "queryMany">;
+	profile: Pick<ProfileAPI, "getMany">;
+	bot: Pick<BotAPI, "has">;
 };
 
 export type FilterRouteDeps = {
@@ -60,10 +49,10 @@ export type FilterRouteDeps = {
 	/**
 	 * 框架设施视图
 	 *
-	 * 声明成 getter: 每次请求都取一次 —— 视图本身是廉价代理, 缓存下来只会拿到
-	 * Core 释放之后的旧东西(与 `ctx.core` 的约定一致)。
+	 * 由 ctx 的扁平成员拼出来。包装对象在调用时才解析设施, 因此这里存下来即可,
+	 * 不需要为了"视图不能缓存"声明 getter。
 	 */
-	readonly core: FilterCoreViews;
+	readonly views: FilterViews;
 };
 
 /**
@@ -74,7 +63,7 @@ export type FilterRouteDeps = {
 export function createFilterHandler(deps: FilterRouteDeps) {
 	return {
 		handle(body: unknown) {
-			const core = deps.core;
+			const views = deps.views;
 			const request = (body ?? {}) as {
 				action?: unknown; scope?: unknown; botId?: unknown;
 				kind?: unknown; targetType?: unknown; target?: unknown;
@@ -82,11 +71,11 @@ export function createFilterHandler(deps: FilterRouteDeps) {
 			};
 
 			const scope = parseScope(request.scope);
-			const botId = parseBotId(core, scope, request.botId);
+			const botId = parseBotId(views, scope, request.botId);
 
 			if (request.action === "list") {
 				return {
-					entries: decorate(core, deps.manager.list(scope, botId)),
+					entries: decorate(views, deps.manager.list(scope, botId)),
 					mode: deps.manager.mode(scope, botId),
 				};
 			}
@@ -99,11 +88,11 @@ export function createFilterHandler(deps: FilterRouteDeps) {
 			if (request.action === "add") {
 				const kind = parseKind(request.kind);
 				const targetType = parseTargetType(request.targetType);
-				const target = resolveTarget(core, targetType, request.target);
+				const target = resolveTarget(views, targetType, request.target);
 				const reason = typeof request.reason === "string" ? request.reason.trim() : "";
 
 				const entry = deps.manager.add(scope, botId, kind, targetType, target, reason);
-				return { entry: decorate(core, [entry])[0] };
+				return { entry: decorate(views, [entry])[0] };
 			}
 
 			if (request.action === "remove") {
@@ -125,13 +114,13 @@ export function createFilterHandler(deps: FilterRouteDeps) {
 /**
  * 把名单项补上平台信息与昵称 (按对象类型分组批量查询, 避免逐条查)
  */
-function decorate(core: FilterCoreViews, entries: FilterEntry[]) {
+function decorate(views: FilterViews, entries: FilterEntry[]) {
 	const userTargets = entries.filter(entry => entry.targetType === "user").map(entry => entry.target);
 	const sessionTargets = entries.filter(entry => entry.targetType === "session").map(entry => entry.target);
 
-	const users = core.user.queryMany(userTargets);
-	const profiles = core.profile.getMany(userTargets);
-	const sessions = core.session.queryMany(sessionTargets);
+	const users = views.user.queryMany(userTargets);
+	const profiles = views.profile.getMany(userTargets);
+	const sessions = views.session.queryMany(sessionTargets);
 
 	return entries.map(entry => {
 		const isSession = entry.targetType === "session";
@@ -158,16 +147,16 @@ function decorate(core: FilterCoreViews, entries: FilterEntry[]) {
 }
 
 /** 把 (平台, 平台ID) 换成框架内部的账号 / 会话 ID */
-function resolveTarget(core: FilterCoreViews, targetType: FilterTargetType, value: unknown): string {
+function resolveTarget(views: FilterViews, targetType: FilterTargetType, value: unknown): string {
 	const { platform, id } = parseTarget(value);
 
 	if (targetType === "session") {
 		const type = parseSessionType((value as { type?: unknown } | null)?.type);
-		return core.session.get(platform, type, id);
+		return views.session.get(platform, type, id);
 	}
 
 	// get() 是 get-or-create: 名单可以先于对方的首次发言建立
-	return core.user.get(platform, id);
+	return views.user.get(platform, id);
 }
 
 function parseScope(value: unknown): FilterScope {
@@ -176,14 +165,14 @@ function parseScope(value: unknown): FilterScope {
 }
 
 /** 校验 scope=bot 时给出的 Bot; 全局范围一律忽略 botId */
-function parseBotId(core: FilterCoreViews, scope: FilterScope, value: unknown): string {
+function parseBotId(views: FilterViews, scope: FilterScope, value: unknown): string {
 	if (scope === "global") return "";
 
 	if (typeof value !== "string" || !value.trim()) {
 		throw { code: 400, err: "scope=bot 时必须提供 botId" };
 	}
 	const botId = value.trim();
-	if (!core.bot.has(botId)) {
+	if (!views.bot.has(botId)) {
 		throw { code: 404, err: `Bot ${botId} 不存在` };
 	}
 	return botId;

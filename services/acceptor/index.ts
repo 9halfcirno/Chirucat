@@ -196,8 +196,8 @@ export default {
 
 		// WebUI: 端点在 /service/chirucat-acceptor/api/acceptor_state,
 		// 页面进 Bot 详情窗口(适配器是 Bot 级的, 没必要占一级导航)。
-		// 未启用 WebUI 时 ctx.core.webui 为 null, 服务本身照常工作。
-		ctx.core.webui?.register({
+		// 未启用 WebUI 时 ctx.webui 为 null, 服务本身照常工作。
+		ctx.webui?.register({
 			path: "acceptor_state",
 			method: "POST",
 			auth: true,
@@ -208,7 +208,7 @@ export default {
 			}),
 		});
 
-		ctx.core.webui?.bot.pages.register({
+		ctx.webui?.bot.pages.register({
 			id: "acceptor",
 			title: "受理人",
 			icon: "acceptor.svg",
@@ -380,7 +380,7 @@ const MAX_LIMIT = 200;
 /** 一个逻辑会话的成员列表; 会话表不可用时给出空数组, 不让页面整个打不开 */
 function membersOf(ctx: ServiceContext, unionId: string): AcceptorMember[] {
 	try {
-		return ctx.core.session.listMembers(unionId).map(member => ({
+		return ctx.session.listMembers(unionId).map(member => ({
 			platform: member.platform,
 			type: member.type,
 			id: member.id,
@@ -525,7 +525,7 @@ function lastActiveAt(runtime: Runtime): number {
 /** 只读查逻辑会话组; Core 正在释放时按"没有 union"处理, 不让判定拖垮消息链 */
 function resolveUnion(ctx: ServiceContext, sessionId: string): string | null {
 	try {
-		return ctx.core.session.unionOf(sessionId);
+		return ctx.session.unionOf(sessionId);
 	} catch {
 		return null;
 	}

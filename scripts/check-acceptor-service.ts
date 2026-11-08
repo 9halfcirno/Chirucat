@@ -724,27 +724,29 @@ function createCtx(kv: KVStore, settings: Record<string, unknown> = {}) {
 			get: (key: string, fallback?: unknown) => (key in settings ? settings[key] : fallback),
 			watch: () => () => { /* 测试里不改配置 */ },
 		},
+		command: {
+			register: (name: string, handler: unknown) => ({ name, handler }),
+			unregister: () => { /* 指令由真实上下文统一注销 */ },
+		},
 		hook: {
 			register: (name: string, handler: (data: any) => unknown) => {
 				hookHandlers[name] = handler;
 				return () => { delete hookHandlers[name]; };
 			},
 		},
-		core: {
-			session: {
-				unionOf: (id: string) => (id.startsWith("u:") ? id.slice(2) : null),
-				// 成员列表固定成两个平台: 编辑页面要能看到“这个逻辑会话里有谁”
-				listMembers: (unionId: string) => [
-					{ sessionId: `s-qq-${unionId}`, platform: "qq", type: "group", id: `qq-${unionId}` },
-					{ sessionId: `s-ob-${unionId}`, platform: "onebot11", type: "group", id: `ob-${unionId}` },
-				],
-			},
-			webui: {
-				register: (route: any) => { uiRoutes.push(route); return () => { /* 测试不注销 */ }; },
-				bot: {
-					pages: {
-						register: (page: any) => { uiPages.push(page); return () => { /* 测试不注销 */ }; },
-					},
+		session: {
+			unionOf: (id: string) => (id.startsWith("u:") ? id.slice(2) : null),
+			// 成员列表固定成两个平台: 编辑页面要能看到“这个逻辑会话里有谁”
+			listMembers: (unionId: string) => [
+				{ sessionId: `s-qq-${unionId}`, platform: "qq", type: "group", id: `qq-${unionId}` },
+				{ sessionId: `s-ob-${unionId}`, platform: "onebot11", type: "group", id: `ob-${unionId}` },
+			],
+		},
+		webui: {
+			register: (route: any) => { uiRoutes.push(route); return () => { /* 测试不注销 */ }; },
+			bot: {
+				pages: {
+					register: (page: any) => { uiPages.push(page); return () => { /* 测试不注销 */ }; },
 				},
 			},
 		},

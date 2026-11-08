@@ -81,7 +81,7 @@ const server = new WebUIServer({
 });
 
 await server.start();
-// Core.init 里就是这么接的: 服务插件的 ctx.core.webui 读的是 Core 上的这个引用
+// Core.init 里就是这么接的: 服务插件的 ctx.webui 读的是 Core 上的这个引用
 core.webui = server;
 const listening = server.listening;
 if (!listening) throw new Error("服务器未能监听");
@@ -191,7 +191,7 @@ remount();
 
 console.log("-- 上下文代管 --");
 
-// 服务插件拿到的 ctx.core.webui 由服务上下文提供: 注册要走通 上下文 -> CoreAPI -> 服务器,
+// 服务插件拿到的 ctx.webui 由服务上下文提供: 注册要走通 上下文 -> WebUIAPI -> 服务器,
 // 注销则由上下文代管(插件自己不记)
 const service = new Service({
 	manifest: { id: "ctx-probe", version: "0.0.0", main: "index.ts", path: pluginDir },
@@ -199,26 +199,26 @@ const service = new Service({
 });
 const serviceContext = new ServiceContext(service, new PluginExports(), new CommandManager({}));
 
-serviceContext.core.webui!.register({ path: "echo", method: "POST", auth: false, handler: () => ({ from: "ctx" }) });
-serviceContext.core.webui!.pages.register({
+serviceContext.webui!.register({ path: "echo", method: "POST", auth: false, handler: () => ({ from: "ctx" }) });
+serviceContext.webui!.pages.register({
 	id: "ctx-page",
 	title: "上下文页面",
 	module: "page/ctx.js",
 	menu: [{ title: "子项", module: "page/ctx.js" }],
 });
-serviceContext.core.webui!.bot.pages.register({ id: "ctx-bot", title: "上下文 Bot 页面", module: "page/bot.js" });
+serviceContext.webui!.bot.pages.register({ id: "ctx-bot", title: "上下文 Bot 页面", module: "page/bot.js" });
 
 const viaContext = await post(`${base}/service/ctx-probe/api/echo`, {});
-check("经 ctx.core.webui.register 注册的端点可访问", viaContext.status === 200, `status=${viaContext.status}`);
+check("经 ctx.webui.register 注册的端点可访问", viaContext.status === 200, `status=${viaContext.status}`);
 check("插件 public 目录由上下文自动挂载", (await fetch(`${base}/service/ctx-probe/public/hello.txt`)).status === 200);
 
 const ctxPages = await (await get(`${base}/api/get_webui_pages`, cookie)).json();
 check(
-	"经 ctx.core.webui.pages.register 注册的页面出现在清单里",
+	"经 ctx.webui.pages.register 注册的页面出现在清单里",
 	ctxPages.pages.some((p: any) => p.key === "svc-ctx-probe-ctx-page" && p.scope === "app"),
 );
 check(
-	"经 ctx.core.webui.bot.pages.register 注册的页面出现在清单里",
+	"经 ctx.webui.bot.pages.register 注册的页面出现在清单里",
 	ctxPages.pages.some((p: any) => p.key === "ctx-probe-ctx-bot" && p.scope === "bot"),
 );
 

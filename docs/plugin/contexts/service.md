@@ -1,14 +1,20 @@
 # 服务插件上下文
 
-该上下文为服务插件上下文, 提供**全局作用域**的插件能力 —— 与普通插件上下文[`PluginContext`](./normal.md)的方法签名一致, 但作用域是整个框架而非某个 Bot
+该上下文为服务插件上下文, 提供**全局作用域**的插件能力 —— 形状与普通插件上下文[`PluginContext`](./normal.md)一致(能力直接挂在 `ctx` 上, 没有嵌套层), 但作用域是整个框架而非某个 Bot
 
-服务插件不属于任何 Bot, 因此该上下文**不提供** Bot 维度能力(`action` / 当前 Bot 视图等), 改用 [`core` 对象](#core对象)访问框架核心的安全视图
+服务插件不属于任何 Bot, 因此该上下文**不提供** Bot 维度能力(`action` / 当前 Bot 视图等); 全局设施经扁平入口(`ctx.user` / `ctx.bots` / `ctx.webui` ...)访问, 见[信息获取](#信息获取)
 
 该上下文提供以下能力
 
 - [全局作用域](#全局作用域)
 - [信息获取](#信息获取)
-  - [core对象](#core对象)
+  - [bots对象](#bots对象)
+  - [services对象](#services对象)
+  - [user对象](#user对象)
+  - [session对象](#session对象)
+  - [profile对象](#profile对象)
+  - [statistics对象](#statistics对象)
+  - [webui对象](#webui对象)
 - [消息处理](#消息处理)
   - [message对象](#message对象)
   - [command对象](#command对象)
@@ -46,22 +52,35 @@
 
 ## 信息获取
 
-### core对象
+### 设施入口
 
-框架核心的**安全视图**, 不是 `Core` 实例 —— `init` / `close` / `settings` / `internalDB` 这类启动与释放流程不会交给你。该对象只有以下几个入口:
+下面这些入口都是**扁平的普通包装对象**: 不是 Proxy 视图, 也不是 `Core` 实例。对象上只列出
+业务方法, `init` / `close` / `settings` / `internalDB` 这类启动与释放流程**根本不存在** ——
+既拿不到, 也不会被 `as any` 变出来。
 
-- `bot`: 框架里有哪些 Bot, 以及启停它们
-- `service`: 有哪些服务插件, 各自什么状态(只读)
-- `webui`: WebUI 视图; **未启用 WebUI 时为 `null`**。可以在运行期注册自己的 HTTP 端点与导航页面(见 [core.webui对象](#corewebui对象))
-- `user` / `session` / `profile` / `statistics`: 全局数据设施的视图
+- [`bots`](#bots对象): 框架里有哪些 Bot, 以及启停它们
+- [`services`](#services对象): 有哪些服务插件, 各自什么状态(只读)
+- [`webui`](#webui对象): WebUI 注册入口; **未启用 WebUI 时为 `null`**
+- [`user`](#user对象) / [`session`](#session对象) / [`profile`](#profile对象) / [`statistics`](#statistics对象): 全局数据设施的视图
 
-每个入口都是一份**白名单视图**: 只放行下面写明的方法, 其余成员读取为 `undefined`(白名单同时约束类型与运行时)。这不是"约定", 是运行时行为 —— 别指望用类型断言绕过去。
+包装对象**每次调用时才解析设施**, 因此可以在插件里放心存下来:
 
-数据设施随框架启动建立, 服务插件加载时必然就绪; 框架关闭后再访问会抛出 `StateError`, 而不是交给你一个已释放的实例。
+```js
+export default {
+	init(ctx) {
+		const user = ctx.user;          // 存下来没问题, 不需要 getter
+		ctx.command.register("whoami", (msg) => msg.reply(user.query(msg.sender.id)?.id ?? "?"));
+	}
+};
+```
 
-> `filterList` **不在** `ctx.core` 里: 黑白名单已抽离为独立服务插件(`services/filter`), 名单的存储、判定与 WebUI 端点都归它。
+同一个上下文里 `ctx.user` 永远是同一个对象(身份稳定), 可以做比较或当 `WeakMap` 键。
+数据设施随框架启动建立, 服务插件加载时必然就绪; 框架关闭后再**调用**会抛出 `StateError`,
+而不是让你读写一个已释放的实例。
 
-#### core.bot对象
+> 黑白名单的 `filterList` 不在 ctx 里: 它已抽离为独立服务插件(`services/filter`), 名单的存储、判定与 WebUI 端点都归它。
+
+### bots对象
 
 不是 `Bot` 实例, 而是只读快照 + 被认可的启停动作
 
@@ -82,7 +101,7 @@ type BotInfo = {
 
 拿到的是快照, 所以没有 `action`、消息处理等 Bot 维度能力; 要操作某个 Bot 的行为, 请通过它发来的 `Message`。
 
-#### core.service对象
+### services对象
 
 服务插件注册表的**只读**视图
 
@@ -105,7 +124,10 @@ type ServiceInfo = {
 
 服务插件的启停带依赖连带(见[持久化启停状态](../service.md#持久化启停状态)), 由框架与 WebUI 编排, 因此这里不提供启停方法 —— 插件不能停用自己或同伴。
 
-#### core.user对象
+> 别和 [`ctx.service`](#插件间导入导出exportsrequire) 混淆: 复数 `services` 是**注册表视图**(看有哪些服务),
+> 单数 `service` 是**其他服务插件的导出代理**(取它们提供的功能)。
+
+### user对象
 
 用户标识与跨平台关系的视图
 
@@ -137,7 +159,7 @@ type UnionMember = UserPlatformInfo & {
 
 约定: **落账由适配器负责**。适配器收到平台事件时写入账号与会话记录, 服务插件通常只用查询类方法; 需要"取或建"时才用 `get`。
 
-#### core.session对象
+### session对象
 
 会话标识的视图
 
@@ -167,7 +189,7 @@ type SessionLinkMember = SessionPlatformInfo & { sessionId: string }
 > 两边得到不同的会话 uuid, 但经会话绑定后共享同一个 `unionId`。需要“在多个适配器
 > 之间对齐同一个会话”的逻辑应该以它为准, 而不是 `session.id`。
 
-#### core.profile对象
+### profile对象
 
 用户档案(昵称等展示信息)的视图
 
@@ -184,7 +206,7 @@ type UserProfile = {
 }
 ```
 
-#### core.statistics对象
+### statistics对象
 
 统计的**查询面**; 统计模块被关掉时为 `null`
 
@@ -205,9 +227,11 @@ type StatRange = {
 
 采集入口(`record` / `recordSend` / `flush` / `close` 等)不开放 —— 它们由框架在消息链路上调用, 放给插件只会干扰统计口径。返回类型见 `src/statistics/types.ts`。
 
-#### core.webui对象
+模块可随设置页热开关, 因此每次访问都看一次当前实例: 关掉时这里是 `null`, 之前存下来的对象在调用时会抛 `StateError`。
 
-WebUI 视图; **未启用 WebUI 时为 `null`**。运行期可以注册**自己的** HTTP 端点与导航页面:
+### webui对象
+
+WebUI 注册入口; **未启用 WebUI 时为 `null`**。运行期可以注册**自己的** HTTP 端点与导航页面:
 
 - `register(route: { path, method, auth?, handler }): () => void`: 注册一个端点, 返回注销函数
 - `pages.register(page: PluginPage): () => void`: 注册**活动栏一级导航**页面
@@ -217,7 +241,7 @@ WebUI 视图; **未启用 WebUI 时为 `null`**。运行期可以注册**自己�
 export default {
 	init(ctx) {
 		// 端点落在本插件的命名空间里: POST /service/<插件id>/api/filter_list
-		ctx.core.webui?.register({
+		ctx.webui?.register({
 			path: "filter_list",   // 相对 /service/<插件id>/api 的单段路径
 			method: "POST",
 			auth: true,            // 缺省 true
@@ -225,7 +249,7 @@ export default {
 		});
 
 		// 活动栏一级导航: 模块与资源都在本插件的 public/ 下
-		ctx.core.webui?.pages.register({
+		ctx.webui?.pages.register({
 			id: "global",            // 本插件内唯一, 单段
 			title: "黑白名单",
 			icon: "shield.svg",      // 相对 public/
@@ -238,7 +262,7 @@ export default {
 		});
 
 		// Bot 详情窗口的二级导航: 与"信息 / 插件 / 设置"平级
-		ctx.core.webui?.bot.pages.register({
+		ctx.webui?.bot.pages.register({
 			id: "filter",
 			title: "名单",
 			icon: "shield.svg",
@@ -278,7 +302,7 @@ export default {
 - `handler` 只拿到**已解析的 JSON 请求体**, 返回值按普通 JSON API 的规则写出(`undefined` → 204, `string` → 原样发送, 其余 → JSON); 抛出 `{ err: string, code: number }` 可定制错误响应, `details` 会原样透传;
 - 注册返回的注销函数由上下文代管, 插件**不必**自己在 `unload` 里注销; 释放后端点返回 503(服务未启用)而不是 404, **页面则从导航里消失**(前端按清单对账, 已经打开的 Bot 窗口也会当场去掉那一项);
 - 同一个 `(插件, 作用域, 页面 id)` 重复注册只换条目 —— 服务停用后重新启用是正常路径, 旧注销不会顶掉新注册;
-- WebUI 未启用时 `ctx.core.webui` 为 `null`, 用 `?.` 跳过即可 —— 服务本身仍应照常工作。
+- WebUI 未启用时 `ctx.webui` 为 `null`, 用 `?.` 跳过即可 —— 服务本身仍应照常工作。
 
 页面模块的 URL 由框架拼装并带 `?v=<清单版本>`: ES 模块按 URL 永久缓存, 没有它"停用再启用"只会拿到旧代码。反过来, 模块**自己 import 的子模块**仍是原 URL, 因此改了插件的多个前端文件后要刷新一次浏览器页面(与核心前端静态资源同性质)。
 
@@ -411,7 +435,7 @@ export default {
 约定:
 
 - **AND 语义**: 遍历全部过滤器, 任一返回 `false` 就丢掉该事件;
-- 第二个参数是**收到事件的 `Bot` 实例**(不是 `core.bot` 那样的只读快照), 便于做“只在某些 Bot 上放行”的判断 —— 它只应被当作判断依据(`id` / `name` 等), 不要拿它去操作 Bot;
+- 第二个参数是**收到事件的 `Bot` 实例**(不是 `ctx.bots` 那样的只读快照), 便于做“只在某些 Bot 上放行”的判断 —— 它只应被当作判断依据(`id` / `name` 等), 不要拿它去操作 Bot;
 - 第三个参数是**事件来源元数据** `{ adapter, bot }`: `adapter` 是派发该事件的适配器插件 id。多个适配器可能共用同一个 `event.platform`(例如 QQBot 与 OneBot11 都是 `qq`), 需要区分"是哪个适配器收到的"时只能看这里; 不想用时可以省去该参数;
 - **过滤器抛错时按放行处理**并记录日志 —— 拦截是显式意图, 不能让一个出错的过滤器使事件无声消失;
 - `observe` 不参与拦截, 只观察, 能拿到 `EntityFactory` 不认识、不会被任何处理链消费的事件;
@@ -465,17 +489,16 @@ export default {
 
 用于插件间互相协作，服务插件的导入导出与普通上下文略有不同:
 
-- 服务插件仅可见其他服务插件的导出，无法获取普通Bot插件的导出
+- 服务插件仅可见其他服务插件的导出，无法获取普通 Bot 插件的导出
 
-- 服务插件没有`exports`字段，通过`provide`方法用于向`ctx.service`注入字段
+- 服务插件只能通过 `ctx.service.xx` / `ctx.require("xx")` 获取其他服务插件的导出
 
-- 服务插件只能通过`ctx.service.xx`/`ctx.require("xx")`获取其他插件的导出
-
-> 服务插件的导入导出实际上也是在PluginExports上操作
+> 服务插件的导入导出实际上也是在 `PluginExports` 上操作
 
 导出:
 
-- `ctx.provide(key: string, service: unknown)`: 向其他上下文提供一个服务，`key`可以是任意字符串，而不仅仅是插件id，比如`"permission"`, `"filter"`等
+- `ctx.exports = value`: 以**本插件 id** 为键导出; 其他上下文用 `ctx.service[<本插件id>]` 或 `ctx.require("<本插件id>")` 取用, 语义与普通上下文的 `exports` 一致
+- `ctx.provide(key: string, service: unknown)`: 在任意键名下再暴露一份, `key` 不必是插件 id, 比如 `"permission"` / `"filter"`
 
 导入:
 
@@ -535,7 +558,7 @@ export default {
 - 框架生命周期: `Core.init` / `close` / `settings` / `internalDB`;
 - 服务插件启停: `ServiceHost.load` / `unload` / `setEnabled` / `scan`;
 - 统计采集: `record` / `flush` / `close`;
-- WebUI 服务器生命周期: `start` / `relisten` / `updateSecurity` / `close`(注册自己的端点与页面**是**开放的, 见 [`core.webui`](#corewebui对象));
+- WebUI 服务器生命周期: `start` / `relisten` / `updateSecurity` / `close`(注册自己的端点与页面**是**开放的, 见 [`ctx.webui`](#webui对象));
 - 数据管理器的建表与连接句柄: `init` / `db`。
 
 ## 绝对不应触碰的禁忌

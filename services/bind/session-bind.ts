@@ -10,7 +10,7 @@
  * 不需要做任何 groupId / group_openid 的格式转换。
  */
 
-import type { SessionAPI } from "../../src/plugin/services/apis/core";
+import type { SessionAPI } from "../../src/plugin/services/apis/facilities";
 import { TTLMap } from "./ttl-map";
 import { uuid } from "./uuid";
 

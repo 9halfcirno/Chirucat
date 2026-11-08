@@ -45,21 +45,19 @@ export default {
 		});
 
 		// 管理端点: /service/chirucat-filter/api/filter_list
-		// WebUI 未启用时 ctx.core.webui 为 null, 此时只是没有管理入口, 过滤照常工作
-		ctx.core.webui?.register({
+		// WebUI 未启用时 ctx.webui 为 null, 此时只是没有管理入口, 过滤照常工作
+		ctx.webui?.register({
 			path: "filter_list",
 			method: "POST",
 			auth: true,
 			handler: createFilterHandler({
 				manager: m,
-				// getter: 每次请求重新取一次设施视图, 不在插件里缓存框架对象
-				get core() {
-					return {
-						user: ctx.core.user,
-						session: ctx.core.session,
-						profile: ctx.core.profile,
-						bot: ctx.core.bot,
-					};
+				// 包装对象在调用时才解析设施, 可以直接存下来, 不必每次请求重建
+				views: {
+					user: ctx.user,
+					session: ctx.session,
+					profile: ctx.profile,
+					bot: ctx.bots,
 				},
 			}).handle,
 		});
@@ -67,7 +65,7 @@ export default {
 		// 管理界面: 一级导航页面 + Bot 详情窗口页面, 都指向 public/ 下自带的模块。
 		// 资源路径相对本插件的 public/, URL 由框架拼装(带版本参数);
 		// 注销函数同样由上下文代管 —— 服务停用后这两个入口会从导航里消失。
-		ctx.core.webui?.pages.register({
+		ctx.webui?.pages.register({
 			id: "global",
 			title: "黑白名单",
 			icon: "shield.svg",
@@ -75,7 +73,7 @@ export default {
 			styles: ["filters.css"],
 			order: 50,
 		});
-		ctx.core.webui?.bot.pages.register({
+		ctx.webui?.bot.pages.register({
 			id: "filter",
 			title: "名单",
 			icon: "shield.svg",
@@ -105,8 +103,8 @@ export default {
 /** 记录一条被拦下的消息: 消息不进任何处理链, 日志是唯一的可观测出口 */
 function logBlocked(ctx: ServiceContext, botId: string, event: MessageCreateEvent) {
 	try {
-		const uinfo = ctx.core.user.query(event.senderId);
-		const sinfo = ctx.core.session.query(event.sessionId);
+		const uinfo = ctx.user.query(event.senderId);
+		const sinfo = ctx.session.query(event.sessionId);
 
 		ctx.logger.log(
 			`[过滤][${botId}][${event.platform} ${event.sessionType}:${sinfo?.id ?? event.sessionId}] ` +
