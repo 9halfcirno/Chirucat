@@ -134,6 +134,25 @@ function validateControl(
 				if (control.required) pushRequired(errors, childPath, label);
 				return;
 			}
+			// 数值输入: 接受数字或数字字符串, 再校验整数与范围
+			if (control.type === "input" && control.valueType === "number") {
+				const num = numericValue(value);
+				if (!Number.isFinite(num)) {
+					pushType(errors, childPath, label, "数字");
+					return;
+				}
+				if (control.integer && !Number.isInteger(num)) {
+					errors.push({ path: childPath, label, message: `${label} 必须是整数` });
+					return;
+				}
+				if (typeof control.min === "number" && num < control.min) {
+					errors.push({ path: childPath, label, message: `${label} 不能小于 ${control.min}` });
+				}
+				if (typeof control.max === "number" && num > control.max) {
+					errors.push({ path: childPath, label, message: `${label} 不能大于 ${control.max}` });
+				}
+				return;
+			}
 			if (typeof value !== "string") {
 				pushType(errors, childPath, label, "字符串");
 				return;
@@ -264,6 +283,13 @@ function validateControl(
 }
 
 /* ---------- 小工具 ---------- */
+
+/** 数字或数字字符串 -> number; 其余(含空串) -> NaN */
+function numericValue(value: unknown): number {
+	if (typeof value === "number") return value;
+	if (typeof value === "string" && value.trim() !== "") return Number(value);
+	return Number.NaN;
+}
 
 function pushRequired(errors: FieldError[], path: string, label: string) {
 	errors.push({ path, label, message: `${label} 不能为空` });

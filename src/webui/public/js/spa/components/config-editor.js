@@ -63,6 +63,13 @@ function defaultValueOf(define) {
 			return define.default === true;
 		case "slider":
 			return typeof define.default === "number" ? define.default : (define.min ?? 0);
+		case "input":
+			// 数值输入的默认值不能是空串: 后端会把它当成"填了个非数字"
+			if (define.valueType === "number") {
+				const num = typeof define.default === "number" ? define.default : Number(define.default);
+				return Number.isFinite(num) ? num : (define.min ?? 0);
+			}
+			return define.default === undefined ? "" : clone(define.default);
 		case "text":
 			return undefined;
 		default:
@@ -360,12 +367,15 @@ function buildInput(define, holder, ctx, opts) {
 	const { el, field } = createFieldShell(define, opts);
 
 	const input = document.createElement("input");
-	input.type = "text";
+	// secret 只是默认渲染成密码框; attr 仍可覆盖(它在本行之后应用)
+	input.type = define.secret ? "password" : "text";
 	input.className = "config-input";
+	if (define.valueType === "number") input.setAttribute("inputmode", "numeric");
 	if (define.placeholder) input.placeholder = define.placeholder;
 	for (const [name, value] of Object.entries(define.attr ?? {})) {
 		input.setAttribute(name, String(value));
 	}
+	if (define.immutable) input.disabled = true;
 	input.addEventListener("input", () => {
 		holder[define.id] = input.value;
 		ctx.onValueChange();
@@ -389,6 +399,7 @@ function buildTextarea(define, holder, ctx, opts) {
 	for (const [name, value] of Object.entries(define.attr ?? {})) {
 		textarea.setAttribute(name, String(value));
 	}
+	if (define.immutable) textarea.disabled = true;
 	textarea.addEventListener("input", () => {
 		holder[define.id] = textarea.value;
 		ctx.onValueChange();
@@ -408,6 +419,7 @@ function buildSwitch(define, holder, ctx, opts) {
 	button.type = "button";
 	button.classList.add("dot-switch");
 	button.setAttribute("role", "switch");
+	if (define.immutable) button.disabled = true;
 
 	const paint = (state) => {
 		button.classList.toggle("dot-switch-on", state);
@@ -416,6 +428,7 @@ function buildSwitch(define, holder, ctx, opts) {
 	};
 
 	button.addEventListener("click", () => {
+		if (define.immutable) return;
 		holder[define.id] = !holder[define.id];
 		paint(holder[define.id] === true);
 		ctx.onValueChange();
@@ -517,6 +530,7 @@ function buildSlider(define, holder, ctx, opts) {
 	if (define.min !== undefined) range.min = String(define.min);
 	if (define.max !== undefined) range.max = String(define.max);
 	if (define.step !== undefined) range.step = String(define.step);
+	if (define.immutable) range.disabled = true;
 
 	const readout = document.createElement("span");
 	readout.className = "config-slider-value";

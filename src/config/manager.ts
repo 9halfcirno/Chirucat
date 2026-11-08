@@ -120,11 +120,38 @@ export class ConfigManager {
 				return define.default === true;
 			case "slider":
 				return typeof define.default === "number" ? define.default : (define.min ?? 0);
+			case "input":
+				// 数值输入没有默认值时不能用空串: 它会被当成"填了个非数字"
+				if (define.valueType === "number") {
+					const num = typeof define.default === "number" ? define.default : Number(define.default);
+					return Number.isFinite(num) ? num : (define.min ?? 0);
+				}
+				return define.default === undefined ? "" : cloneValue(define.default);
 			case "text":
 				return undefined;
 			default:
 				return define.default === undefined ? "" : cloneValue(define.default);
 		}
+	}
+
+	/**
+	 * 按控件类型规范化一个已有值
+	 *
+	 * 目前只有数值输入需要: 数字字符串 -> 数字。无法解析时原样保留,
+	 * 由 `validate()` 报错 —— 插件配置的写入是宽松的, 这里不替用户
+	 * 决定"坏值该变成什么"。
+	 */
+	private static normalizeValue(control: Control, value: unknown): unknown {
+		if (
+			control.type === "input"
+			&& control.valueType === "number"
+			&& typeof value === "string"
+			&& value.trim() !== ""
+		) {
+			const num = Number(value);
+			if (Number.isFinite(num)) return num;
+		}
+		return value;
 	}
 
 	/**
@@ -162,9 +189,12 @@ export class ConfigManager {
 
 		for (const column of columns) {
 			if (column.type === "text") continue;
-			out[column.id] = Object.prototype.hasOwnProperty.call(row, column.id)
-				? cloneValue(row[column.id])
-				: ConfigManager.defaultValueOf(column);
+			out[column.id] = ConfigManager.normalizeValue(
+				column,
+				Object.prototype.hasOwnProperty.call(row, column.id)
+					? cloneValue(row[column.id])
+					: ConfigManager.defaultValueOf(column),
+			);
 		}
 		return out;
 	}
@@ -327,11 +357,14 @@ export class ConfigManager {
 				continue;
 			}
 
-			out[id] = hasSrc
-				? cloneValue(src[id])
-				: hasFb
-					? cloneValue(fb[id])
-					: ConfigManager.defaultValueOf(control);
+			out[id] = ConfigManager.normalizeValue(
+				control,
+				hasSrc
+					? cloneValue(src[id])
+					: hasFb
+						? cloneValue(fb[id])
+						: ConfigManager.defaultValueOf(control),
+			);
 		}
 		return out;
 	}
