@@ -48,7 +48,7 @@
 
 该文件为JSON文件, 用于WebUI前端生成表单控件及后端值校验
 
-该JSON的Schema文件在`/src/config/schema.json`, 也可以查看[Config生成文件](../schemas/config.md)定义
+该JSON的控件定义见 `src/config/types.ts`, 结构与语义见 [Config生成文件](../schemas/config.md)。
 
 ## 模板
 

@@ -2,7 +2,8 @@
 
 ## 概述
 
-该文件用于WebUI生成配置表单控件及值校验等, 具体Schema文件在[Config Schema](/src/config//schema.json)
+该文件用于WebUI生成配置表单控件及值校验等, 控件与值的类型定义见 `src/config/types.ts`,
+默认值/规范化/校验规则见 `src/config/schema.ts`。
 
 ## 结构
 
@@ -23,15 +24,24 @@
 | `required` | `boolean` | 否 | 控件是否为必填项, 默认非必填 |
 | `desc` | `string` | 否 | 控件小字描述, 显示在控件下方 |
 | `visible` | [`Expr`](#expr表达式) | 否 | 控制控件要显示的满足条件, 不填则为始终显示 |
+| `restart` | `boolean` | 否 | **框架设置**: 改动需重启才生效, 落盘后不进热应用 |
+| `immutable` | `boolean` | 否 | **框架设置**: 写入接口拒绝改成别的值; 仅声明在 input / textarea / switch / slider 上 |
+
+> `restart` / `immutable` 只由框架设置(`SettingsDomain`)消费; 插件配置会解析它们但
+> 没有对应的运行期语义 —— 插件配置的校验由 API 层显式调用 `validate()`。
 
 ### 输入框控件
 
 **type**为`"input"`
 
-**产出值**为`string`类型
+**产出值**为`string`类型; `valueType` 为 `"number"` 时为`number`
 
 | 属性 | 类型 | 必填 | 描述 |
 |---|---|---|---|
+| `valueType` | `"string" \| "number"` | 否 | 产出值类型, 缺省 `string`; 数值输入在规范化时把数字字符串转成数字 |
+| `integer` | `boolean` | 否 | `valueType:"number"` 时必须为整数 |
+| `min` / `max` | `number` | 否 | `valueType:"number"` 的取值范围 |
+| `secret` | `boolean` | 否 | 敏感项: 框架设置读取时脱敏为空串; 写入时空串表示"不修改"、null 表示清除 |
 | `placeholder` | `string` | 否 | 输入框为空时的占位 |
 | `attr` | `Record<string, any>` | 否 | 输入框input属性, 为额外HTMLInputElement属性 |
 
@@ -65,7 +75,7 @@
 
 | 属性 | 类型 | 必填 | 描述 |
 |---|---|---|---|
-| `items` | ``{ label: string, value: (string \| number \| boolean) }[]`` | 是 | 可选值列表 |
+| `items` | ``{ label: string, value: string }[]`` | 是 | 可选值列表 |
 
 ### 复选框控件
 
@@ -75,7 +85,7 @@
 
 | 属性 | 类型 | 必填 | 描述 |
 |---|---|---|---|
-| `items` | `{ label: string, value: (string \| number \| boolean) }[]` | 是 | 可复选值列表 |
+| `items` | ``{ label: string, value: string }[]`` | 是 | 可复选值列表 |
 
 ### 滑块控件
 
@@ -88,6 +98,7 @@
 | `min` | `number` | 是 | 滑块最小值 |
 | `max` | `number` | 是 | 滑块最大值 |
 | `step` | `number` | 是 | 滑块步长 |
+| `integer` | `boolean` | 否 | 必须为整数 (前端步进已保证; 防手工改坏值文件) |
 
 ### 文本控件
 

@@ -1,61 +1,65 @@
 # 设置 (Settings)
 
 面向**框架自身**的可变配置: WebUI 端口与密码、Core 模块开关、统计参数 ...
-插件配置仍走 [Config Schema](./config.md) —— 那套由插件自带的 schema 驱动, 两者并存。
+它就是一份 [Config Schema](./config.md) —— 与插件配置同一套控件、同一个存储引擎,
+差别只在**写入策略**: 框架设置的写入是"校验 + 落盘"原子的, 并多出脱敏、热应用与
+首次生成这些策略。
 
-## 为什么要另起一层
+## 与插件配置的关系
 
-`ConfigManager` 把三件事绑在同一份控件树上: 前端渲染、默认值来源、校验与白名单
-(`coerce` 以控件为白名单丢弃未知键)。于是"不是表单形状"的设置项无处安放:
-要么为存储伪造一份控件, 要么退化成裸 JSON 读写、丢掉默认值与校验。
+同一个引擎 `ConfigBase` (`src/config/base.ts`) 负责: 默认值展开、宽松 `coerce`
+(补默认/丢未知键/数字规范化)、逐字段变更通知、文件绑定与载入。
+两个子类只差策略:
 
-设置层把**定义**和**表述**分开:
+| | 插件配置 `ConfigManager` | 框架设置 `SettingsDomain` |
+| --- | --- | --- |
+| 写入 | 宽松合并, 校验由 API 层另调 `validate()` | 严格 patch: 校验 + 写盘原子, 未知键拒绝 |
+| 读取 | 原样 | `secret` 字段脱敏 |
+| 语义标记 | 解析但不消费 | `restart` / `immutable` 生效 |
+| 写入后 | 触发 `watch` | 调 `apply(values, changed)` |
+| 载入 | 缺失按默认建; 语法错误抛出 | 缺失按 `onCreate` 建; 损坏备份重建 |
 
-- **定义** (`SettingSpec`, 见 `src/config/settings/types.ts`) —— 数据层的真相源:
-  类型、默认值、校验、语义标记(`secret` / `restart` / `immutable`)
-- **投影** (`toControls`, `src/config/settings/compile.ts`) —— 把定义转成 `Control[]`,
-  单向且可丢弃; 前端 `config-editor` 只认控件树, 于是它零改动就能渲染设置
-- **域** (`SettingsDomain`, `src/config/settings/manager.ts`) —— 一份定义 + 一个值文件 + 一个热应用钩子
+值文件的容错语义由传给 `JsonFileStore` 的选项显式给出(抛出 / 回落 / 备份重建),
+不把这几种混成一种。
 
-存储底座是 `src/config/store.ts` 的 `JsonFileStore`(原子写 + 串行化的 `SerialQueue` +
-revision 守卫 + 外部改动监听), 设置域、期望态存储与 `ConfigManager` 共用同一套落盘机制。
-三者的差异由传给 store 的选项显式表达: 设置域值文件损坏时备份重建、状态文件回落默认、
-插件配置值文件语法错误照常抛出 —— 不要把这几种容错语义混成一种。
-
-`JsonFileStore` 的**外部改动监听能力不是每个调用方都要开**: Bot / 服务期望态文件靠它
-收敛启停, 而设置域与 `ConfigManager` 刻意不开 —— 框架设置几乎都经 WebUI/API 写入,
-插件配置更是; 每份配置挂一个目录 `fs.watch`, 在几十上百个插件同时启用时句柄数与事件
-唤醒会成倍放大。手工编辑设置或插件配置的值文件需重启(或显式 `load()`)才生效。
+**两者都不监听值文件的外部改动**: Bot / 服务期望态文件靠 store 的监听收敛启停,
+而设置与插件配置几乎都经 WebUI/API 写入; 每份配置挂一个目录 `fs.watch`, 在几十上百个
+插件同时启用时句柄数与事件唤醒会成倍放大。手工编辑值文件需重启(或显式 `load()`)才生效。
 
 ## 加一个设置项
 
-只改定义; 存储、接口、前端都不用动:
+只改 schema; 存储、接口、前端都不用动:
 
 ```ts
-export const webuiSettings = defineSettings({
-	groups: { frontConfig: { label: "前端" } },
-	fields: {
-		port: {
-			type: "number", default: 7636, min: 1, max: 65535,
-			integer: true, restart: true, label: "监听端口",
+export const webuiSettings: ConfigRoot = {
+	version: "1.0.0",
+	controls: [
+		{
+			type: "input", id: "port", label: "监听端口",
+			default: 7636, valueType: "number", min: 1, max: 65535, integer: true,
 		},
-		"frontConfig.enableTestLab": { type: "boolean", default: false, label: "测试实验室" },
-	},
-});
+		{
+			type: "group", id: "frontConfig", label: "前端", controls: [
+				{ type: "switch", id: "enableTestLab", label: "测试实验室", default: false },
+			],
+		},
+	],
+};
 ```
 
-- 键支持点号路径, 中间前缀会投影成 `group`; 分组标题在 `groups` 里声明。
-- `defineSettings` 会在**启动时**校验定义本身(键是合法路径、类型受支持、默认值自洽、
-  enum 有 items、字段键之间不互为前缀 ...), 定义写错立刻炸, 不会拖到用户点保存。
-- 类型 → 控件: `string`→input(`multiline` 时 textarea, `secret` 时密码框)、
-  `number`→有 `min`&`max` 时 slider、否则数字输入框、`boolean`→switch、
-  `enum`→select、`stringList`→有 `items` 时 checkbox, 否则多行文本(按行拆分)。
+- 控件类型与字段见 [Config Schema](./config.md); 嵌套分组用 `group`。
+- 数值输入用 `input` + `valueType: "number"`(前端是文本框 + 数字键盘提示, 后端转数字);
+  有完整范围的用 `slider`。
+- `SettingsManager.register()` 会在启动时检查 schema: 重复 id、缺 id、`table` 立刻抛错
+  (框架设置不支持 table —— 整表替换没有对应的严格写入入口)。类型与语义标记由
+  TypeScript 在域定义处保证。
+- `select` 请显式写 `default`: 共享引擎的缺省值是空串, 而不是首项。
 
 ## 加一个设置域
 
 ```ts
 const domain = core.settings.register<WebUISettings>("webui", {
-	definition: webuiSettings,
+	schema: webuiSettings,
 	file: WEBUI_SETTINGS_FILE,
 	apply: (values, changed) => { /* 只需重启的字段不会进来 */ },
 });
@@ -63,16 +67,17 @@ await domain.load();
 ```
 
 - `apply` 在**落盘成功后**调用, 只收到本次真正变化的字段, 且已剔除 `restart` 字段 ——
-  需要重启才生效的项
-  在运行期没有意义, 机制上不让它进热应用。
+  需要重启才生效的项在运行期没有意义, 机制上不让它进热应用。载入完成时也会调用一次
+  (`changed` 为空数组), 用于把值同步给运行中的对象。
 - `apply` 抛错不回滚已落盘的值, 而是抛 `SettingsApplyError`(其 `outcome` 已脱敏),
   消息是"已保存, 但热应用失败"。
-- 值文件缺失时按 `onCreate`(缺省取定义默认值)生成; 内容损坏时先把原文件改名为
+- 值文件缺失时按 `onCreate`(缺省取 schema 默认值)生成; 内容损坏时先把原文件改名为
   `<文件>.broken-<时间戳>-<随机>` 备份, 再按同样的默认值重建一份 —— 既不静默跳过、
   也不阻断启动。`load()` 返回 `{ values, created, recovered, backupFile? }` 供启动层
-  打印初始密码或告警; 域定义文件本身不掺日志逻辑。
-  只要值的旧调用方仍在: `get()` 取当前值, 底层 `JsonFileStore.load()` 也仍返回值本身
-  (需要元信息改用 `loadOutcome()`)。
+  打印初始密码或告警; schema 文件本身不掺日志逻辑。
+  `get()` 取当前值(明文, 内部通道), `get_settings` 走的是脱敏后的 `read()`。
+- 读盘时语义非法的单个字段会**回落到默认值**, 而不是让整个域起不来; 语法错误才按
+  `onError` 处理(`recreate` / `fallback` / `throw`)。
 
 ## 启动参数也来自设置域
 
@@ -113,19 +118,27 @@ WebUI 的全局设置列表里。值文件是 `<Bot目录>/config.json` —— �
 - **接口**: `POST /api/get_bot_config { id }` 与 `POST /api/update_bot_config { id, patch }`,
   返回形状与全局设置域一致, 前端复用同一套渲染。
 
-> 值文件按定义白名单规范化, 定义外的键会在下一次写入时被丢弃 ——
-> `config.json` 里出现的字段必须都写进定义。
+> 值文件按 schema 白名单规范化, schema 之外的键会在下一次写入时被丢弃 ——
+> `config.json` 里出现的字段必须都写进 schema。
 
 ## 语义标记
 
-- **`secret`**: 只允许用在 `string` 上。对外读取(`read()`)一律脱敏为空串,
+- **`secret`** (仅 `input`): 对外读取(`read()`)一律脱敏为空串,
   patch 里**空串表示不修改**、**null 表示清除**(回落默认值)。
   `get()` 是明文内部通道, 不得把它的值写进日志或任何外流结构。
-- **`restart`**: 改动会落盘, 但不进 `apply`, 且出现在接口返回的 `restartRequired` 里, 前端据此提示"需重启 Core 后生效"。
-  **当前内置的域没有用到它** —— 能热的都做成热的了 (`WebUIServer.relisten` 换监听、`updateSecurity` 换密码与免密、`StatisticsManager.updateOptions` 改统计参数); 机制保留给将来真正无法热更的项(如数据库路径)。
-- **`widget`** (仅 `number`): 缺省规则是"给了 `min` & `max` 就用滑块"; 跨度太大或需要精确输入时显式写 `widget: "input"` —— 端口就是这种情况。
+  插件配置**不脱敏** —— 插件自己需要明文。
+- **`restart`**: 改动会落盘, 但不进 `apply`, 且出现在接口返回的 `restartRequired` 里,
+  前端据此提示"需重启 Core 后生效"。
+  **当前内置的域没有用到它** —— 能热的都做成热的了 (`WebUIServer.relisten` 换监听、
+  `updateSecurity` 换密码与免密、`StatisticsManager.updateOptions` 改统计参数);
+  机制保留给将来真正无法热更的项(如数据库路径)。
 - **`immutable`**: 设置接口(patch)不接受把它改成别的值; 提交等值不算改动。
   它**只约束 patch** —— 手工编辑值文件仍会让新值生效(与 `state.json` 的处理一致)。
+  只声明在 input / textarea / switch / slider 上: 自绘下拉没有原生 disabled,
+  给它加这个标记只会变成"看起来能改、后端拒绝"的假只读。
+- **`valueType: "number"`** (仅 `input`): 后端把数字字符串规范化为数字, 校验要求
+  可解析为数字并满足 `integer` / `min` / `max`。前端仍是文本框 + 数字键盘提示;
+  需要滑块时用 `slider` 控件。
 
 ## 接口
 
@@ -161,7 +174,7 @@ WebUI 的全局设置列表里。值文件是 `<Bot目录>/config.json` —— �
 ## 自检
 
 ```
-npm run check:settings   # 定义/投影/校验/落盘/并发/竞态 + 接口层端到端
+npm run check:settings   # schema 校验/默认值/patch/落盘/并发/竞态 + 接口层端到端
 npm run check:startup    # 启动装配: created / recovered / 注入覆盖 / 服务钩子
 npm run check:baseline   # 状态管理重构前的行为基线 (三个脚本串联)
 npm run check:desired-state  # 期望态泛型基类
@@ -217,3 +230,9 @@ WebUI 侧把四个配置端点的"按需装配 + 404"薄壳收敛到 `_shared.re
 两个 view 的字段映射收敛到 `plugin-view.toManagedView`; **返回结构刻意不对称**
 (插件分组对象 / 服务数组、服务 `affected` 与完整列表、hasConfig 口径)全部保留,
 由 `npm run check:webui-config` 逐条钉住。状态管理的整体说明见 [Bot 概念文档](../concepts/bot.md)。
+
+第 5 批把设置层并入共享 schema: 5 个内置域改用 `ConfigRoot`, `SettingsDomain` 建在
+`ConfigBase` 上(严格 patch / 脱敏 / `apply` / `onCreate` 作为它的策略), 值规则下沉为
+`src/config/schema.ts` 的纯函数。`SettingSpec`、`defineSettings`、`toControls` 投影层与
+`coercePatch` / `normalizeValues` 一并删除 —— 设置与插件配置现在是同一套控件、同一个引擎,
+差别只在写入策略(见文首对照表)。
