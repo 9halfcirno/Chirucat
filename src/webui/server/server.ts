@@ -675,11 +675,12 @@ export class WebUIServer {
 			res.json({ ok: true });
 		});
 
-		// 鉴权状态查询: 前端进入页面时调用; 无密码时恒为已登录
+		// 鉴权状态查询: 前端进入页面时调用
+		// 必须和 API 走同一套判定 (`isAuthorized`), 否则本机免密会被漏掉:
+		// 免密时前端手里没有 token, 只看 token 会回 authed:false -> 弹登录框,
+		// 而它后续每个 API 请求又都是放行的, 表现成"明明开了免密还要输密码"。
 		this.app.get("/api/auth/verify", (req, res) => {
-			const token = readAuthToken(req);
-			const authed = !this.password || (token !== null && verifyToken(token, this.password) !== null);
-			res.json({ authed });
+			res.json({ authed: this.isAuthorized(req) });
 		});
 
 		// 未匹配的 /api 路由统一返回 JSON 404
