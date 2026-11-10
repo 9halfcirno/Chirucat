@@ -1,0 +1,266 @@
+/**
+ * Chirucat WebUI 设计令牌 — Material Design 3 皮肤 (浅色 + 深色)
+ *
+ * 自包含皮肤, 由 js/spa/theme.js 在运行时注入 <link>, 挂载点:
+ *   :root[data-theme="md3"]       浅色
+ *   :root[data-theme="md3-dark"]  深色
+ * 不改动 default.css / dark.css 的 VSC 令牌; 本文件只在上述两个
+ * 标记下生效, 选择器特异性高于 :root, 与加载顺序无关。
+ *
+ * 配色取自 MD3 官方 baseline scheme (m3.material.io, 紫色基准):
+ *   light: primary #6750A4 / surface #FEF7FF / error #B3261E
+ *   dark:  primary #D0BCFF / surface #141218 / error #F2B8B5
+ * 表面分层用 surface-container 五档色阶 (lowest→highest) 而不是阴影。
+ * ok / warn 不在 MD3 基线角色里, 取 Material 绿/黄 tonal 40/80 近似。
+ *
+ * 结构令牌 (形状尺度 / 形态钩子 / 密度 / 动效 / elevation) 两套明暗共用;
+ * 形态钩子语义见 default.css「结构 · 形态钩子」, 皮肤只改值不换原语。
+ * 末尾的组件覆盖用 :root[data-theme^="md3"] 同时命中两种明暗,
+ * 只留令牌表达不了的真结构差异 (导航指示器几何 / 焦点环 / state layer 叠序)。
+ */
+
+/* ==================== 浅色 · 颜色令牌 ==================== */
+
+:root[data-theme="md3"] {
+	color-scheme: light;
+
+	/* ---- 表面: MD3 surface / surface-container 色阶 ---- */
+	--bg-app: #fef7ff;        /* surface: 窗口底色 */
+	--bg-activity: #f3edf7;   /* surface-container: 活动栏 */
+	--bg-sidebar: #f7f2fa;    /* surface-container-low: 侧栏 (nav drawer) */
+	--bg-panel: #ffffff;      /* surface-container-lowest: 卡片 */
+	--bg-elevated: #ece6f0;   /* surface-container-high: 弹窗规范色 */
+	--bg-input: #e6e0e9;      /* surface-container-highest: 填充式输入框 */
+
+	/* 交互态 = on-surface 的 state layer (hover 8% / pressed 12%),
+	   选中 = secondary-container */
+	--bg-hover: rgba(29, 27, 32, 0.08);
+	--bg-active: rgba(29, 27, 32, 0.12);
+	--bg-selected: #e8def8;   /* secondary-container */
+
+	/* ---- 文字 ---- */
+	--fg: #1d1b20;            /* on-surface */
+	--fg-muted: #49454f;      /* on-surface-variant */
+	--fg-subtle: #79747e;     /* outline */
+	--fg-on-accent: #ffffff;  /* on-primary */
+
+	/* ---- 线条 ---- */
+	--border: #cac4d0;        /* outline-variant */
+	--border-strong: #79747e; /* outline */
+
+	/* ---- 语义 ---- */
+	--accent: #6750a4;        /* primary */
+	--accent-hover: #735eab;  /* primary + on-primary 8% state layer */
+	--ok: #386a20;            /* Material green 40 (近似) */
+	--warn: #785900;          /* Material yellow 40 (近似) */
+	--danger: #b3261e;        /* error */
+
+	--accent-soft: #eaddff;   /* primary-container */
+	--ok-soft: rgba(56, 106, 32, 0.14);
+	--ok-line: rgba(56, 106, 32, 0.5);
+	--warn-soft: rgba(120, 89, 0, 0.14);
+	--warn-line: rgba(120, 89, 0, 0.5);
+	--danger-soft: #f9dedc;   /* error-container */
+	--danger-line: rgba(179, 38, 30, 0.5);
+
+	/* 插件类型标识: primary / teal / tertiary */
+	--type-adapter: #6750a4;
+	--type-adapter-soft: #eaddff;
+	--type-service: #006a6a;
+	--type-service-soft: rgba(0, 106, 106, 0.12);
+	--type-normal: #7d5260;   /* tertiary */
+	--type-normal-soft: #ffd8e4; /* tertiary-container */
+
+	/* ---- 遮罩 / 毛玻璃 ---- */
+	--scrim: rgba(0, 0, 0, 0.32); /* MD3 scrim 基准 32% */
+	--overlay-bg: rgba(254, 247, 255, 0.6);
+	--glass-bg: rgba(247, 242, 250, 0.78);
+	--glass-border: rgba(29, 27, 32, 0.12);
+
+	/* 日志终端区: 保持深色观感 (inverse-surface 方向) */
+	--log-bg: rgba(20, 18, 24, 0.94);
+
+	/* on-error: 深色下 danger 是浅粉, 不能复用 --fg-on-accent */
+	--fg-on-danger: #ffffff;
+}
+
+/* ==================== 深色 · 颜色令牌 ==================== */
+
+:root[data-theme="md3-dark"] {
+	color-scheme: dark;
+
+	/* ---- 表面: 深色靠色阶分层, 阴影只作辅助 ---- */
+	--bg-app: #141218;        /* surface */
+	--bg-activity: #211f26;   /* surface-container */
+	--bg-sidebar: #1d1b20;    /* surface-container-low */
+	--bg-panel: #1d1b20;      /* surface-container-low: 卡片 */
+	--bg-elevated: #2b2930;   /* surface-container-high: 弹窗 */
+	--bg-input: #36343b;      /* surface-container-highest */
+
+	--bg-hover: rgba(230, 224, 233, 0.08);  /* on-surface 8% */
+	--bg-active: rgba(230, 224, 233, 0.12); /* on-surface 12% */
+	--bg-selected: #4a4458;   /* secondary-container */
+
+	/* ---- 文字 ---- */
+	--fg: #e6e0e9;            /* on-surface */
+	--fg-muted: #cac4d0;      /* on-surface-variant */
+	--fg-subtle: #938f99;     /* outline */
+	--fg-on-accent: #381e72;  /* on-primary */
+
+	/* ---- 线条 ---- */
+	--border: #49454f;        /* outline-variant */
+	--border-strong: #938f99; /* outline */
+
+	/* ---- 语义 ---- */
+	--accent: #d0bcff;        /* primary */
+	--accent-hover: #c4aff4;  /* primary + on-primary 8% state layer */
+	--ok: #a8d5a2;            /* Material green 80 (近似) */
+	--warn: #e7c463;          /* Material yellow 80 (近似) */
+	--danger: #f2b8b5;        /* error */
+
+	--accent-soft: #4f378b;   /* primary-container */
+	--ok-soft: rgba(168, 213, 162, 0.16);
+	--ok-line: rgba(168, 213, 162, 0.5);
+	--warn-soft: rgba(231, 196, 99, 0.16);
+	--warn-line: rgba(231, 196, 99, 0.5);
+	--danger-soft: #8c1d18;   /* error-container */
+	--danger-line: rgba(242, 184, 181, 0.5);
+
+	/* ---- 插件类型标识 ---- */
+	--type-adapter: #d0bcff;
+	--type-adapter-soft: #4f378b;
+	--type-service: #4fd8eb;
+	--type-service-soft: rgba(79, 216, 235, 0.16);
+	--type-normal: #efb8c8;   /* tertiary */
+	--type-normal-soft: #633b48; /* tertiary-container */
+
+	/* ---- 遮罩 / 毛玻璃 ---- */
+	--scrim: rgba(0, 0, 0, 0.5);
+	--overlay-bg: rgba(20, 18, 24, 0.6);
+	--glass-bg: rgba(43, 41, 48, 0.82);
+	--glass-border: rgba(230, 224, 233, 0.12);
+
+	/* 日志终端区: 比周围 UI 更暗一档 */
+	--log-bg: rgba(15, 13, 19, 0.94);
+
+	--fg-on-danger: #601410;  /* on-error (dark) */
+}
+
+/* ==================== 结构令牌 (两套明暗共用) ==================== */
+
+:root[data-theme="md3"],
+:root[data-theme="md3-dark"] {
+	/* MD3 基准字体 Roboto, 本机没有时回落系统栈 */
+	--font-ui: Roboto, system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+
+	/* 密度: 比 VSC 的 26px 控件松一档, 贴近 MD3 桌面组件 */
+	--ctl-h: 32px;
+	--row-h: 28px;
+
+	/* 形状尺度: small 8 / medium 12 / large 16 / extra-large 28 */
+	--r-sm: 8px;
+	--r-md: 12px;
+	--r-lg: 16px;
+	--r-xl: 28px;
+
+	/* 形态钩子: MD3 形态 (胶囊按钮 / 正圆图标钮 / 无边卡片与弹窗 /
+	   胶囊导航), 令牌语义见 default.css「结构 · 形态钩子」 */
+	--btn-r: 999px;
+	--btn-fw: 500;
+	--btn-ls: 0.01em;
+	--icon-btn-r: 50%;
+	--input-focus-ring: inset 0 0 0 1px var(--accent); /* outlined 2px 描边, inset 补像素防布局抖动 */
+	--card-border: transparent;
+	--card-shadow: var(--shadow-1);
+	--dialog-border: transparent;
+	--dialog-divider: transparent;
+	--dialog-title-fs: var(--fs-lg);
+	--dialog-title-fw: 500;
+	--tooltip-r: 999px;
+	--tooltip-px: var(--sp-3);
+	--bar-h: 4px;
+	--activity-r: 999px;
+	--nav-gap: 2px;
+	--nav-edge: var(--sp-2);
+	--nav-item-r: 999px;
+	--nav-item-mx: var(--sp-2);
+	--nav-item-px: var(--sp-4);
+	--nav-active-bg: var(--bg-selected);
+	--nav-active-fw: 500;
+	--bot-nav-extra: 2px; /* Bot 弹窗导航: ctl-h+8 在 md3 密度下过大, 收回普通图标按钮同档 */
+
+	/* 动效: MD3 emphasized 减速曲线; 时长取 short/medium 档 */
+	--dur-fast: 0.15s;
+	--dur: 0.25s;
+	--dur-slow: 0.4s;
+	--ease: cubic-bezier(0.2, 0, 0, 1);
+
+	/* elevation: level 1 (卡片) / level 3 (弹窗、浮层) */
+	--shadow-1: 0 1px 3px 1px rgba(0, 0, 0, 0.15), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+	--shadow-2: 0 4px 8px 3px rgba(0, 0, 0, 0.15), 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+
+	/* 日志终端文字: 两种明暗下终端都是深底 */
+	--log-fg: #e6e0e9;
+}
+
+/* ==================== 组件外观覆盖 ====================
+ * 形态钩子令牌化后 (见 default.css「结构 · 形态钩子」), 这里只留
+ * 令牌表达不了的真结构差异: 导航指示器几何 / 焦点环 / state layer 叠序。
+ * :root[data-theme^="md3"] 同时命中 md3 / md3-dark。 */
+
+/* 键盘焦点: MD3 focus indicator (外扩描边环) */
+:root[data-theme^="md3"] :is(.btn, .icon-btn, .activity-btn):focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+/* ---- 活动栏: nav rail ----
+ * VSC 的左侧竖条 / 整宽 hover 矩形换成图标背后/周围的胶囊;
+ * ::before/::after 是定位元素会盖住图标, 给图标抬一层 */
+
+:root[data-theme^="md3"] .activity-btn.active {
+	background: transparent;
+}
+
+:root[data-theme^="md3"] .activity-btn.active::before {
+	inset: 50% auto auto 50%;
+	transform: translate(-50%, -50%);
+	width: 32px;
+	height: 24px;
+	border-radius: 999px;
+	background: var(--bg-selected);
+}
+
+:root[data-theme^="md3"] .activity-btn .icon {
+	position: relative;
+}
+
+/* hover 状态层叠在图标之上 (MD3 state layer 顺序);
+   悬停选中项时与 ::before 的选中胶囊自然叠成两层 */
+:root[data-theme^="md3"] .activity-btn:hover {
+	background: transparent;
+}
+
+:root[data-theme^="md3"] .activity-btn:hover::after {
+	content: "";
+	position: absolute;
+	inset: 50% auto auto 50%;
+	transform: translate(-50%, -50%);
+	width: 32px;
+	height: 24px;
+	border-radius: 999px;
+	background: var(--bg-hover);
+}
+
+/* ---- 次级侧栏: nav drawer ----
+ * 胶囊菜单项的值已在形态令牌里; 这里只去掉 VSC 的左侧竖条
+ * (选中改由胶囊填充表达) */
+:root[data-theme^="md3"] .spa-sidebar-item.active::before {
+	content: none;
+}
+
+/* 字标是单色黑, md3-dark 下同样要反色
+ * (layout.css 只处理了 VSC 的 data-theme="dark") */
+:root[data-theme="md3-dark"] .login-logo {
+	filter: invert(1);
+}

@@ -32,6 +32,7 @@
 	--fg-muted: #616161;      /* 次要信息 */
 	--fg-subtle: #8b8b8b;     /* 弱化: 单位 / 脚注 / 占位符 */
 	--fg-on-accent: #ffffff;  /* 强调色底上的文字 */
+	--fg-on-danger: var(--fg-on-accent); /* 危险填充底上的文字; 皮肤可单独改 (如 MD3 深色) */
 
 	/* ==================== 颜色 · 线条 ==================== */
 	--border: rgba(0, 0, 0, 0.10);        /* 分隔线 / 卡片描边 */
@@ -105,6 +106,36 @@
 	--r-sm: 3px;
 	--r-md: 6px;
 	--r-lg: 10px;
+
+	/* ==================== 结构 · 形态钩子 ====================
+	 * 风格皮肤 (vsc / md3 / 后续 WinUI) 的形态差异收敛在这些令牌上:
+	 * 共享原语只消费它们, 皮肤改值即可换形态, 不必写组件/页面覆盖。
+	 * 这里给 VSC 基准值; 真结构差异 (导航指示器几何等) 才留给皮肤覆盖区。 */
+	--r-xl: var(--r-lg);      /* extra-large: 弹窗 / 登录卡 */
+	--btn-r: var(--r-sm);
+	--btn-bg: var(--bg-panel);
+	--btn-border: var(--border-strong);
+	--btn-fw: 400;
+	--btn-ls: normal;
+	--icon-btn-r: var(--r-sm);
+	--input-focus-ring: 0 0 0 2px var(--bg-selected);
+	--card-border: var(--border);
+	--card-shadow: none;
+	--dialog-border: var(--border);
+	--dialog-divider: var(--border);
+	--dialog-title-fs: var(--fs);
+	--dialog-title-fw: 600;
+	--tooltip-r: var(--r-sm);
+	--tooltip-px: var(--sp-2);
+	--bar-h: 6px;
+	--activity-r: 0;
+	--nav-gap: normal;        /* 二级侧栏项间距 */
+	--nav-edge: 0;            /* 二级侧栏首尾留白 */
+	--nav-item-r: 0;
+	--nav-item-mx: 0;         /* 菜单项水平外边距 (宽度同步收缩) */
+	--nav-item-px: var(--sp-3);
+	--nav-active-bg: var(--bg-active);
+	--nav-active-fw: 400;
 
 	/* ==================== 结构 · 层级 ====================
 	 * 集中定义, 避免各组件各写一个数字而互相盖住 (下拉浮层曾被弹窗盖住)。 */

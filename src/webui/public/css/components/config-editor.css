@@ -116,7 +116,7 @@ input.config-input:focus,
 textarea.config-textarea:focus,
 .config-select:focus {
 	border-color: var(--accent);
-	box-shadow: 0 0 0 2px var(--bg-selected);
+	box-shadow: var(--input-focus-ring);
 }
 
 input.config-input:disabled,
@@ -488,8 +488,8 @@ input.config-slider:focus-visible,
 	font-size: var(--fs-sm);
 	cursor: pointer;
 
-	border: 1px solid var(--border-strong);
-	border-radius: var(--r-sm);
+	border: 1px solid var(--btn-border);
+	border-radius: var(--btn-r);
 	background: transparent;
 	color: var(--fg);
 

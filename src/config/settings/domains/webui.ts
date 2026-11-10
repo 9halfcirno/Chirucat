@@ -23,6 +23,8 @@ export interface WebUISettings extends Record<string, unknown> {
 	localNoAuth: boolean;
 	frontConfig: {
 		enableTestLab: boolean;
+		/** 界面风格; 值文件里缺省时由 schema 补 "vsc" */
+		uiStyle?: "vsc" | "md3" | "winui";
 	};
 }
 
@@ -83,6 +85,18 @@ export const webuiSettings: ConfigRoot = {
 			label: "前端",
 			desc: "下发给 WebUI 前端的开关, 保存后立即生效",
 			controls: [
+				{
+					type: "select",
+					id: "uiStyle",
+					label: "界面风格",
+					default: "vsc",
+					items: [
+						{ label: "VS Code 风格", value: "vsc" },
+						{ label: "Material 3 风格", value: "md3" },
+						{ label: "WinUI 风格", value: "winui" },
+					],
+					desc: "WebUI 的视觉风格; 明暗仍由顶栏按钮或系统偏好决定。保存后立即生效, 对所有访问者生效",
+				},
 				{
 					type: "switch",
 					id: "enableTestLab",

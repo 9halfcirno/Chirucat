@@ -1,0 +1,266 @@
+/**
+ * Chirucat WebUI 设计令牌 — WinUI 3 / Fluent 皮肤 (浅色 + 深色)
+ *
+ * 自包含皮肤, 由 js/spa/theme.js 在运行时注入 <link>, 挂载点:
+ *   :root[data-theme="winui"]       浅色
+ *   :root[data-theme="winui-dark"]  深色
+ *
+ * 配色取 Fluent (WinUI 3) 主题资源基线 (learn.microsoft.com XAML theme
+ * resources + Common_themeresources): mica 底色 #F3F3F3 / #202020,
+ * 强调色 #005FB8 / #60CDFF, 文本主色 #E4000000 / #FFFFFF。
+ * 部分 alpha (stroke / subtle fill / 状态色) 按公开基线取近似, 注释标明。
+ * 形态: ControlCornerRadius 4 / OverlayCornerRadius 8, 控件高 32px,
+ * 分层靠 1px 描边而不是阴影, 焦点是内外双环, 导航选中是短粗强调竖条。
+ *
+ * 结构:
+ *   1. 浅色颜色令牌  (:root[data-theme="winui"])
+ *   2. 深色颜色令牌  (:root[data-theme="winui-dark"])
+ *   3. 共用结构令牌 + 形态钩子取值 (语义清单见 default.css)
+ *   4. 组件外观覆盖: 只留令牌表达不了的真结构差异
+ *      (双环焦点 / nav rail 指示器几何 / 输入框聚焦描边)
+ */
+
+/* ==================== 1. 浅色 ==================== */
+
+:root[data-theme="winui"] {
+	color-scheme: light;
+
+	/* ---- 表面: mica 基色 + layer 白卡 ---- */
+	--bg-app: #f3f3f3;        /* SolidBackgroundFillColorBase */
+	--bg-activity: #ebebeb;   /* 近似 pane 底 (基色降一档) */
+	--bg-sidebar: #f9f9f9;    /* NavigationView 面板 */
+	--bg-panel: #ffffff;      /* LayerCard 白 */
+	--bg-elevated: #ffffff;   /* 飞出/弹窗层 (WinUI 弹窗不加深, 靠描边+阴影) */
+	--bg-input: #fcfcfc;      /* ControlFillColorDefault 70% 白 近似 */
+
+	/* 交互态: SubtleFill 基线 (hover 3.7% / pressed 2.4% 黑, 近似) */
+	--bg-hover: rgba(0, 0, 0, 0.037);
+	--bg-active: rgba(0, 0, 0, 0.024);
+	--bg-selected: rgba(0, 95, 184, 0.1);
+
+	/* ---- 文字: TextFillColor 三档 ---- */
+	--fg: rgba(0, 0, 0, 0.8956);
+	--fg-muted: rgba(0, 0, 0, 0.6063);
+	--fg-subtle: rgba(0, 0, 0, 0.4458);
+	--fg-on-accent: #ffffff;  /* TextOnAccentFillColorPrimary */
+
+	/* ---- 线条: 卡片 5.8% / 控件 16% 黑 (ControlStroke 近似) ---- */
+	--border: rgba(0, 0, 0, 0.058);
+	--border-strong: rgba(0, 0, 0, 0.16);
+
+	/* ---- 语义 ---- */
+	--accent: #005fb8;        /* AccentFillColorDefault */
+	--accent-hover: #1a6fbf;  /* 90% 强调叠白 (Secondary 近似) */
+	--ok: #0f7b0f;            /* InfoBar Success 前景 */
+	--warn: #9d5d00;          /* InfoBar Caution 前景 */
+	--danger: #c42b1c;        /* InfoBar Error 前景 */
+
+	--accent-soft: rgba(0, 95, 184, 0.12);
+	--ok-soft: #dff6dd;       /* InfoBar Success 底 */
+	--ok-line: rgba(15, 123, 15, 0.5);
+	--warn-soft: #fff4ce;     /* InfoBar Caution 底 */
+	--warn-line: rgba(157, 93, 0, 0.5);
+	--danger-soft: #fde7e9;   /* InfoBar Error 底 */
+	--danger-line: rgba(196, 43, 28, 0.5);
+
+	--fg-on-danger: #ffffff;
+
+	/* ---- 插件类型标识: 强调蓝 / 青 / 紫 (Fluent 色板近似) ---- */
+	--type-adapter: #005fb8;
+	--type-adapter-soft: rgba(0, 95, 184, 0.12);
+	--type-service: #038387;
+	--type-service-soft: rgba(3, 131, 135, 0.12);
+	--type-normal: #8764b8;
+	--type-normal-soft: rgba(135, 100, 184, 0.12);
+
+	/* ---- 遮罩 / 毛玻璃 (Acrylic 近似) ---- */
+	--scrim: rgba(0, 0, 0, 0.3);
+	--overlay-bg: rgba(243, 243, 243, 0.6);
+	--glass-bg: rgba(252, 252, 252, 0.85);
+	--glass-blur: 24px;
+	--glass-border: rgba(0, 0, 0, 0.08);
+
+	/* 日志终端区: 深色终端观感 (命令提示符底) */
+	--log-bg: rgba(32, 32, 32, 0.94);
+
+	/* 焦点双环: 内环贴控件 (Secondary), 外环对比色 (Primary) */
+	--focus-inner: #ffffff;
+	--focus-outer: rgba(0, 0, 0, 0.8956);
+
+	/* WinUI 阴影很克制: 卡片无, 飞出一层薄影 */
+	--shadow-1: 0 2px 8px rgba(0, 0, 0, 0.14);
+	--shadow-2: 0 8px 16px rgba(0, 0, 0, 0.14);
+}
+
+/* ==================== 2. 深色 ==================== */
+
+:root[data-theme="winui-dark"] {
+	color-scheme: dark;
+
+	/* ---- 表面: 深色 mica 基色 + 5% 白 layer ---- */
+	--bg-app: #202020;        /* SolidBackgroundFillColorBase */
+	--bg-activity: #272727;   /* 近似 pane 底 */
+	--bg-sidebar: #252525;
+	--bg-panel: #2b2b2b;      /* LayerFillColorDefault 近似 */
+	--bg-elevated: #2c2c2c;   /* 飞出层 */
+	--bg-input: #2d2d2d;      /* ControlFillColorDefault 6% 白 近似 */
+
+	--bg-hover: rgba(255, 255, 255, 0.06);
+	--bg-active: rgba(255, 255, 255, 0.033);
+	--bg-selected: rgba(96, 205, 255, 0.12);
+
+	/* ---- 文字 ---- */
+	--fg: #ffffff;
+	--fg-muted: rgba(255, 255, 255, 0.787);
+	--fg-subtle: rgba(255, 255, 255, 0.534);
+	--fg-on-accent: #000000;  /* 深色强调是浅蓝, 文字取黑 */
+
+	/* ---- 线条: 深色描边偏黑, 控件描边微亮 ---- */
+	--border: rgba(0, 0, 0, 0.2);
+	--border-strong: rgba(255, 255, 255, 0.09);
+
+	/* ---- 语义 ---- */
+	--accent: #60cdff;        /* AccentFillColorDefault (dark) */
+	--accent-hover: #5abce9;  /* 90% 强调叠底 近似 */
+	--ok: #6ccb5f;            /* InfoBar Success 前景 (dark) */
+	--warn: #fce100;          /* InfoBar Caution 前景 (dark) */
+	--danger: #ff99a4;        /* InfoBar Error 前景 (dark) */
+
+	--accent-soft: rgba(96, 205, 255, 0.16);
+	--ok-soft: #393d1b;       /* InfoBar Success 底 (dark) */
+	--ok-line: rgba(108, 203, 95, 0.5);
+	--warn-soft: #433519;     /* InfoBar Caution 底 (dark) */
+	--warn-line: rgba(252, 225, 0, 0.5);
+	--danger-soft: #442726;   /* InfoBar Error 底 (dark) */
+	--danger-line: rgba(255, 153, 164, 0.5);
+
+	--fg-on-danger: #000000;
+
+	/* ---- 插件类型标识: 深色提亮一档 ---- */
+	--type-adapter: #60cdff;
+	--type-adapter-soft: rgba(96, 205, 255, 0.16);
+	--type-service: #5fc9cf;
+	--type-service-soft: rgba(95, 201, 207, 0.16);
+	--type-normal: #b4a0ff;
+	--type-normal-soft: rgba(180, 160, 255, 0.16);
+
+	/* ---- 遮罩 / 毛玻璃 ---- */
+	--scrim: rgba(0, 0, 0, 0.45);
+	--overlay-bg: rgba(32, 32, 32, 0.6);
+	--glass-bg: rgba(44, 44, 44, 0.85);
+	--glass-blur: 24px;
+	--glass-border: rgba(255, 255, 255, 0.07);
+
+	--log-bg: rgba(28, 28, 28, 0.94);
+
+	--focus-inner: #000000;
+	--focus-outer: #ffffff;
+
+	/* 深色阴影加重才有层次 */
+	--shadow-1: 0 2px 8px rgba(0, 0, 0, 0.28);
+	--shadow-2: 0 8px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* ==================== 3. 结构 + 形态钩子 (两套明暗共用) ==================== */
+
+:root[data-theme="winui"],
+:root[data-theme="winui-dark"] {
+	/* Fluent 基准字体 */
+	--font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+
+	/* 密度: WinUI 标准控件高 32px */
+	--ctl-h: 32px;
+	--row-h: 28px;
+
+	/* 形状: ControlCornerRadius 4 / OverlayCornerRadius 8 */
+	--r-sm: 4px;
+	--r-md: 4px;
+	--r-lg: 8px;
+	--r-xl: 8px;
+
+	/* 动效: Fluent decelerate 曲线, 时长取 fast/normal 档 */
+	--dur-fast: 0.1s;
+	--dur: 0.167s;
+	--dur-slow: 0.25s;
+	--ease: cubic-bezier(0.1, 0.9, 0.2, 1);
+
+	/* 形态钩子: 语义清单见 default.css */
+	--btn-r: 4px;
+	--btn-bg: rgba(255, 255, 255, 0.7);   /* ControlFillColorDefault; 深色块覆盖 */
+	--btn-border: rgba(0, 0, 0, 0.08);    /* ControlStroke 近似; 深色块覆盖 */
+	--btn-fw: 400;
+	--btn-ls: normal;
+	--icon-btn-r: 4px;
+	--input-focus-ring: inset 0 -2px 0 0 var(--accent); /* 聚焦=底部强调线 */
+	--card-border: var(--border);
+	--card-shadow: none;                 /* Fluent 分层靠描边不靠阴影 */
+	--dialog-border: var(--border);
+	--dialog-divider: transparent;
+	--dialog-title-fs: var(--fs-xl);
+	--dialog-title-fw: 600;
+	--tooltip-r: 4px;
+	--tooltip-px: var(--sp-3);
+	--bar-h: 4px;
+	--activity-r: 4px;
+	--nav-gap: 2px;
+	--nav-edge: var(--sp-1);
+	--nav-item-r: 4px;
+	--nav-item-mx: var(--sp-1);
+	--nav-item-px: var(--sp-3);
+	--nav-active-bg: var(--bg-hover);    /* 选中=SubtleFillSecondary */
+	--nav-active-fw: 400;
+	--bot-nav-extra: 0px;                /* 图标钮与标准 32px 对齐 */
+
+	/* 深色控件填充/描边换方向 (上面浅色值是默认) */
+	--log-fg: #e4e4e4;
+}
+
+:root[data-theme="winui-dark"] {
+	--btn-bg: rgba(255, 255, 255, 0.06);
+	--btn-border: rgba(255, 255, 255, 0.09);
+}
+
+/* ==================== 4. 组件外观覆盖 ====================
+ * 只留形态钩子表达不了的真结构差异。
+ * :root[data-theme^="winui"] 同时命中 winui / winui-dark。 */
+
+/* 键盘焦点: Fluent 双环 (内白/黑贴边 + 外对比环) */
+:root[data-theme^="winui"] :is(.btn, .icon-btn, .activity-btn, .spa-sidebar-item, .sidebar-toggle):focus-visible {
+	outline: none;
+	box-shadow: 0 0 0 1px var(--focus-inner), 0 0 0 2px var(--focus-outer);
+}
+
+/* 输入框聚焦: 保留原描边, 只加底部强调线 (环令牌负责) */
+:root[data-theme^="winui"] :is(.input, .config-input, .config-textarea, .config-select):focus {
+	border-color: var(--border-strong);
+}
+
+/* ---- 活动栏: NavigationView 选中态 ----
+ * VSC 的整高竖条换成 3x16 圆头短条 (WinUI 指示器几何) */
+
+:root[data-theme^="winui"] .activity-btn.active {
+	background: var(--bg-hover);
+}
+
+:root[data-theme^="winui"] .activity-btn.active::before {
+	inset: 50% auto auto 0;
+	transform: translateY(-50%);
+	width: 3px;
+	height: 16px;
+	border-radius: 2px;
+	background: var(--accent);
+}
+
+/* 次级侧栏同款短条 (几何与活动栏一致) */
+:root[data-theme^="winui"] .spa-sidebar-item.active::before {
+	inset: 50% auto auto 0;
+	transform: translateY(-50%);
+	width: 3px;
+	height: 16px;
+	border-radius: 2px;
+}
+
+/* 字标是单色黑, winui-dark 下要反色 */
+:root[data-theme="winui-dark"] .login-logo {
+	filter: invert(1);
+}

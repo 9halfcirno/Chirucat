@@ -78,13 +78,15 @@
 
 	font-family: inherit;
 	font-size: var(--fs-sm);
+	font-weight: var(--btn-fw);
+	letter-spacing: var(--btn-ls);
 	line-height: 1;
 	white-space: nowrap;
 
 	color: var(--fg);
-	background: var(--bg-panel);
-	border: 1px solid var(--border-strong);
-	border-radius: var(--r-sm);
+	background: var(--btn-bg);
+	border: 1px solid var(--btn-border);
+	border-radius: var(--btn-r);
 	cursor: pointer;
 
 	transition: background-color var(--dur-fast) var(--ease),
@@ -114,7 +116,7 @@
 
 /* 危险操作按钮 */
 .btn.danger {
-	color: var(--fg-on-accent);
+	color: var(--fg-on-danger);
 	background: var(--danger);
 	border-color: transparent;
 }
@@ -133,7 +135,7 @@
 	color: var(--fg-muted);
 	background: transparent;
 	border: 1px solid transparent;
-	border-radius: var(--r-sm);
+	border-radius: var(--icon-btn-r);
 	cursor: pointer;
 
 	transition: color var(--dur-fast) var(--ease),
@@ -197,7 +199,7 @@ textarea.input {
 .input:focus {
 	outline: none;
 	border-color: var(--accent);
-	box-shadow: 0 0 0 2px var(--bg-selected);
+	box-shadow: var(--input-focus-ring);
 }
 
 .input:disabled {
@@ -216,8 +218,9 @@ textarea.input {
 	padding: var(--sp-3);
 
 	background: var(--bg-panel);
-	border: 1px solid var(--border);
+	border: 1px solid var(--card-border);
 	border-radius: var(--r-md);
+	box-shadow: var(--card-shadow);
 }
 
 /* 毛玻璃卡片: 浮层 (弹窗 / Toast) 同款表面 */
@@ -231,7 +234,7 @@ textarea.input {
 /* ==================== 进度条 ==================== */
 
 .bar {
-	height: 6px;
+	height: var(--bar-h);
 	border-radius: 999px;
 	background: var(--bg-active);
 	overflow: hidden;

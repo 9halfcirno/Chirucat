@@ -178,6 +178,7 @@ body {
 	border: 0;
 	background: transparent;
 	color: var(--fg-subtle);
+	border-radius: var(--activity-r);
 	cursor: pointer;
 
 	transition: color var(--dur-fast) var(--ease),
@@ -259,9 +260,20 @@ body.nav-collapsed #side-bar {
 	display: flex;
 	flex-direction: column;
 	align-items: stretch;
+	gap: var(--nav-gap);
 
 	flex: 0 0 auto;
 	min-width: 0;
+}
+
+/* 首尾留白落在子元素 margin 上: 窄屏收起态 (height:0 + overflow:hidden)
+   不会像容器 padding 那样撑出 padding box 露出内容碎片 */
+.spa-sidebar > :first-child {
+	margin-top: var(--nav-edge);
+}
+
+.spa-sidebar > :last-child {
+	margin-bottom: var(--nav-edge);
 }
 
 /* 二级菜单项: 纯文字 (无背景无边框), 左对齐, 撑满侧栏宽度。
@@ -275,10 +287,12 @@ body.nav-collapsed #side-bar {
 	flex: 0 0 auto;
 
 	display: block;
-	width: 100%;
-	padding: var(--sp-1) var(--sp-3);
+	width: calc(100% - var(--nav-item-mx) * 2);
+	margin: 0 var(--nav-item-mx);
+	padding: var(--sp-1) var(--nav-item-px);
 
 	border: 0;
+	border-radius: var(--nav-item-r);
 	background: transparent;
 	color: var(--fg-muted);
 	font-family: inherit;
@@ -307,7 +321,8 @@ body.nav-collapsed #side-bar {
 
 .spa-sidebar-item.active {
 	color: var(--fg);
-	background: var(--bg-active);
+	background: var(--nav-active-bg);
+	font-weight: var(--nav-active-fw);
 }
 
 /* 选中态: 左侧 2px 强调色竖条 (与活动栏按钮同款) */
@@ -386,7 +401,7 @@ body:not(.authed) #main {
 
 	background: var(--bg-panel);
 	border: 1px solid var(--border);
-	border-radius: var(--r-lg);
+	border-radius: var(--r-xl);
 	box-shadow: var(--shadow-2);
 }
 

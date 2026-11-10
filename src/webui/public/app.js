@@ -29,6 +29,7 @@ import { createApp } from "./js/spa/framework.js";
 import { startServicePages } from "./js/spa/service-pages.js";
 import * as auth from "./js/spa/auth.js";
 import toast from "./js/spa/toast.js";
+import { initTheme, syncUIStyleFromServer } from "./js/spa/theme.js";
 
 const app = createApp({
 	main: document.getElementById("main"),
@@ -151,6 +152,10 @@ function enterMain() {
 	showMain();
 	app.start();
 
+	// 界面风格是服务端设置项: 登录后向 get_webui_front_config 校准一次。
+	// 皮肤样式表已由 theme.js 在启动时预加载, 这里只负责取值; 不 await, 不拖慢首屏。
+	syncUIStyleFromServer();
+
 	// 服务插件注册的页面 (一级导航 + Bot 详情窗口的二级导航) 走清单对账:
 	// 启动时拉一次, 之后服务启停/刷新时主动拉, 另有焦点触发与兜底轮询。
 	// insertBefore 决定它们在活动栏里插在哪一段 —— 排在"插件"页之前。
@@ -192,65 +197,11 @@ auth.onUnauthorized(() => {
 	}
 })();
 
-// ---- 主题切换 (跟随系统 / 浅色 / 深色 三态循环) ----
-//
-// 两个标记分工不同, 不要混:
-//   data-theme-mode  用户选的模式 (auto|light|dark) → 决定顶栏显示哪个图标
-//   data-theme       "dark" 或不存在 → 决定实际配色
-// 跟随系统时 data-theme 会随系统偏好变化, 但 mode 始终是 auto。
-// index.html 的 <head> 内联脚本早在首屏前就把这两者写好, 避免白闪;
-// 这里只负责交互与持久化。
-const THEME_KEY = "chirucat-theme";
-const THEME_MODES = ["auto", "light", "dark"];
-const THEME_MODE_NAMES = { auto: "跟随系统", light: "浅色", dark: "深色" };
-const themeToggle = document.getElementById("theme-toggle");
-const darkMedia = matchMedia("(prefers-color-scheme: dark)");
-
-if (themeToggle) {
-	/** 当前模式; 以 <head> 脚本写下的 data-theme-mode 为准 */
-	let mode = THEME_MODES.includes(document.documentElement.dataset.themeMode)
-		? document.documentElement.dataset.themeMode
-		: "auto";
-
-	/** 提示当前模式与下一次会切到什么 */
-	function syncThemeLabel() {
-		const next = THEME_MODES[(THEME_MODES.indexOf(mode) + 1) % THEME_MODES.length];
-		const label = `主题: ${THEME_MODE_NAMES[mode]} (点击切换到${THEME_MODE_NAMES[next]})`;
-		themeToggle.title = label;
-		themeToggle.setAttribute("aria-label", label);
-	}
-
-	/** 把模式落到 <html>: 写模式标记, 再按模式决定实际配色 */
-	const applyMode = next => {
-		mode = next;
-		document.documentElement.dataset.themeMode = next;
-
-		const dark = next === "dark" || (next === "auto" && darkMedia.matches);
-		if (dark) document.documentElement.dataset.theme = "dark";
-		else delete document.documentElement.dataset.theme;
-
-		syncThemeLabel();
-	};
-
-	themeToggle.addEventListener("click", () => {
-		const next = THEME_MODES[(THEME_MODES.indexOf(mode) + 1) % THEME_MODES.length];
-		applyMode(next);
-
-		try {
-			// 跟随系统也显式存下来, 这样用户能主动从手动模式切回跟随系统
-			localStorage.setItem(THEME_KEY, next);
-		} catch {
-			/* localStorage 不可用 (隐私模式等): 本次会话内仍生效, 只是记不住 */
-		}
-	});
-
-	// 跟随系统时, 系统偏好变了要立刻反映到配色上
-	darkMedia.addEventListener("change", () => {
-		if (mode === "auto") applyMode("auto");
-	});
-
-	syncThemeLabel();
-}
+// ---- 顶栏明暗切换 ----
+// 三态循环 (跟随系统 / 浅色 / 深色) 只是「明暗」这一个维度; 界面风格
+// (VS Code / Material 3) 是设置页 WebUI 域里的前端设置项, 不占用这个按钮。
+// 两个维度如何合成 data-theme, 统一放在 js/spa/theme.js, 设置页保存后也调它。
+initTheme();
 
 // 窄屏的二级菜单 (折叠 header 条 / 展开高度) 由 js/spa/sidebar.js 负责,
 // 不再需要独立的汉堡按钮与遮罩点击收起逻辑。

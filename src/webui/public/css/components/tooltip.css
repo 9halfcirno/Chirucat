@@ -10,12 +10,12 @@
 
 	/* 提示都短, 宽度自适应; 给个上限避免长文本拉成一条 */
 	max-width: min(320px, 60vw);
-	padding: 3px var(--sp-2);
+	padding: 3px var(--tooltip-px);
 
 	background: var(--bg-elevated);
 	color: var(--fg);
 	border: 1px solid var(--border);
-	border-radius: var(--r-sm);
+	border-radius: var(--tooltip-r);
 	box-shadow: var(--shadow-1);
 
 	font-size: var(--fs-sm);

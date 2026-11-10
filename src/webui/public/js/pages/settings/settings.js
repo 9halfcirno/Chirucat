@@ -14,6 +14,7 @@ import { callAPI } from "../../spa/api.js";
 import { createButton } from "../../spa/components/button.js";
 import { createConfigList } from "../../spa/components/config-editor.js";
 import { syncServicePages } from "../../spa/service-pages.js";
+import { setUIStyle } from "../../spa/theme.js";
 import toast from "../../spa/toast.js";
 
 /** 域 id → 侧栏展示名; 未列出的域直接显示 id */
@@ -135,6 +136,12 @@ async function handleSave(domain, list) {
 		(domain.id === "core" && changed.includes("statistics"))
 		|| (domain.id === "webui" && changed.includes("frontConfig.enableTestLab"));
 	if (pageSwitchChanged) await syncServicePages();
+
+	// 界面风格是下发给前端的设置项: 保存后当场换皮肤, 不必刷新页面。
+	// 取后端规范化后的值 (值文件里缺省时会被补成 schema 的 "vsc")。
+	if (domain.id === "webui" && changed.includes("frontConfig.uiStyle")) {
+		setUIStyle(result?.values?.frontConfig?.uiStyle ?? patch?.frontConfig?.uiStyle);
+	}
 
 	// 换监听端口: 服务器马上会先关旧监听再在新端口上重开, 这个页面所在的原址会失效。
 	// 是否真的换了端口以服务端的 changed 为准 —— 绑定域名 / 反向代理 / 端口映射时,

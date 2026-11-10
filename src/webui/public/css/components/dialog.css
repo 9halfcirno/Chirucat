@@ -39,8 +39,8 @@
 	flex-direction: column;
 
 	background: var(--bg-elevated);
-	border: 1px solid var(--border);
-	border-radius: var(--r-lg);
+	border: 1px solid var(--dialog-border);
+	border-radius: var(--r-xl);
 	box-shadow: var(--shadow-2);
 }
 
@@ -68,7 +68,7 @@
 	flex-shrink: 0;
 	padding: var(--sp-2) var(--sp-3);
 
-	border-bottom: 1px solid var(--border);
+	border-bottom: 1px solid var(--dialog-divider);
 }
 
 .dialog-window header .icon-btn {
@@ -88,8 +88,8 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 
-	font-size: var(--fs);
-	font-weight: 600;
+	font-size: var(--dialog-title-fs);
+	font-weight: var(--dialog-title-fw);
 	color: var(--fg);
 }
 
@@ -109,7 +109,7 @@
 	flex-shrink: 0;
 	padding: var(--sp-2) var(--sp-3);
 
-	border-top: 1px solid var(--border);
+	border-top: 1px solid var(--dialog-divider);
 }
 
 /* 按钮靠右; row-reverse 让主操作在最右 */

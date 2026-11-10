@@ -3,6 +3,8 @@ import type { Request, Response } from "express";
 
 export type WebUIFrontConfig = {
 	enableTestLab?: boolean;
+	/** 界面风格, 由设置页的 webui 域下发; 缺省按 "vsc" 处理 */
+	uiStyle?: "vsc" | "md3" | "winui";
 }
 
 export interface WebUIAPI {
