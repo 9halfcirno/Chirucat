@@ -441,8 +441,8 @@ input.config-slider:focus-visible,
 	max-width: 100%;
 	/* flex 子项默认不会被压到内容宽度以下, 显式放开 */
 	min-width: 0;
-	overflow-x: auto;
-	overflow-y: hidden;
+	overflow: auto;
+	max-height: 60vh;
 }
 
 .config-table {
@@ -461,9 +461,14 @@ input.config-slider:focus-visible,
 }
 
 .config-table th {
+	position: sticky;
+	top: 0;
 	font-weight: 600;
+	z-index: 2;
 	color: var(--fg-muted);
-	border-bottom: 1px solid var(--border-strong);
+	background-color: var(--bg-panel, #fff);
+	box-shadow: inset 0 -1px 0 var(--border-strong);
+	/* border-bottom: 1px solid var(--border-strong); */
 }
 
 .config-table tbody tr+tr td {
