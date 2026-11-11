@@ -102,7 +102,7 @@
 	/* 两个方向都允许滚动: 内容宽于弹窗上限时不至于溢出到弹窗外 */
 	overflow: auto;
 
-	padding: var(--sp-3);
+	padding: var(--sp-2);
 }
 
 .dialog-window footer {

@@ -37,6 +37,8 @@ class El {
 		this.scrollHeight = 0;
 
 		this.style = { _props: new Map(), setProperty(k, v) { this._props.set(k, v); } };
+		/* dataset 桩: 真实 DOM 里是 DOMStringMap, 这里只要能读写即可 */
+		this.dataset = {};
 
 		const self = this;
 		this.classList = {
@@ -69,12 +71,27 @@ class El {
 	set innerHTML(value) { this.textContent = value; }
 
 	appendChild(node) {
+		/* DocumentFragment: 真实 DOM 里 append 会展开它的子节点, 而不是塞进一个节点 */
+		if (node.tagName === "#FRAGMENT") {
+			for (const child of [...node.children]) this.appendChild(child);
+			node.children = [];
+			return node;
+		}
 		node.parent = this;
 		this.children.push(node);
 		// 浏览器里外链资源是异步加载完再触发 load; 样式表加载靠它 resolve
 		if (node.tagName === "LINK") setTimeout(() => node.fire("load"), 0);
 		return node;
 	}
+	removeChild(node) {
+		const at = this.children.indexOf(node);
+		if (at >= 0) {
+			this.children.splice(at, 1);
+			node.parent = null;
+		}
+		return node;
+	}
+	get childElementCount() { return this.children.length; }
 	append(...nodes) {
 		for (const node of nodes) this.appendChild(node);
 	}
@@ -159,8 +176,7 @@ class El {
 }
 
 const elements = new Map();
-const hashChangeListeners = [];
-/** 浏览器里 hash 是地址栏的一部分; 赋值会异步派发 hashchange */
+const hashChangeListeners = [];/** 浏览器里 hash 是地址栏的一部分; 赋值会异步派发 hashchange */
 let hash = "";
 
 const location = {
@@ -183,6 +199,8 @@ const documentStub = {
 	body: new El("body"),
 	documentElement: { dataset: {} },
 	createElement: (tag) => new El(tag),
+	/* DocumentFragment 桩: 只需能装子节点, 再整体 append 到真实容器 */
+	createDocumentFragment: () => new El("#fragment"),
 	getElementById: (id) => elements.get(id) ?? null,
 	addEventListener: () => { },
 	removeEventListener: () => { },
@@ -210,6 +228,46 @@ globalThis.window = windowStub;
 globalThis.document = documentStub;
 globalThis.location = location;
 globalThis.history = historyStub;
+
+/**
+ * EventSource 桩: 只记录实例与监听器, 由用例手动 fire 事件。
+ * Bot 日志页靠它建立 SSE 连接, 没有这个桩就没法验证 tag 与连接清理。
+ */
+const eventSources = [];
+class EventSourceStub {
+	constructor(url) {
+		this.url = String(url);
+		this.readyState = 0; // CONNECTING
+		this.closed = false;
+		this._listeners = new Map();
+		eventSources.push(this);
+	}
+	addEventListener(type, fn) {
+		if (!this._listeners.has(type)) this._listeners.set(type, []);
+		this._listeners.get(type).push(fn);
+	}
+	removeEventListener(type, fn) {
+		const list = this._listeners.get(type) ?? [];
+		const at = list.indexOf(fn);
+		if (at >= 0) list.splice(at, 1);
+	}
+	close() {
+		this.closed = true;
+		this.readyState = 2; // CLOSED
+	}
+	/** 桩专用: 触发一条 SSE 事件 */
+	fire(type, event = {}) {
+		this.readyState = 1; // OPEN
+		const e = { type, currentTarget: this, target: this, ...event };
+		for (const fn of [...(this._listeners.get(type) ?? [])]) fn(e);
+	}
+}
+globalThis.EventSource = EventSourceStub;
+
+// rAF 桩: 日志页靠它把一轮 SSE 推送批量写入 DOM
+let rafSeq = 0;
+globalThis.requestAnimationFrame = (fn) => setTimeout(() => fn(Date.now()), 0);
+globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
 
 // matchMedia: 同一个查询返回同一个对象 (与浏览器一致), 用例可直接改它的 matches
 const mediaQueries = new Map();
@@ -933,10 +991,10 @@ await settle(12);
 
 const botNav = () => botContent.querySelector(".bot-nav");
 const botMain = () => botContent.querySelector(".bot-main");
-eq(botNav().children.map((b) => b.getAttribute("aria-label")), ["信息", "插件", "名单", "设置"], "核心子页 + 插件页按 order 合并排序");
-eq(botMain().textContent.includes("id: bot-a"), true, "默认打开第一项(信息)");
+eq(botNav().children.map((b) => b.getAttribute("aria-label")), ["信息", "插件", "日志", "名单", "设置"], "核心子页 + 插件页按 order 合并排序");
+eq(botMain().textContent.includes("bot-a"), true, "默认打开第一项(信息)");
 
-await botNav().children[2].click();
+await botNav().children[3].click();
 await settle(4);
 eq(botMain().textContent, "Bot 名单: bot-a", "插件页面拿到当前 Bot 并渲染");
 
@@ -944,15 +1002,154 @@ eq(botMain().textContent, "Bot 名单: bot-a", "插件页面拿到当前 Bot 并
 payload = pageViews(8, [filterView]);
 await serviceSync.sync();
 await settle(4);
-eq(botNav().children.map((b) => b.getAttribute("aria-label")), ["信息", "插件", "设置"], "停用后该项从窗口里消失");
-eq(botMain().textContent.includes("id: bot-a"), true, "停在它上面时落到第一项");
+eq(botNav().children.map((b) => b.getAttribute("aria-label")), ["信息", "插件", "日志", "设置"], "停用后该项从窗口里消失");
+eq(botMain().textContent.includes("bot-a"), true, "停在它上面时落到第一项");
 
 // 窗口关闭后不再响应清单变化
 botContent.disposeBotContent();
 payload = pageViews(9, [filterView, botView]);
 await serviceSync.sync();
 await settle(3);
-eq(botNav().children.length, 3, "关闭后的窗口不再被清单变化驱动");
+eq(botNav().children.length, 4, "关闭后的窗口不再被清单变化驱动");
+
+section("Bot 信息页: 运行态 / 启停按钮 / 适配器 / 基础信息");
+
+// 接口可用时: bot/get 给实时运行态、目录与启动时间, plugin/scan 给适配器与普通插件。
+// botRunning 由启停接口改写, 用来验证工具栏点击后页面确实重新对齐。
+let botRunning = true;
+let lastStateRequest = null;
+const BOT_STARTED_AT = 1_700_000_000_000;
+
+globalThis.fetch = async (url, options) => {
+	const target = String(url);
+	if (target.endsWith("/api/bot/get")) {
+		return {
+			ok: true,
+			status: 200,
+			json: async () => ({
+				id: "bot-a",
+				name: "机器人A",
+				path: "C:\\Projects\\Chirucat\\bots\\bot-a",
+				running: botRunning,
+				runningTime: botRunning ? 3_725_000 : null,
+				startedAt: botRunning ? BOT_STARTED_AT : null,
+				state: { enable: true, enabledPlugins: [] },
+			}),
+		};
+	}
+	if (target.endsWith("/api/bot/state/update")) {
+		lastStateRequest = JSON.parse(options?.body ?? "{}");
+		botRunning = lastStateRequest.state === true;
+		return { ok: true, status: 200, json: async () => ({ success: true, state: botRunning }) };
+	}
+	if (target.endsWith("/api/bot/plugin/scan")) {
+		return {
+			ok: true,
+			status: 200,
+			json: async () => ({
+				running: botRunning,
+				plugins: {
+					global: [
+						{ id: "adapter-onebot", name: "OneBot", type: "adapter", status: "enabled" },
+					],
+					bot: [
+						{ id: "adapter-qq", name: "QQ", type: "adapter", status: "disabled" },
+						{ id: "plugin-echo", name: "回声", type: "normal", status: "enabled" },
+						{ id: "plugin-timer", name: "定时", type: "normal", status: "enabled" },
+						{ id: "plugin-lottery", name: "抽签", type: "normal", status: "disabled" },
+					],
+				},
+			}),
+		};
+	}
+	return { ok: false, status: 404, json: async () => ({ err: `unexpected url ${url}` }) };
+};
+
+const infoContent = createBotContent({ id: "bot-a", name: "机器人A" });
+documentStub.body.appendChild(infoContent);
+await settle(12);
+
+const infoMain = infoContent.querySelector(".bot-main");
+eq(infoMain.querySelector(".bot-info-name").textContent, "机器人A", "信息页显示 Bot 名称");
+eq(infoMain.querySelector(".bot-info-id").textContent, "bot-a", "名称右侧显示 Bot ID");
+eq(infoMain.querySelector(".bot-info-state").textContent, "运行中", "运行态来自 running 字段");
+ok(infoMain.querySelector(".bot-info-uptime-value").textContent.includes("1小时 2分"), "运行时长按 runningTime 本地换算");
+
+const adapterChips = infoMain.querySelectorAll(".bot-adapter-chip");
+eq(adapterChips.length, 2, "列出全部适配器");
+ok(adapterChips.some((chip) => chip.textContent.includes("OneBot")), "启用中的适配器在列表里");
+ok(adapterChips.some((chip) => chip.textContent.includes("QQ")), "未启用的适配器也列出");
+ok(infoMain.textContent.includes("已装载 2 个 · 未启用 1 个"), "普通插件按装载数 / 总数统计");
+
+// 工具栏与基础信息
+eq(infoMain.querySelector(".bot-info-toggle").textContent, "停止 Bot", "运行中时启停按钮给出停止");
+ok(
+	infoMain.querySelector(".bot-info-toggle").parent.classList.contains("bot-info-runtime"),
+	"启停按钮位于运行状态行内 (不单独占一行)",
+);
+const metaValues = infoMain.querySelectorAll(".bot-info-kv-value");
+eq(metaValues.length, 2, "基础信息有目录与启动时间两行");
+ok(metaValues[0].textContent.includes("bots\\bot-a"), "基础信息展示 Bot 目录");
+ok(metaValues[1].textContent.startsWith("2023-11-1"), "基础信息展示启动时间");
+
+// 点击工具栏: 发出停止请求, 页面按新运行态重新对齐
+await infoMain.querySelector(".bot-info-toggle").click();
+await settle(12);
+eq(lastStateRequest?.state, false, "点击启停按钮发出停止请求");
+eq(infoMain.querySelector(".bot-info-toggle").textContent, "启动 Bot", "停止后按钮改为启动");
+eq(infoMain.querySelector(".bot-info-state").textContent, "已停止", "状态胶囊跟着变为已停止");
+eq(metaValues[1].textContent, "—", "未运行时启动时间留空");
+
+infoContent.disposeBotContent();
+globalThis.fetch = realFetch;
+
+section("Bot 日志页: 只订阅本 Bot 的 tag");
+
+const logContent = createBotContent({ id: "bot-a", name: "机器人A" });
+documentStub.body.appendChild(logContent);
+await settle(12);
+
+const logNav = logContent.querySelector(".bot-nav");
+// 第 3 项是日志 (信息 / 插件 / 日志 / 设置)
+await logNav.children[2].click();
+await settle(4);
+
+const logSource = eventSources[eventSources.length - 1];
+ok(logSource instanceof EventSourceStub, "打开日志页时建立了 SSE 连接");
+eq(logSource.url, "/api/log/stream?tag=bot-a", "连接地址只带当前 Bot 的 tag");
+
+logSource.fire("open");
+logSource.fire("log", {
+	data: JSON.stringify({ time: "2026-11-11 10:00:00", level: "info", name: "Bot bot-a", tag: "bot-a", message: "启动成功" }),
+});
+logSource.fire("log", {
+	data: JSON.stringify({ time: "2026-11-11 10:00:01", level: "debug", name: "Bot bot-a", tag: "bot-a", message: "调试信息" }),
+});
+await settle(4);
+
+const logMain = logContent.querySelector(".bot-main");
+eq(logMain.querySelectorAll(".log-line").length, 2, "两条日志都渲染出来");
+ok(logMain.textContent.includes("启动成功"), "日志文本来自 SSE 推送");
+ok(logMain.textContent.includes("[INFO]"), "行内保留等级标记");
+
+// 切走: 上一页的 SSE 必须被关掉, 否则每切一次就多一条连接
+await logNav.children[0].click();
+await settle(4);
+eq(logSource.closed, true, "切页后关闭了上一页的 SSE 连接");
+
+// 每个 Bot 用自己的 tag; 关窗时同样收尾
+const logContentB = createBotContent({ id: "bot-b", name: "机器人B" });
+documentStub.body.appendChild(logContentB);
+await settle(12);
+await logContentB.querySelector(".bot-nav").children[2].click();
+await settle(4);
+
+const logSourceB = eventSources[eventSources.length - 1];
+eq(logSourceB.url, "/api/log/stream?tag=bot-b", "不同 Bot 订阅各自的 tag");
+logContentB.disposeBotContent();
+eq(logSourceB.closed, true, "关窗时关闭 SSE 连接");
+
+logContent.disposeBotContent();
 
 section("窄屏折叠菜单在列表变化时不崩");
 setNarrow(true);

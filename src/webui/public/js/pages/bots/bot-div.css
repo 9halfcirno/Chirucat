@@ -6,6 +6,19 @@
 	height: 80vh;
 }
 
+/* 窄屏: 弹窗有 `min-width: min(360px, calc(100vw - var(--sp-6)))`,
+   而 80vw 会比它更小, 于是内容靠左、右侧留出一块随视口变窄而变大的空白。
+   阈值由两者的交点算出: 80vw = 360px 即视口 450px; 更窄时弹窗下限换成
+   100vw - 24px, 80vw 依然更小 (直到 120px 这种极端值)。
+   只有 Bot 窗口会这样 —— 其他弹窗的内容宽度是 auto, 不会比弹窗本身窄。
+   这里不写死 calc(360px - ...): 那会把两个文件里的常量绑在一起。
+   width: auto 作为块级子元素自动填满 .dialog-window-inner 的内容区。 */
+@media (max-width: 450px) {
+	.bot-div {
+		width: auto;
+	}
+}
+
 /* 窗口最大化时, 详情体跟随撑满 —— 80vw/80vh 是普通窗口下的尺寸, 不覆盖的话
    最大化后四周会留一圈空白。
    百分比高度能生效, 是因为 .dialog-window-inner 在 .maximize 下有了确定高度。 */
@@ -18,6 +31,8 @@
 .bot-nav {
 	display: flex;
 	flex-direction: column;
+	/* 导航条不参与收缩: 极端窄屏下不能让图标列被压扁 */
+	flex: 0 0 auto;
 	gap: var(--sp-2);
 	padding: 0 var(--sp-1);
 	border-right: 1px solid var(--border);
@@ -37,7 +52,13 @@
 
 .bot-main {
 	box-sizing: border-box;
-	width: 100%;
+
+	/* 占满导航条之外的剩余宽度。原写法 width: 100% 是相对 .bot-div 的
+	   内容盒算的, 加上左侧导航条后总宽就超过了 .bot-div —— 窄屏下表现为
+	   内容溢出 / 被挤压。flex: 1 + min-width: 0 才是 flex 里正确的写法。 */
+	flex: 1 1 auto;
+	min-width: 0;
+
 	height: 100%;
 	padding: var(--sp-2) var(--sp-3);
 

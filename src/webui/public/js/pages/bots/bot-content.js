@@ -28,6 +28,7 @@ import { getServicePages } from "../../spa/service-pages.js";
 const CORE_PAGES = [
 	{ url: "./bot-pages/info.js", order: 10 },
 	{ url: "./bot-pages/plugins.js", order: 20 },
+	{ url: "./bot-pages/logs.js", order: 30 },
 	{ url: "./bot-pages/setting.js", order: 90 },
 ];
 
@@ -60,6 +61,8 @@ export function createBotContent(bot) {
 	let closed = false;
 	/** 菜单项按钮: key → button (随 paintMenu 重建) */
 	const buttons = new Map();
+	/** 当前页面的清理函数 (render 的返回值); 切页/关窗时先调用 */
+	let disposeActive = null;
 
 	/** 建一个菜单项 (核心子页与服务插件页面共用) */
 	function addEntry({ key, title, icon, styles, order, render }) {
@@ -98,8 +101,19 @@ export function createBotContent(bot) {
 		syncHighlight();
 	}
 
-	/** 打开某一项 */
+	/**
+	 * 打开某一项
+	 *
+	 * 子页可以返回一个清理函数 (如日志页要关掉 EventSource): 切走或关窗时调用。
+	 * 插件页的 render 是 async, 返回的是 Promise —— 等它落定再接管, 期间若已切走
+	 * 就立即清理, 不留一个没人管的连接。
+	 */
 	function select(key) {
+		// 先收尾上一页: 它可能持有 SSE 连接 / 定时器
+		const previous = disposeActive;
+		disposeActive = null;
+		if (typeof previous === "function") previous();
+
 		const entry = entries.get(key);
 		if (!entry) {
 			botMain.replaceChildren();
@@ -110,7 +124,38 @@ export function createBotContent(bot) {
 		syncHighlight();
 		ensureStyles(entry.styles);
 		botMain.replaceChildren();
-		entry.render(botMain, bot, app);
+
+		const result = entry.render(botMain, bot, app);
+		adoptDisposer(result, key);
+	}
+
+	/**
+	 * 接管子页返回的清理函数 (同步返回或 Promise 均可)
+	 *
+	 * 渲染期间用户可能已经切到别的项: 那种情况下立即清理, 不能把它存成
+	 * 当前页面的 dispose —— 否则下次切页会漏掉这个连接。
+	 * @param {unknown} result render 的返回值
+	 * @param {string} key 发起渲染的菜单项
+	 */
+	function adoptDisposer(result, key) {
+		if (result && typeof result.then === "function") {
+			result.then(
+				(fn) => takeDisposer(fn, key),
+				() => { /* 渲染失败已由各自页面展示 */ },
+			);
+			return;
+		}
+		takeDisposer(result, key);
+	}
+
+	function takeDisposer(fn, key) {
+		if (typeof fn !== "function") return;
+		// 渲染期间已切走 / 窗口已关: 直接收尾
+		if (closed || activeKey !== key) {
+			fn();
+			return;
+		}
+		disposeActive = fn;
 	}
 
 	// ---- 服务插件注册的页面 ----
@@ -166,10 +211,13 @@ export function createBotContent(bot) {
 		paintMenu();
 	}) ?? null;
 
-	/** 收尾: 窗口关掉后别再响应清单变化 */
+	/** 收尾: 窗口关掉后别再响应清单变化, 并释放当前子页 (如日志页的 SSE 连接) */
 	div.disposeBotContent = () => {
 		closed = true;
 		unsubscribe?.();
+		const dispose = disposeActive;
+		disposeActive = null;
+		if (typeof dispose === "function") dispose();
 	};
 
 	// 先加载核心子页, 再合并服务插件页面并画出来 (与旧的逐个 addPage 等价, 只是有了顺序与来源)

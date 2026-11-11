@@ -290,6 +290,9 @@ export class WebUIServer {
 	}
 
 	private setupMiddleware() {
+		// 支持解析 query 参数
+		this.app.set('query parser', 'simple');
+
 		// 解析 JSON 请求体, 供后续 WebUI API 使用
 		this.app.use(express.json());
 

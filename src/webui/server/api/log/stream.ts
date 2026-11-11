@@ -33,7 +33,7 @@ const api: WebUIAPI = {
 	method: "GET",
 	auth: true,
 
-	stream({ res }) {
+	stream({ req, res }) {
 		res.writeHead(200, {
 			"Content-Type": "text/event-stream",
 			"Cache-Control": "no-cache",
@@ -43,12 +43,20 @@ const api: WebUIAPI = {
 
 		// 连接建立标记 + 历史回放, 让新打开的页面立即有内容
 		res.write(`: connected\n\n`);
+		const raw = req.query?.tag;
+		const tags = (Array.isArray(raw) ? raw : raw ? [raw] : [])
+			.filter((t): t is string => typeof t === 'string' && t.length > 0);
+		
 		for (const entry of defaultLogStream.getHistory()) {
-			res.write(toSSE(entry));
+			if (filterEntry(tags, entry))
+				res.write(toSSE(entry));
 		}
 
 		let closed = false;
-		const unsubscribe = defaultLogStream.subscribe((entry) => write(toSSE(entry)));
+		const unsubscribe = defaultLogStream.subscribe((entry) => {
+			if (filterEntry(tags, entry))
+				write(toSSE(entry))
+		});
 		const heartbeat = setInterval(() => write(`: heartbeat\n\n`), HEARTBEAT_MS);
 
 		function cleanup(): void {
@@ -80,5 +88,10 @@ const api: WebUIAPI = {
 		res.on("close", cleanup);
 	},
 };
+
+function filterEntry(tags: string[], entry: LogEntry): boolean {
+	if (tags.length === 0) return true;           // 未指定 tag：全收
+	return entry.tag != null && tags.includes(entry.tag); // 指定了：只要匹配的
+}
 
 export default api;

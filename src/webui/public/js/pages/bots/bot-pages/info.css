@@ -1,0 +1,317 @@
+/* ==================== Bot 面板 · 信息页 ====================
+ * 结构: 头部 (名称 + ID / 运行状态 + 时长 + 启停按钮) / 统计卡片 / 基础信息
+ * 只消费 base.css 与主题令牌, 卡片与图标原语不在这里重复定义。
+ *
+ * 注意: 头部用 div 而不是 <header>。弹窗外壳的 `.dialog-window header`
+ * 会把所有后代 header 拉成 row, 优先级 (0,1,1) 高于单个类 (0,1,0),
+ * 会把运行时行挤回名称行。
+ */
+
+.bot-info {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-4);
+	min-width: 0;
+}
+
+/* ---- 头部 ---- */
+
+.bot-info-head {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-2);
+
+	padding-bottom: var(--sp-3);
+	border-bottom: 1px solid var(--border);
+}
+
+.bot-info-headline {
+	display: flex;
+	align-items: baseline;
+	gap: var(--sp-2);
+	min-width: 0;
+}
+
+.bot-info-name {
+	margin: 0;
+
+	font-size: var(--fs-xl);
+	font-weight: 700;
+	line-height: 1.2;
+	color: var(--fg);
+
+	/* 长名称截断, 不把 ID 和刷新按钮挤出可视区 */
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Bot ID: 紧跟名称的灰色小字 */
+.bot-info-id {
+	flex: 0 1 auto;
+	min-width: 0;
+
+	font-family: var(--font-mono);
+	font-size: var(--fs-sm);
+	color: var(--fg-subtle);
+
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.bot-info-refresh {
+	margin-left: auto;
+	align-self: center;
+}
+
+/* ---- 运行状态行 ---- */
+
+.bot-info-runtime {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--sp-1) var(--sp-3);
+
+	font-size: var(--fs-sm);
+}
+
+.bot-info-state {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+
+	padding: 2px var(--sp-2);
+	border-radius: 999px;
+
+	font-weight: 500;
+	color: var(--fg-muted);
+	background: var(--bg-active);
+}
+
+.bot-info-state.is-running {
+	color: var(--ok);
+	background: var(--ok-soft);
+}
+
+.bot-info-state:not(.is-running) {
+	color: var(--fg-muted);
+	background: var(--bg-active);
+}
+
+/* 运行时长: 标签弱化, 数值用正文色等宽数字 */
+.bot-info-uptime {
+	display: inline-flex;
+	align-items: baseline;
+	gap: var(--sp-1);
+	color: var(--fg-muted);
+}
+
+.bot-info-uptime-label {
+	color: var(--fg-subtle);
+}
+
+.bot-info-uptime-value {
+	color: var(--fg);
+	font-variant-numeric: tabular-nums;
+}
+
+/* 启停按钮: 置于本行最右, 不单独占一行。
+   margin-left: auto 在 wrap 后仍会把按钮推到行末; 对齐居中以与状态胶囊同轴。 */
+.bot-info-toggle {
+	margin-left: auto;
+	align-self: center;
+	min-width: 6.5em;
+}
+
+/* 期望态 / 运行态不一致的提示 */
+.bot-info-hint {
+	display: inline-flex;
+	align-items: center;
+
+	padding: 2px var(--sp-2);
+	border-radius: 999px;
+
+	font-size: var(--fs-xs);
+	color: var(--warn);
+	background: var(--warn-soft);
+}
+
+.bot-info-hint[hidden] {
+	display: none;
+}
+
+/* ---- 统计区: 宽屏左右并排, 窄屏单列 ---- */
+
+.bot-info-stats {
+	display: grid;
+	gap: var(--sp-3);
+	grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 640px) {
+	.bot-info-stats {
+		grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+		align-items: stretch;
+	}
+}
+
+.bot-stat {
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-2);
+
+	/* grid item 默认 min-width: auto, 长适配器名会把列顶宽 */
+	min-width: 0;
+}
+
+.bot-stat-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+}
+
+.bot-stat-icon {
+	width: 1em;
+	height: 1em;
+	color: var(--fg-subtle);
+}
+
+.bot-stat-title {
+	font-weight: 600;
+	color: var(--fg);
+}
+
+/* 右侧计数 (适配器数量 / 插件总数) */
+.bot-stat-count {
+	margin-left: auto;
+	flex-shrink: 0;
+
+	font-size: var(--fs-xs);
+	color: var(--fg-subtle);
+	font-variant-numeric: tabular-nums;
+}
+
+.bot-stat-count:empty {
+	display: none;
+}
+
+/* ---- 适配器胶囊 ---- */
+
+.bot-adapter-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--sp-1);
+
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.bot-adapter-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	min-width: 0;
+
+	padding: 2px var(--sp-2);
+	border-radius: 999px;
+
+	font-size: var(--fs-xs);
+	color: var(--type-adapter);
+	background: var(--type-adapter-soft);
+}
+
+/* 未启用的适配器: 弱化成中性色, 仍然列出但一眼可辨 */
+.bot-adapter-chip.is-disabled {
+	color: var(--fg-subtle);
+	background: var(--bg-active);
+}
+
+.bot-adapter-chip > span:last-child {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ---- 普通插件主数值 ---- */
+
+.bot-stat-body {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-1);
+}
+
+.bot-stat-value {
+	display: flex;
+	align-items: baseline;
+	gap: var(--sp-1);
+
+	font-size: var(--fs-xl);
+	font-weight: 700;
+	line-height: 1.15;
+	color: var(--fg);
+	font-variant-numeric: tabular-nums;
+}
+
+.bot-stat-unit {
+	font-size: var(--fs-sm);
+	font-weight: 500;
+	color: var(--fg-subtle);
+}
+
+.bot-stat-sub {
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+}
+
+.bot-stat-empty {
+	margin: 0;
+	font-size: var(--fs-sm);
+}
+
+/* ---- 基础信息 ---- */
+
+.bot-info-meta {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-1);
+	min-width: 0;
+}
+
+.bot-info-kv {
+	display: flex;
+	align-items: baseline;
+	gap: var(--sp-3);
+	min-width: 0;
+
+	font-size: var(--fs-sm);
+}
+
+.bot-info-kv-key {
+	flex: 0 0 auto;
+	width: 5em;
+	color: var(--fg-subtle);
+}
+
+.bot-info-kv-value {
+	min-width: 0;
+
+	font-family: var(--font-mono);
+	color: var(--fg-muted);
+
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 目录路径可能很长: 悬停显示完整路径, 单元内截断不撑破卡片 */
+.bot-info-kv-value:hover {
+	color: var(--fg);
+}
