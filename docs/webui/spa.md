@@ -99,7 +99,7 @@ getApp()?.sidebar.add({ title: "面板", render(el) { /* ... */ } }, { page: "my
 
 统计页依赖可选的 `src/statistics` 模块, 测试页由 `frontConfig.enableTestLab` 控制。
 两者都不写死在启动注册里, 而是由后端作为 `corePages` 条目放进
-`/api/get_webui_pages` 的同一份清单, 前端沿用 `js/spa/service-pages.js` 的对账逻辑
+`/api/webui/page/get` 的同一份清单, 前端沿用 `js/spa/service-pages.js` 的对账逻辑
 动态挂载:
 
 - 统计模块启动成功 (`core.statistics` 非空) 时清单里才有统计页, 关闭时条目消失;
@@ -119,7 +119,7 @@ getApp()?.sidebar.add({ title: "面板", render(el) { /* ... */ } }, { page: "my
 前端这边(`js/spa/service-pages.js`)只做一件事: **拿权威清单来对账**。
 
 ```
-GET /api/get_webui_pages → {
+GET /api/webui/page/get → {
   version, corePagesVersion,
   pages: [{ key, scope, service, title, icon, module, styles, order, menu }],
   corePages: [{ key, scope, title, icon, module, order, menu, before }],
@@ -128,7 +128,7 @@ GET /api/get_webui_pages → {
 
 - 全部对账都是幂等的: 清单有本地没有 → `app.register`; 本地有清单没有 → `app.unregister`;
   定义变了 → `app.update`。因此**触发方式可以随便叠加**, 任何一条路生效都不会不一致;
-- 触发点: 启动一次; 服务启停 / `refresh_services` 之后主动一次(那是导航变化的直接原因);
+- 触发点: 启动一次; 服务启停 / `services/scan` 之后主动一次(那是导航变化的直接原因);
   设置页保存 core / webui 域后主动一次(统计 / 测试页开关); 窗口重新聚焦 / 标签页恢复可见;
   兜底轮询(60s)。两个版本号拼成的键没变就直接返回, 所以这些加起来也只花一次很小请求;
 - **停用即注销**: 服务停用 → 服务上下文把页面从清单里摘掉 → 下一次对账注销它; 核心可选

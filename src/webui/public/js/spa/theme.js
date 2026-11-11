@@ -5,7 +5,7 @@
  *
  *   界面风格 (style): "vsc" | "md3" | "winui"
  *     服务端设置项, 来自设置页 WebUI 域的 frontConfig.uiStyle
- *     (见 src/config/settings/domains/webui.ts)。get_webui_front_config 下发,
+ *     (见 src/config/settings/domains/webui.ts)。webui/config/get 下发,
  *     设置页保存后当场调 setUIStyle() 应用, 对所有访问者生效。
  *
  *   明暗 (mode): "auto" | "light" | "dark"
@@ -123,7 +123,7 @@ export function setUIStyle(next) {
 /** 登录后向服务端校准界面风格; 失败时静默沿用本地缓存 */
 export async function syncUIStyleFromServer() {
 	try {
-		const front = await callAPI("get_webui_front_config", null, "GET");
+		const front = await callAPI("webui/config/get", null, "GET");
 		setUIStyle(front?.uiStyle);
 	} catch {
 		/* 接口不可用 / 会话失效: 不阻塞界面, 风格保持缓存值 */

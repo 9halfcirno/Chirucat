@@ -36,10 +36,10 @@ import { root } from "../src/utils/root";
 import { Bot } from "../src/bot/bot";
 import { Core } from "../src/core";
 import { WebUIServer } from "../src/webui/server/server";
-import getBotConfig from "../src/webui/server/api/get_bot_config";
-import getSettings from "../src/webui/server/api/get_settings";
-import updateBotConfig from "../src/webui/server/api/update_bot_config";
-import updateSettings from "../src/webui/server/api/update_settings";
+import getBotConfig from "../src/webui/server/api/bot/config/get";
+import getSettings from "../src/webui/server/api/settings/get";
+import updateBotConfig from "../src/webui/server/api/bot/config/update";
+import updateSettings from "../src/webui/server/api/settings/update";
 
 let passed = 0;
 let failed = 0;
@@ -101,8 +101,8 @@ try {
 	});
 	await domain.load();
 
-	/* ---------- get_settings ---------- */
-	console.log("\n[get_settings]");
+	/* ---------- settings/get ---------- */
+	console.log("\n[settings/get]");
 	const snapshot = await getSettings.handler!(req(), core) as any;
 	check("返回 success", snapshot.success === true);
 	check("列出了 webui 域", snapshot.domains.some((d: any) => d.id === "webui"));
@@ -156,8 +156,8 @@ try {
 		&& ["debug", "info", "warn", "error"].includes(String(logSnap.values.level)),
 		`快照=${String(logSnap?.values?.level)}, 文件=${String(loggingFile.level)}`);
 
-	/* ---------- update_settings ---------- */
-	console.log("\n[update_settings]");
+	/* ---------- settings/update ---------- */
+	console.log("\n[settings/update]");
 	const saved = await updateSettings.handler!(
 		req({ domain: "webui", patch: { port: "8123" } }), core,
 	) as any;
@@ -246,8 +246,8 @@ try {
 	await bot.settings.load();
 	core.bot.bots.set("probe", bot);
 
-	const botSnap = await getBotConfig.handler!(req({ id: "probe" }), core) as any;
-	check("get_bot_config 返回该 Bot", botSnap.id === "probe");
+	const botSnap = await getBotConfig.handler!(req({ bot: "probe" }), core) as any;
+	check("bot/config/get 返回该 Bot", botSnap.id === "probe");
 	check("值来自 Bot 自己的 config.json", botSnap.values["name"] === "探针");
 	check("id 控件标为不可修改",
 		botSnap.define.controls.some((c: any) => c.id === "id" && c.immutable === true));
@@ -255,7 +255,7 @@ try {
 		!(await getSettings.handler!(req(), core) as any).domains.some((d: any) => d.id.startsWith("bot:")));
 
 	const botSaved = await updateBotConfig.handler!(
-		req({ id: "probe", patch: { name: "新名字" } }), core,
+		req({ bot: "probe", patch: { name: "新名字" } }), core,
 	) as any;
 	check("保存返回 success", botSaved.success === true);
 	check("名称已落盘",
@@ -264,13 +264,13 @@ try {
 
 	let idRejected: any = null;
 	try {
-		await updateBotConfig.handler!(req({ id: "probe", patch: { id: "renamed" } }), core);
+		await updateBotConfig.handler!(req({ bot: "probe", patch: { id: "renamed" } }), core);
 	} catch (e) { idRejected = e; }
 	check("改 id 被拒 (400)", idRejected?.code === 400, JSON.stringify(idRejected));
 	check("目录没有被改名", await exists(botDir));
 
 	let noBot: any = null;
-	try { await getBotConfig.handler!(req({ id: "ghost" }), core); } catch (e) { noBot = e; }
+	try { await getBotConfig.handler!(req({ bot: "ghost" }), core); } catch (e) { noBot = e; }
 	check("不存在的 Bot 返回 404", noBot?.code === 404);
 
 	bot.settings.close();
@@ -297,17 +297,17 @@ try {
 	check("relisten 后旧端口已释放", oldClosed);
 
 	// 有密码 + 未开本机免密: 本机照样要鉴权
-	const denied = await fetch("http://127.0.0.1:7712/api/get_settings");
+	const denied = await fetch("http://127.0.0.1:7712/api/settings/get");
 	check("有密码且未开本机免密时本机也被拦 (401)", denied.status === 401, String(denied.status));
 
 	// 开本机免密: 同一台机器的请求直接放行
 	hotServer.updateSecurity({ localNoAuth: true });
-	const allowed = await fetch("http://127.0.0.1:7712/api/get_settings");
+	const allowed = await fetch("http://127.0.0.1:7712/api/settings/get");
 	check("开本机免密后本机请求放行", allowed.status === 200, String(allowed.status));
 
 	// 换密码: 令牌由密码派生密钥签发, 旧令牌立刻失效(关掉免密才看得见)
 	hotServer.updateSecurity({ password: "another-secret", localNoAuth: false });
-	const afterPwd = await fetch("http://127.0.0.1:7712/api/get_settings");
+	const afterPwd = await fetch("http://127.0.0.1:7712/api/settings/get");
 	check("换密码后无令牌请求被拒 (401)", afterPwd.status === 401, String(afterPwd.status));
 
 	await hotServer.close();

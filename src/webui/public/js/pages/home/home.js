@@ -10,7 +10,7 @@
  * 通用骨架 (进度条 / kv / 面板外壳 / 状态项) 在 widgets.js,
  * 数值格式化工具在 format.js。
  *
- * 数据源: /api/health (存活) + /api/get_state (性能)。每 5s 定时刷新。
+ * 数据源: /api/health (存活) + /api/core/state/get (性能)。每 5s 定时刷新。
  *
  * 性能优化: 面板骨架只在首次渲染时创建一次, 后续刷新仅更新
  * 文本 / 进度条 / 状态点 (增量更新), 不再整块重建 DOM, 减少浏览器
@@ -58,7 +58,7 @@ export default {
 		let panels = null;
 		/** 进程运行时长文本节点, 由每秒 uptimeTimer 直接更新 */
 		let uptimeText = null;
-		/** 最近一次 get_state 返回的进程启动时间戳; 用于运行时长每秒自增 */
+		/** 最近一次 core/state/get 返回的进程启动时间戳; 用于运行时长每秒自增 */
 		let currentStartTime = null;
 
 		// 每秒按启动时间戳重算运行时长, 不等 5s 刷新 (用 Date.now 差值, 无累计误差)
@@ -67,7 +67,7 @@ export default {
 			uptimeText.textContent = formatUptime((Date.now() - currentStartTime) / 1000);
 		};
 
-		// health 与 get_state 独立处理: 任一失败只在对应位置报告, 不影响另一项已有展示
+		// health 与 core/state/get 独立处理: 任一失败只在对应位置报告, 不影响另一项已有展示
 		const refresh = async () => {
 			// ---- 服务器存活 (/api/health): 只更新状态条 ----
 			try {
@@ -88,9 +88,9 @@ export default {
 				coreItem.text.textContent = "状态未知";
 			}
 
-			// ---- 性能数据 (/api/get_state): 失败时只在板块区域写错误信息, 不清空已有板块 ----
+			// ---- 性能数据 (/api/core/state/get): 失败时只在板块区域写错误信息, 不清空已有板块 ----
 			try {
-				const stateRes = await apiFetch("/api/get_state");
+				const stateRes = await apiFetch("/api/core/state/get");
 				if (!stateRes.ok) throw new Error(`HTTP ${stateRes.status}`);
 				const state = await stateRes.json();
 

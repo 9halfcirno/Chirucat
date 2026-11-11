@@ -1,7 +1,7 @@
 /**
  * 机器人管理页面
  *
- * 调用后端 GET /api/get_bot_list 获取机器人列表, 以卡片形式展示。
+ * 调用后端 GET /api/bots/list 获取机器人列表, 以卡片形式展示。
  * 卡片容器使用 flex 布局 (见 layout.css 的 .bot-list)。
  * 页面头部右侧提供圆形刷新按钮, 点击后重新拉取列表, 并通过 Toast 提示结果。
  */
@@ -38,7 +38,7 @@ export default {
 		const load = async (fromRefresh = false) => {
 			refresh.classList.add("loading");
 			try {
-				const res = await apiFetch("/api/scan_bots");
+				const res = await apiFetch("/api/bots/scan", { method: "POST" });
 				if (!res.ok) throw new Error(`HTTP ${res.status}`);
 				const data = await res.json();
 				const bots = Array.isArray(data.bots) ? data.bots : [];
@@ -148,12 +148,12 @@ function createBotCard(bot) {
 	let enabled = Boolean(bot.state?.enable);
 	const dotSwh = createDotSwitch(async (_, state) => {
 		try {
-			const res = await apiFetch("/api/set_bot_state", {
+			const res = await apiFetch("/api/bot/state/update", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
 				},
-				body: JSON.stringify({ id: bot.id, state }),
+				body: JSON.stringify({ bot: bot.id, state }),
 			}).then((r) => r.json());
 
 			if (res.success) {

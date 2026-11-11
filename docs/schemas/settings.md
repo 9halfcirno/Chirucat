@@ -75,7 +75,7 @@ await domain.load();
   `<文件>.broken-<时间戳>-<随机>` 备份, 再按同样的默认值重建一份 —— 既不静默跳过、
   也不阻断启动。`load()` 返回 `{ values, created, recovered, backupFile? }` 供启动层
   打印初始密码或告警; schema 文件本身不掺日志逻辑。
-  `get()` 取当前值(明文, 内部通道), `get_settings` 走的是脱敏后的 `read()`。
+  `get()` 取当前值(明文, 内部通道), `settings/get` 走的是脱敏后的 `read()`。
 - 读盘时语义非法的单个字段会**回落到默认值**, 而不是让整个域起不来; 语法错误才按
   `onError` 处理(`recreate` / `fallback` / `throw`)。
 
@@ -115,7 +115,7 @@ WebUI 的全局设置列表里。值文件是 `<Bot目录>/config.json` —— �
 - **损坏值文件不重建**: `bot:<id>` 域显式用 `onError: "throw"` —— `id` 的默认值是
   空串, 又同时是目录名与索引键, 按默认值重建会造出身份不明的 Bot。框架自身的
   四个域才备份并按默认值重建。
-- **接口**: `POST /api/get_bot_config { id }` 与 `POST /api/update_bot_config { id, patch }`,
+- **接口**: `POST /api/bot/config/get { bot }` 与 `POST /api/bot/config/update { bot, patch }`,
   返回形状与全局设置域一致, 前端复用同一套渲染。
 
 > 值文件按 schema 白名单规范化, schema 之外的键会在下一次写入时被丢弃 ——
@@ -142,12 +142,12 @@ WebUI 的全局设置列表里。值文件是 `<Bot目录>/config.json` —— �
 
 ## 接口
 
-- `GET /api/get_settings` → `{ domains: [{ id, define, values }] }`
+- `GET /api/settings/get` → `{ domains: [{ id, define, values }] }`
 
-  `define` 是 **`ConfigRoot`** (`{ controls: [...] }`), 与 `get_plugin_config` 一致 —— 前端
+  `define` 是 **`ConfigRoot`** (`{ controls: [...] }`), 与 `bot/plugin/config/get` 一致 —— 前端
   `createConfigList` 读的就是 `define.controls`, 传裸数组会渲染成空表单 (表现为"一个设置项
   都没有")。`values` 已脱敏。
-- `POST /api/update_settings` `{ domain, patch }` → `{ values, changed, restartRequired }`
+- `POST /api/settings/update` `{ domain, patch }` → `{ values, changed, restartRequired }`
   字段级校验失败返回 400 + `details`; 未知域 404; WebUI 脱离 Core 时 503。
 
 两者都声明 `auth: true`, 走与其它管理接口相同的鉴权。

@@ -49,6 +49,8 @@ export class Bot extends EventEmitter {
 
 	/** Bot 是否处于运行中(已启动且未停止) */
 	running = false;
+	/** Bot 上次运行时间, 初始为对象创建时间 */
+	runningAt = Date.now();
 
 	/** 收敛串行化: 外部改动与 WebUI 操作不会交错启停 */
 	private applying: Promise<void> = Promise.resolve();
@@ -114,6 +116,7 @@ export class Bot extends EventEmitter {
 	 */
 	async start() {
 		if (this.running) return; // 幂等
+		this.runningAt = Date.now();
 
 		// Hook 埋点: Bot 启动之前, 可被服务插件取消
 		if (this.core.hooks.dispatch("before.bot.enable", this)) {

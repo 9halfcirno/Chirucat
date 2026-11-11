@@ -100,7 +100,7 @@ export interface WebUIServerOptions {
 	staticDir?: string;
 	/** 提供给 WebUI API handler 的 Core 实例 */
 	core?: Core;
-	/** API 模块目录, 默认 src/webui/server/api, 启动时自动加载其中的 API */
+	/** API 模块目录, 默认 src/webui/server/api, 启动时递归加载其中的 API */
 	apiDir?: string;
 	/** 前端页面配置 */
 	frontConfig?: WebUIFrontConfig;
@@ -158,7 +158,7 @@ export class WebUIServer {
 	/**
 	 * 服务插件注册的 WebUI 页面 (活动栏一级导航 + Bot 详情窗口的二级导航)
 	 *
-	 * 前端通过 `GET /api/get_webui_pages` 拉取这份清单, 并按版本号做幂等对账;
+	 * 前端通过 `GET /api/webui/page/get` 拉取这份清单, 并按版本号做幂等对账;
 	 * 清单里只有活着的页面 —— 服务上下文释放时注册表条目会被注销函数清掉。
 	 */
 	private readonly servicePages = new ServicePageRegistry();
@@ -182,6 +182,8 @@ export class WebUIServer {
 	/** 本机访问是否跳过鉴权 */
 	private localNoAuth: boolean;
 
+	/** 已注册的核心 API 端点, 键为 `METHOD /api/<路径>`, 值为来源文件; 用于发现重复注册 */
+	private readonly apiRouteKeys = new Map<string, string>();
 	/** 是否已完成"加载 API + 注册路由"; 只做一次, relisten 不会重跑 */
 	private initialized = false;
 	/** 前端配置 */
@@ -296,43 +298,78 @@ export class WebUIServer {
 	}
 
 	/**
-	 * 加载 api 目录下的所有 API 模块并注册到路由。
+	 * 递归收集 api 目录下的模块文件
+	 *
+	 * 返回的 `rel` 是相对 apiDir 的路径, 目录段统一用 `/` 分隔 —— 它同时是
+	 * 模块的**路由前缀**(见 loadAPIs), 所以这里只负责把文件树摊平。
+	 * 约定与扁平版本一致: 跳过 `_`/`.` 前缀(内部模块与隐藏目录)、`index` 入口、
+	 * `.d.ts` 以及非 .ts/.js 文件。
+	 */
+	private async collectAPIFiles(dir: string, prefix = ""): Promise<string[]> {
+		let entries;
+		try {
+			entries = await fs.readdir(dir, { withFileTypes: true });
+		} catch (err) {
+			this.logger.error(`读取 API 目录失败: ${dir}`, err);
+			return [];
+		}
+
+		const files: string[] = [];
+		for (const entry of entries) {
+			const name = entry.name;
+			// `_` 前缀是 api 目录内部的共享模块, `.` 前缀是隐藏目录, 都不注册
+			if (name.startsWith("_") || name.startsWith(".")) continue;
+
+			const rel = prefix ? `${prefix}/${name}` : name;
+
+			if (entry.isDirectory()) {
+				files.push(...await this.collectAPIFiles(path.join(dir, name), rel));
+				continue;
+			}
+			if (!entry.isFile()) continue;
+			// 只加载模块文件, 跳过 .d.ts 与 index 入口
+			if (!name.endsWith(".ts") && !name.endsWith(".js")) continue;
+			if (name.endsWith(".d.ts") || name === "index.ts" || name === "index.js") continue;
+
+			files.push(rel);
+		}
+		return files;
+	}
+
+	/**
+	 * 递归加载 api 目录下的所有 API 模块并注册到路由。
+	 *
+	 * 目录结构即路由: 模块**不写 path** 时端点就是文件自身的相对路径
+	 * (`api/bots/list.ts` → `/api/bots/list`); 也可以显式声明 ——
+	 * `path: "list"` 相对所在目录, `path: "/other"`(以 `/` 开头)为绝对路径、
+	 * 忽略所在目录, 用于改 URL 或跨目录复用。
 	 * 每个模块需默认导出一个 WebUIAPI 对象, 无效的模块会被跳过并记录日志。
 	 */
 	private async loadAPIs(): Promise<void> {
-		let files: string[];
-		try {
-			files = await fs.readdir(this.apiDir);
-		} catch (err) {
-			this.logger.error(`读取 API 目录失败: ${this.apiDir}`, err);
-			return;
-		}
+		const currentExt = path.extname(fileURLToPath(import.meta.url)) === ".ts" ? ".ts" : ".js";
+		const files = (await this.collectAPIFiles(this.apiDir))
+			.sort((a, b) => a.localeCompare(b));
 
-		for (const file of files) {
-			// 只加载模块文件, 跳过 .d.ts、index 入口与 _ 前缀的内部模块(如 _shared.ts)
-			const currentExt = path.extname(fileURLToPath(import.meta.url)) === ".ts" ? ".ts" : ".js";
-
-			// 只加载模块文件, 跳过 .d.ts、index 入口与 _ 前缀的内部模块(如 _shared.ts)
-			const isModule = file.endsWith(".ts") || file.endsWith(".js");
-			if (!isModule || file.endsWith(".d.ts") || file === "index.ts" || file.startsWith("_")) {
-				continue;
-			}
-
-			const targetFile = file.replace(/\.(ts|js)$/, currentExt);
-			const apiUrl = pathToFileURL(path.join(this.apiDir, targetFile)).href;
+		for (const rel of files) {
+			// 相对路径的扩展名换成运行时模块扩展名(.ts 源码 / .js 构建产物)
+			const targetRel = rel.replace(/\.(ts|js)$/, currentExt);
+			const apiUrl = pathToFileURL(path.join(this.apiDir, ...targetRel.split("/"))).href;
 			const mod = await import(apiUrl).catch((err) => {
-				this.logger.error(`加载 API 模块失败: ${targetFile}`, err);
+				this.logger.error(`加载 API 模块失败: ${targetRel}`, err);
 				return null;
 			});
 			if (!mod) continue;
 
 			const api = mod.default;
 			if (!this.isWebUIAPI(api)) {
-				this.logger.warn(`跳过无效的 API 模块: ${file} (缺少有效的默认导出)`);
+				this.logger.warn(`跳过无效的 API 模块: ${rel} (缺少有效的默认导出)`);
 				continue;
 			}
 
-			this.registerAPI(api, file);
+			// 所在目录构成显式 path 的前缀; 未填 path 时直接用整个相对路径(含文件名)
+			const segments = rel.split("/").slice(0, -1);
+			const prefix = segments.length ? `/${segments.join("/")}` : "";
+			this.registerAPI(api, rel, prefix);
 		}
 		this.logger.log(`后端API端点注册完成`)
 	}
@@ -342,7 +379,7 @@ export class WebUIServer {
 		if (!api || typeof api !== "object") return false;
 		const candidate = api as Partial<WebUIAPI>;
 		return (
-			typeof candidate.path === "string" &&
+			(candidate.path === undefined || typeof candidate.path === "string") &&
 			typeof candidate.method === "string" &&
 			(typeof candidate.handler === "function" || typeof candidate.stream === "function")
 		);
@@ -380,18 +417,47 @@ export class WebUIServer {
 			: null;
 	}
 
-	/** 将单个 API 定义注册为 express 路由 (核心 API 模块启动时调用) */
-	private registerAPI(api: WebUIAPI, file: string): void {
+	/**
+	 * 将单个 API 定义注册为 express 路由 (核心 API 模块启动时调用)
+	 *
+	 * @param file 来源文件(相对 apiDir), 未填 path 时它同时就是路由; 也用于日志
+	 * @param prefix 模块所在目录构成的路由前缀, 形如 `/bots`; 空串表示 apiDir 根
+	 */
+	private registerAPI(api: WebUIAPI, file: string, prefix: string): void {
 		const method = this.normalizeMethod(api.method);
 		if (!method) {
-			this.logger.warn(`跳过 API ${api.path}: 不支持的请求方法 ${api.method} (${file})`);
+			this.logger.warn(`跳过 API ${api.path ?? file}: 不支持的请求方法 ${api.method} (${file})`);
 			return;
 		}
 
+		// 未填 path: 整个文件相对路径去掉扩展名就是路由
+		// 填了: `/` 开头为绝对路由(不叠加目录), 否则相对所在目录
+		const declared = api.path === undefined
+			? `/${file.replace(/\.(ts|js)$/, "")}`
+			: api.path.startsWith("/")
+				? api.path
+				: `${prefix}/${api.path}`;
 		// router 内部的路径不含挂载前缀(`apiRouter` 已挂在 /api 上), 对外 URL 才带
-		const routePath = `/${api.path.replace(/^\/+/, "")}`;
+		const routePath = `/${declared.replace(/^\/+/, "").replace(/\/+$/, "")}`;
 		const urlPath = `/api${routePath}`;
-		// this.logger.log(`注册 API: ${method.toUpperCase()} ${urlPath} (${file})`);
+
+		if (routePath === "/") {
+			this.logger.warn(`跳过 API ${file}: path 不能为空`);
+			return;
+		}
+		// 文件名带空格等字符时推导出的 URL 不可用, 直接跳过而不是注册一个打不开的端点
+		if (!/^\/[A-Za-z0-9_./-]*$/.test(routePath)) {
+			this.logger.warn(`跳过 API ${file}: 路径 ${routePath} 含不支持路段的字符`);
+			return;
+		}
+
+		const routeKey = `${method} ${urlPath}`;
+		const previous = this.apiRouteKeys.get(routeKey);
+		if (previous) {
+			this.logger.warn(`跳过重复的 API: ${method.toUpperCase()} ${urlPath} (${file} 与 ${previous} 冲突)`);
+			return;
+		}
+		this.apiRouteKeys.set(routeKey, file);
 
 		// 声明 auth:true 的 API 在 handler 之前先过鉴权中间件
 		const middlewares: RequestHandler[] = api.auth ? [this.authRequired()] : [];

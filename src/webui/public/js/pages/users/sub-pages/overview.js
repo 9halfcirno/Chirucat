@@ -141,7 +141,7 @@ export function renderOverviewPage(div) {
 
 	async function refresh() {
 		try {
-			const data = await callAPI("get_user_overview", { days: current.days });
+			const data = await callAPI("users/overview", { days: current.days });
 			renderCards(data);
 			renderPlatforms(data.platforms);
 

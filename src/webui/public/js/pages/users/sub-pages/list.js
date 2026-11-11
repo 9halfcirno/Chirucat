@@ -201,7 +201,7 @@ export function renderListPage(div) {
 	async function load() {
 		summary.textContent = "加载中…";
 		try {
-			const data = await callAPI("list_users", {
+			const data = await callAPI("users/list", {
 				platform: state.platform,
 				keyword: state.keyword,
 				bound: state.bound,

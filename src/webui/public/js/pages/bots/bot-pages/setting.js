@@ -1,7 +1,7 @@
 /**
  * Bot 设置页
  *
- * 定义与值都来自后端 (`get_bot_config`) —— 前端不持有设置项定义。此前这里
+ * 定义与值都来自后端 (`bot/config/get`) —— 前端不持有设置项定义。此前这里
  * 硬编码了 id/name 两个输入框, 后端改了没人知道, 也正是"设置页只能看不能存"的根源。
  */
 import { callAPI } from "../../../spa/api.js"
@@ -28,7 +28,7 @@ export default {
 
 		let payload
 		try {
-			payload = await callAPI("get_bot_config", { id: bot.id })
+			payload = await callAPI("bot/config/get", { bot: bot.id })
 		} catch (e) {
 			status.textContent = `读取Bot设置失败: ${e.message}`
 			return
@@ -73,7 +73,7 @@ async function handleSave(bot, list) {
 	}
 
 	try {
-		const result = await callAPI("update_bot_config", { id: bot.id, patch: list.getValues() })
+		const result = await callAPI("bot/config/update", { bot: bot.id, patch: list.getValues() })
 
 		// 用后端回传的规范化值回填, 并让列表上的名称同步过来
 		if (result?.values) list.setValues(result.values)
@@ -115,10 +115,10 @@ async function handleDeleteClick(bot, container, btn) {
  * @returns {Promise<boolean>} 是否正在运行
  */
 async function fetchBotRunning(id) {
-	const res = await apiFetch("/api/get_bot_state", {
+	const res = await apiFetch("/api/bot/get", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ id })
+		body: JSON.stringify({ bot: id })
 	})
 	if (!res.ok) throw new Error(`HTTP: ${res.status}`)
 	const data = await res.json()
@@ -224,10 +224,10 @@ function buildConfirmContent(botId) {
  */
 async function deleteBot(bot, container) {
 	try {
-		const res = await apiFetch("/api/delete_bot", {
+		const res = await apiFetch("/api/bots/delete", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ id: bot.id })
+			body: JSON.stringify({ bot: bot.id })
 		})
 		if (!res.ok) throw new Error(`HTTP: ${res.status}`)
 

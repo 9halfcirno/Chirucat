@@ -133,7 +133,7 @@ export function renderQueryPage(div) {
 
 		resultBox.replaceChildren();
 		try {
-			const data = await callAPI("query_user", { platform, id });
+			const data = await callAPI("user/get", { platform, id });
 			lastQuery = { platform, id };
 			renderResult(data);
 		} catch (e) {
@@ -147,7 +147,7 @@ export function renderQueryPage(div) {
 	/** 变更成功后按上次查询刷新结果 */
 	async function refresh() {
 		if (!lastQuery) return;
-		await callAPI("query_user", lastQuery)
+		await callAPI("user/get", lastQuery)
 			.then(renderResult)
 			.catch(() => { /* 刷新失败静默: 变更本身已提示过结果 */ });
 	}
@@ -243,7 +243,7 @@ export function renderQueryPage(div) {
 
 		let preview;
 		try {
-			preview = await callAPI("bind_account", { source, target, dryRun: true });
+			preview = await callAPI("user/account/bind", { source, target, dryRun: true });
 		} catch (e) {
 			toast(`预检失败: ${e.message}`, { type: "error" });
 			return;
@@ -298,7 +298,7 @@ export function renderQueryPage(div) {
 
 		async function apply() {
 			try {
-				const res = await callAPI("bind_account", { source, target, dryRun: false });
+				const res = await callAPI("user/account/bind", { source, target, dryRun: false });
 				dlg.closeDialog();
 				toast(`绑定成功, 目标跨平台ID ${shortId(res.targetUnionId)}`, { type: "info" });
 				await refresh();
@@ -332,7 +332,7 @@ export function renderQueryPage(div) {
 
 		async function apply() {
 			try {
-				const res = await callAPI("unbind_account", { platform: data.platform, id: data.id });
+				const res = await callAPI("user/account/unbind", { platform: data.platform, id: data.id });
 				dlg.closeDialog();
 				toast(`已解绑, 新跨平台ID ${shortId(res.unionId)}`, { type: "info" });
 				await refresh();
@@ -347,7 +347,7 @@ export function renderQueryPage(div) {
 	/** 恢复到上一个跨平台ID */
 	async function doRestore(data) {
 		try {
-			const res = await callAPI("restore_internal", { platform: data.platform, id: data.id });
+			const res = await callAPI("user/account/restore", { platform: data.platform, id: data.id });
 			toast(`已恢复到跨平台ID ${shortId(res.unionId)}`, { type: "info" });
 			await refresh();
 		} catch (e) {

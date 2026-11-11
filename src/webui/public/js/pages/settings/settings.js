@@ -4,7 +4,7 @@
  * 页面骨架只做一件事: 拉取全部设置域, 然后**按域生成二级侧栏** —— 每个域一项,
  * 点哪一项就渲染哪个域的表单。
  *
- * 域列表与设置项全部来自后端 (`get_settings`): 这里既不硬编码设置项, 也不硬编码
+ * 域列表与设置项全部来自后端 (`settings/get`): 这里既不硬编码设置项, 也不硬编码
  * 域名 —— 后端加一个域, 侧栏就多一项。
  *
  * 能在 render 里动态写 `this.sidebar` 是因为 framework 的导航顺序是先
@@ -41,7 +41,7 @@ export default {
 
 		let domains;
 		try {
-			const payload = await callAPI("get_settings", null, "GET");
+			const payload = await callAPI("settings/get", null, "GET");
 			domains = Array.isArray(payload?.domains) ? payload.domains : [];
 		} catch (e) {
 			this.sidebar = [];
@@ -110,7 +110,7 @@ async function handleSave(domain, list) {
 
 	let result;
 	try {
-		result = await callAPI("update_settings", {
+		result = await callAPI("settings/update", {
 			domain: domain.id,
 			patch,
 		});

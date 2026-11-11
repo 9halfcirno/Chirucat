@@ -1,7 +1,7 @@
 /**
  * 日志查看页面
  *
- * 通过 SSE (GET /api/get_log_stream) 接收实时日志流:
+ * 通过 SSE (GET /api/log/stream) 接收实时日志流:
  * - 连接建立后服务器先回放最近历史, 再实时推送
  * - EventSource 断线自动重连, 页面只负责展示状态
  *
@@ -73,7 +73,7 @@ export default {
 
 		const clearBtn = createIconButton("/img/icons/delete.svg", async () => {
 			try {
-				const res = await apiFetch("/api/clear_logs", { method: "POST" });
+				const res = await apiFetch("/api/log/clear", { method: "POST" });
 				if (!res.ok) throw new Error(`HTTP ${res.status}`);
 				toast("日志已清理");
 			} catch (err) {
@@ -136,7 +136,7 @@ export default {
 		};
 
 
-		source = new EventSource("/api/get_log_stream");
+		source = new EventSource("/api/log/stream");
 		source.addEventListener("open", () => setStatus("on", "已连接"));
 		source.addEventListener("error", () => setStatus("off", "重连中…"));
 		source.addEventListener("log", (e) => {
@@ -182,7 +182,7 @@ function createField(label, control) {
 /** 把 Tag 列表灌进下拉; 拉不到就只留"全部 / 全局", 不影响等级过滤 */
 async function loadTagOptions() {
 	try {
-		const res = await apiFetch("/api/get_bot_list");
+		const res = await apiFetch("/api/bots/list");
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
 		const data = await res.json();
 		// 响应回来时页面可能已经切走

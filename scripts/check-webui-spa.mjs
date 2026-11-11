@@ -590,7 +590,7 @@ let fetchCount = 0;
 globalThis.fetch = async (url) => {
 	fetchCount++;
 	const target = String(url);
-	if (target.includes("/api/get_webui_pages")) {
+	if (target.includes("/api/webui/page/get")) {
 		return { ok: true, status: 200, json: async () => payload };
 	}
 	return { ok: false, status: 404, json: async () => ({ err: `unexpected url ${url}` }) };

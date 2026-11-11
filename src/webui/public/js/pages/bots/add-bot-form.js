@@ -6,7 +6,7 @@
  * - createAddForm(): 构建表单 DOM (id 必填 + 名称可选)。返回普通 div 而非
  *   <form>: 按钮在对话框 footer 里, 因此"提交"只是一个动作, 由调用方绑定
  *   到"确定"按钮与表单内 Enter (见 bots.js 的 openCreateBotDialog)。
- * - submitAddForm(formEl): 读取输入并 POST /api/create_bot。错误 (前端必填
+ * - submitAddForm(formEl): 读取输入并 POST /api/bots/create。错误 (前端必填
  *   校验或服务端 { err, code }) 直接展示在表单错误区, 对话框保持打开;
  *   成功返回 { ok: true, id, name }, 由调用方决定关闭对话框、toast、刷新列表。
  *
@@ -122,11 +122,11 @@ export async function submitAddForm(formEl) {
 	errorEl.hidden = true;
 
 	try {
-		const res = await apiFetch("/api/create_bot", {
+		const res = await apiFetch("/api/bots/create", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			// name 为空时不发送该字段 (与后端省略 config.json 中 name 的行为一致)
-			body: JSON.stringify(name ? { id, name } : { id }),
+			body: JSON.stringify(name ? { bot: id, name } : { bot: id }),
 		});
 
 		let data = {};

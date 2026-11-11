@@ -34,7 +34,7 @@ export function renderServices(div) {
 		if (firstLoad) body.replaceChildren(createSpinner())
 
 		try {
-			const data = await postJSON("/api/refresh_services", {})
+			const data = await postJSON("/api/services/scan", {})
 			paint(data)
 			if (fromClick) toast("服务插件列表已刷新")
 
@@ -75,12 +75,12 @@ export function renderServices(div) {
 	async function toggleService(item, target) {
 		let data
 		try {
-			data = await postJSON("/api/set_service_state", { id: item.id, state: target })
+			data = await postJSON("/api/service/state/update", { service: item.id, state: target })
 		} catch (e) {
 			// 失败也可能已经改动了运行态(连带加载/卸载跑到一半), 拉一次列表把界面拉回
 			// 现实, 再把错误抛给卡片去提示与回弹
 			try {
-				paint(await postJSON("/api/get_service_list", {}))
+				paint(await postJSON("/api/services/list", {}))
 			} catch { /* 刷新失败就维持现状: 原始错误更要紧 */ }
 			throw e
 		}
@@ -103,13 +103,13 @@ export function renderServices(div) {
 		return state
 	}
 
-	/** 服务配置弹窗: 值文件全局唯一, 因此请求体只有 id */
+	/** 服务配置弹窗: 值文件全局唯一, 因此请求体只有 service */
 	function openConfig(item) {
 		void openConfigDialog({
 			title: `${item.name}(${item.id})的服务配置`,
 			label: "服务插件",
-			load: () => postJSON("/api/get_service_config", { id: item.id }),
-			save: (config) => postJSON("/api/update_service_config", { id: item.id, config }),
+			load: () => postJSON("/api/service/config/get", { service: item.id }),
+			save: (config) => postJSON("/api/service/config/update", { service: item.id, config }),
 		})
 	}
 

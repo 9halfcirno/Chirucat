@@ -40,7 +40,7 @@ function stopAutoRefresh() {
 
 /** 调用统计接口, 统一处理错误 */
 async function query(payload) {
-	const res = await apiFetch("/api/get_stats", {
+	const res = await apiFetch("/api/stats/get", {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify(payload),

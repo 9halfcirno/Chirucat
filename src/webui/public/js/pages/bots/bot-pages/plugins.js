@@ -3,9 +3,9 @@
  *
  * 提供四件事:
  * - 列表: 全局插件 / Bot 私有插件分组展示, 带类型、版本与运行状态
- * - 启停: 单个插件开关, 走 set_plugin_state (先收敛运行态, 成功才落盘);
+ * - 启停: 单个插件开关, 走 bot/plugin/state/update (先收敛运行态, 成功才落盘);
  *   接口回传依赖连带的 affected, 这里逐个对齐那些卡片, 不重新扫描目录
- * - 刷新: 重新扫描插件目录, 与 scan_bots 同语义(先扫描再回传列表)
+ * - 刷新: 重新扫描插件目录, 与 bots/scan 同语义(先扫描再回传列表)
  * - 配置: 声明了配置的插件给出入口, 弹窗内用 config-editor 渲染并保存
  *
  * 卡片与配置弹窗的实现在 spa/components/plugin-card.js, 与 WebUI 的服务插件页
@@ -62,7 +62,7 @@ export default {
 			if (firstLoad) body.replaceChildren(createSpinner())
 
 			try {
-				const data = await postJSON("/api/refresh_plugins", { bot: bot.id })
+				const data = await postJSON("/api/bot/plugin/scan", { bot: bot.id })
 				paint(data)
 				if (fromClick) toast("插件列表已刷新")
 			} catch (e) {
@@ -107,16 +107,16 @@ export default {
 		async function togglePlugin(item, target) {
 			let data
 			try {
-				data = await postJSON("/api/set_plugin_state", {
+				data = await postJSON("/api/bot/plugin/state/update", {
 					bot: bot.id,
-					id: item.id,
+					plugin: item.id,
 					state: target,
 				})
 			} catch (e) {
 				// 连带加载/卸载可能已经跑了一半: 用只读列表(不扫描目录)把界面拉回现实,
 				// 再把原始错误抛给卡片去提示与回弹
 				try {
-					paint(await postJSON("/api/get_plugin_list", { bot: bot.id }))
+					paint(await postJSON("/api/bot/plugin/list", { bot: bot.id }))
 				} catch { /* 刷新失败就维持现状: 原始错误更要紧 */ }
 				throw e
 			}
@@ -145,8 +145,8 @@ export default {
 			void openConfigDialog({
 				title: `${item.name}(${item.id})的插件配置`,
 				label: "插件",
-				load: () => postJSON("/api/get_plugin_config", { bot: bot.id, id: item.id }),
-				save: (config) => postJSON("/api/update_plugin_config", { bot: bot.id, id: item.id, config }),
+				load: () => postJSON("/api/bot/plugin/config/get", { bot: bot.id, plugin: item.id }),
+				save: (config) => postJSON("/api/bot/plugin/config/update", { bot: bot.id, plugin: item.id, config }),
 			})
 		}
 

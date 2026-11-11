@@ -152,7 +152,7 @@ function enterMain() {
 	showMain();
 	app.start();
 
-	// 界面风格是服务端设置项: 登录后向 get_webui_front_config 校准一次。
+	// 界面风格是服务端设置项: 登录后向 webui/config/get 校准一次。
 	// 皮肤样式表已由 theme.js 在启动时预加载, 这里只负责取值; 不 await, 不拖慢首屏。
 	syncUIStyleFromServer();
 

@@ -8,8 +8,14 @@ export type WebUIFrontConfig = {
 }
 
 export interface WebUIAPI {
-	/** 注册端点 */
-	path: string;
+	/**
+	 * 注册端点路径 (相对 `/api`); 省略时按模块文件自身的路径注册
+	 *
+	 * - 省略: `api/bots/list.ts` → `/api/bots/list`, 目录与文件名一起构成路由
+	 * - 相对写法: `api/bots/list.ts` 内写 `"list"` 同样得到 `/api/bots/list`
+	 * - 绝对写法: 以 `/` 开头时忽略所在目录(`"/list"` → `/api/list`)
+	 */
+	path?: string;
 	/** 请求方法 */
 	method: string;
 	/** 是否鉴权 */

@@ -31,7 +31,7 @@ export interface SettingsSnapshot {
 	/**
 	 * 控件定义, 供前端 config-editor 渲染
 	 *
-	 * 形状是 `ConfigRoot` (`{ controls: [...] }`) —— 与 `get_plugin_config`
+	 * 形状是 `ConfigRoot` (`{ controls: [...] }`) —— 与 `bot/plugin/config/get`
 	 * 返回的 define 保持一致: 前端 `createConfigList` 读的就是 `define.controls`。
 	 */
 	define: ConfigRoot;

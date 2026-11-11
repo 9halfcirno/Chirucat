@@ -478,8 +478,8 @@ export default {
 			[
 				createButton("重启 Chirucat Core", async () => {
 					toast(`核心重启请求已发送!`);
-					log("apiFetch(\"/api/reboot_core\") ← 忽略错误, 因为 fetch 会立即失败");
-					await apiFetch("/api/reboot_core").catch(() => void 0);
+					log("apiFetch(\"/api/core/reboot\") ← 忽略错误, 因为 fetch 会立即失败");
+					await apiFetch("/api/core/reboot", { method: "POST" }).catch(() => void 0);
 				}),
 			]
 		);

@@ -67,8 +67,10 @@ export default {
 `, "utf-8");
 
 // 页面清单端点直接用仓库里真实的实现(转出去即可): 页面注册表的 HTTP 行为要在真模块上验
-const realPagesApi = pathToFileURL(path.resolve(import.meta.dirname, "..", "src", "webui", "server", "api", "get_webui_pages.ts")).href;
-await fs.writeFile(path.join(apiDir, "get_webui_pages.ts"), `export { default } from ${JSON.stringify(realPagesApi)};\n`, "utf-8");
+const realPagesApi = pathToFileURL(path.resolve(import.meta.dirname, "..", "src", "webui", "server", "api", "webui/page/get.ts")).href;
+// 目录即路由: 转出去的模块要落在同名子目录里, 推出来的 URL 才是 /api/webui/page/get
+await fs.mkdir(path.join(apiDir, "webui", "page"), { recursive: true });
+await fs.writeFile(path.join(apiDir, "webui/page/get.ts"), `export { default } from ${JSON.stringify(realPagesApi)};\n`, "utf-8");
 
 const core = new Core({ webui: false, statistics: false });
 const server = new WebUIServer({
@@ -212,7 +214,7 @@ const viaContext = await post(`${base}/service/ctx-probe/api/echo`, {});
 check("经 ctx.webui.register 注册的端点可访问", viaContext.status === 200, `status=${viaContext.status}`);
 check("插件 public 目录由上下文自动挂载", (await fetch(`${base}/service/ctx-probe/public/hello.txt`)).status === 200);
 
-const ctxPages = await (await get(`${base}/api/get_webui_pages`, cookie)).json();
+const ctxPages = await (await get(`${base}/api/webui/page/get`, cookie)).json();
 check(
 	"经 ctx.webui.pages.register 注册的页面出现在清单里",
 	ctxPages.pages.some((p: any) => p.key === "svc-ctx-probe-ctx-page" && p.scope === "app"),
@@ -228,7 +230,7 @@ check("上下文释放后端点返回 503", afterDispose.status === 503, `status
 check("上下文释放后静态资源回到 404", (await fetch(`${base}/service/ctx-probe/public/hello.txt`)).status === 404);
 
 // 这就是"停用即注销": 注销函数由上下文代管, 插件自己不记也不会残留
-const afterCtxDispose = await (await get(`${base}/api/get_webui_pages`, cookie)).json();
+const afterCtxDispose = await (await get(`${base}/api/webui/page/get`, cookie)).json();
 check(
 	"上下文释放后它注册的页面从清单消失(停用即注销)",
 	!afterCtxDispose.pages.some((p: any) => p.service === "ctx-probe"),
@@ -239,9 +241,9 @@ check(
 
 console.log("-- 服务插件页面 --");
 
-check("页面清单端点要求鉴权", (await get(`${base}/api/get_webui_pages`)).status === 401);
+check("页面清单端点要求鉴权", (await get(`${base}/api/webui/page/get`)).status === 401);
 
-const before = await (await get(`${base}/api/get_webui_pages`, cookie)).json();
+const before = await (await get(`${base}/api/webui/page/get`, cookie)).json();
 check("上面那些上下文页面注销后清单里没有 app 页面", !before.pages.some((p: any) => p.scope === "app"));
 
 const disposeApp = webui.pages.register({
@@ -255,7 +257,7 @@ const disposeApp = webui.pages.register({
 });
 webui.bot.pages.register({ id: "filter", title: "名单", module: "page/bot.js", order: 30 });
 
-const registered = await (await get(`${base}/api/get_webui_pages`, cookie)).json();
+const registered = await (await get(`${base}/api/webui/page/get`, cookie)).json();
 const appPage = registered.pages.find((p: any) => p.scope === "app");
 const botPage = registered.pages.find((p: any) => p.scope === "bot");
 
@@ -277,7 +279,7 @@ check("bot 作用域不带二级菜单", botPage?.menu?.length === 0);
 check("版本号随注册递增", registered.version > before.version, `${before.version} -> ${registered.version}`);
 
 disposeApp();
-const afterAppDispose = await (await get(`${base}/api/get_webui_pages`, cookie)).json();
+const afterAppDispose = await (await get(`${base}/api/webui/page/get`, cookie)).json();
 check("注销后 app 页面从清单消失", !afterAppDispose.pages.some((p: any) => p.scope === "app"));
 check("注销也让版本号递增", afterAppDispose.version > registered.version, `${registered.version} -> ${afterAppDispose.version}`);
 
@@ -285,7 +287,7 @@ check("注销也让版本号递增", afterAppDispose.version > registered.versio
 const pageFirst = webui.pages.register({ id: "again", title: "第一版", module: "page/a.js" });
 const pageSecond = webui.pages.register({ id: "again", title: "第二版", module: "page/a.js" });
 pageFirst();
-const pageAgain = await (await get(`${base}/api/get_webui_pages`, cookie)).json();
+const pageAgain = await (await get(`${base}/api/webui/page/get`, cookie)).json();
 check("同 id 重新注册只换条目", pageAgain.pages.filter((p: any) => p.key === "svc-probe-again").length === 1);
 check("旧注销不影响重新注册的条目", pageAgain.pages.find((p: any) => p.key === "svc-probe-again")?.title === "第二版");
 pageSecond();
@@ -293,7 +295,7 @@ pageSecond();
 // 排序: order 小的在前, 同 order 按注册顺序
 webui.pages.register({ id: "late", title: "靠后", module: "page/l.js", order: 900 });
 webui.pages.register({ id: "early", title: "靠前", module: "page/e.js", order: 10 });
-const sorted = await (await get(`${base}/api/get_webui_pages`, cookie)).json();
+const sorted = await (await get(`${base}/api/webui/page/get`, cookie)).json();
 const appKeys: string[] = sorted.pages.filter((p: any) => p.scope === "app").map((p: any) => p.key);
 check("清单按 order 升序", JSON.stringify(appKeys) === JSON.stringify(["svc-probe-early", "svc-probe-late"]), JSON.stringify(appKeys));
 
@@ -361,9 +363,9 @@ await real.start();
 core.webui = real;
 const realBase = `http://127.0.0.1:${real.listening!.port}`;
 
-const frontConfig = await get(`${realBase}/api/get_webui_front_config`);
+const frontConfig = await get(`${realBase}/api/webui/config/get`);
 check("核心 API 模块仍注册在 /api 下", frontConfig.status !== 404, `status=${frontConfig.status}`);
-const corePagesBody = await (await get(`${realBase}/api/get_webui_pages`)).json() as {
+const corePagesBody = await (await get(`${realBase}/api/webui/page/get`)).json() as {
 	corePages?: unknown[];
 	corePagesVersion?: number;
 };
@@ -377,7 +379,7 @@ check(
 
 // 测试页的来源是 webui.front (设置域热更新), 清单要如实反映
 real.front = { enableTestLab: true };
-const withTestLab = await (await get(`${realBase}/api/get_webui_pages`)).json() as {
+const withTestLab = await (await get(`${realBase}/api/webui/page/get`)).json() as {
 	corePages?: any[];
 	corePagesVersion?: number;
 };

@@ -8,7 +8,7 @@
  *
  * 刻意保留的不对称也在断言里: 插件 payload 是 `{running, plugins:{global,bot}}`,
  * 服务 payload 是 `{plugins:[...]}`; 插件 hasConfig 看装配结果, 服务看清单声明;
- * set_service_state 严格校验布尔并回完整列表, set_plugin_state 宽松转换且
+ * service/state/update 严格校验布尔并回完整列表, bot/plugin/state/update 宽松转换且
  * **只回 affected**(依赖连带的插件 id), 不扫描目录也不回传完整列表。
  * 末尾还静态检查前端确实消费了 affected 并同步卡片/开关的状态闭包。
  *
@@ -32,16 +32,16 @@ import type { PluginManifest, PluginStatus } from "../src/plugin/types";
 import type { WebUIAPI } from "../src/webui/server/types";
 import type { APIError } from "../src/webui/server/api/_shared";
 
-import getPluginConfig from "../src/webui/server/api/get_plugin_config";
-import getServiceConfig from "../src/webui/server/api/get_service_config";
-import updatePluginConfig from "../src/webui/server/api/update_plugin_config";
-import updateServiceConfig from "../src/webui/server/api/update_service_config";
-import getPluginList from "../src/webui/server/api/get_plugin_list";
-import getServiceList from "../src/webui/server/api/get_service_list";
-import refreshPlugins from "../src/webui/server/api/refresh_plugins";
-import refreshServices from "../src/webui/server/api/refresh_services";
-import setPluginState from "../src/webui/server/api/set_plugin_state";
-import setServiceState from "../src/webui/server/api/set_service_state";
+import getPluginConfig from "../src/webui/server/api/bot/plugin/config/get";
+import getServiceConfig from "../src/webui/server/api/service/config/get";
+import updatePluginConfig from "../src/webui/server/api/bot/plugin/config/update";
+import updateServiceConfig from "../src/webui/server/api/service/config/update";
+import getPluginList from "../src/webui/server/api/bot/plugin/list";
+import getServiceList from "../src/webui/server/api/services/list";
+import refreshPlugins from "../src/webui/server/api/bot/plugin/scan";
+import refreshServices from "../src/webui/server/api/services/scan";
+import setPluginState from "../src/webui/server/api/bot/plugin/state/update";
+import setServiceState from "../src/webui/server/api/service/state/update";
 
 let passed = 0;
 let failed = 0;
@@ -160,7 +160,7 @@ async function call(api: WebUIAPI, body: Record<string, unknown> = {}): Promise<
 	}
 }
 
-const body = (id: string, extra: Record<string, unknown> = {}) => ({ bot: "b1", id, ...extra });
+const body = (id: string, extra: Record<string, unknown> = {}) => ({ bot: "b1", plugin: id, ...extra });
 
 try {
 	/* ---------- 1. 配置读取 ---------- */
@@ -168,10 +168,10 @@ try {
 	const p1 = makeEntity("p1", { hasConfig: true, declared: true });
 	globalPlugins.set("p1", p1);
 	const r1 = await call(getPluginConfig, body("p1"));
-	check("get_plugin_config 返回 define + config",
+	check("bot/plugin/config/get 返回 define + config",
 		r1.ok && r1.value.success === true && r1.value.define === schema
 		&& r1.value.config?.name === "chiru", JSON.stringify(r1));
-	check("get_plugin_config 不含多余字段",
+	check("bot/plugin/config/get 不含多余字段",
 		r1.ok && Object.keys(r1.value).sort().join(",") === "config,define,success");
 
 	const p2 = makeEntity("p2", { declared: true, status: "disabled" });
@@ -194,19 +194,19 @@ try {
 
 	const s1 = makeEntity("s1", { hasConfig: true, declared: true, type: "service" });
 	serviceRegistry.set("s1", s1);
-	const r5 = await call(getServiceConfig, { id: "s1" });
-	check("get_service_config 与插件版同构",
+	const r5 = await call(getServiceConfig, { service: "s1" });
+	check("service/config/get 与插件版同构",
 		r5.ok && r5.value.success === true && r5.value.define === schema
 		&& r5.value.config?.name === "chiru", JSON.stringify(r5));
 
 	const s2 = makeEntity("s2", { declared: true, type: "service", status: "disabled" });
 	serviceRegistry.set("s2", s2);
 	setupCalls = 0;
-	const r6 = await call(getServiceConfig, { id: "s2" });
+	const r6 = await call(getServiceConfig, { service: "s2" });
 	check("服务配置未装配时按需重新装配",
 		r6.ok && setupCalls === 1 && r6.value.config?.name === "chiru", JSON.stringify(r6));
 
-	const r7 = await call(getServiceConfig, { id: "ghost" });
+	const r7 = await call(getServiceConfig, { service: "ghost" });
 	check("服务插件不存在抛 404", !r7.ok && r7.error.code === 404 && r7.error.err.includes("不存在"));
 
 	/* ---------- 2. 配置更新 ---------- */
@@ -215,12 +215,12 @@ try {
 	globalPlugins.set("p3", p3);
 	setupCalls = 0;
 	const r8 = await call(updatePluginConfig, body("p3", { config: { name: "x" } }));
-	check("update_plugin_config 不重装配, 缺配置直接 404",
+	check("bot/plugin/config/update 不重装配, 缺配置直接 404",
 		!r8.ok && r8.error.code === 404 && setupCalls === 0
 		&& r8.error.err.includes("没有可用的配置"), JSON.stringify(r8));
 
 	const r9 = await call(updatePluginConfig, body("p1", { config: { name: "changed" } }));
-	check("update_plugin_config 保存并回传规范化值",
+	check("bot/plugin/config/update 保存并回传规范化值",
 		r9.ok && r9.value.success === true && r9.value.config?.name === "changed", JSON.stringify(r9));
 
 	const r10 = await call(updatePluginConfig, body("p1", { config: "not-an-object" }));
@@ -230,8 +230,8 @@ try {
 	const s3 = makeEntity("s3", { declared: true, type: "service" });
 	serviceRegistry.set("s3", s3);
 	setupCalls = 0;
-	const r11 = await call(updateServiceConfig, { id: "s3", config: { name: "svc" } });
-	check("update_service_config 会重装配后保存",
+	const r11 = await call(updateServiceConfig, { service: "s3", config: { name: "svc" } });
+	check("service/config/update 会重装配后保存",
 		r11.ok && setupCalls === 1 && r11.value.config?.name === "svc", JSON.stringify(r11));
 
 	/* ---------- 3. 列表与视图 ---------- */
@@ -275,27 +275,27 @@ try {
 	console.log("\n[刷新与状态切换]");
 	refreshCalls = 0;
 	const r16 = await call(refreshPlugins, { bot: "b1" });
-	check("refresh_plugins 扫描后回传同形状列表",
+	check("bot/plugin/scan 扫描后回传同形状列表",
 		r16.ok && r16.value.success === true && refreshCalls === 1
 		&& Array.isArray(r16.value.plugins?.global), JSON.stringify(r16));
 
 	const r17 = await call(refreshServices);
-	check("refresh_services 额外回传 failed",
+	check("services/scan 额外回传 failed",
 		r17.ok && r17.value.success === true && Array.isArray(r17.value.failed)
 		&& r17.value.failed.includes("failed-id"), JSON.stringify(r17));
 
-	const r18 = await call(setServiceState, { id: "s1", state: "true" });
-	check("set_service_state 严格校验布尔", !r18.ok && r18.error.code === 400);
+	const r18 = await call(setServiceState, { service: "s1", state: "true" });
+	check("service/state/update 严格校验布尔", !r18.ok && r18.error.code === 400);
 
-	const r19 = await call(setServiceState, { id: "s1", state: true });
-	check("set_service_state 回传 affected 与完整列表",
+	const r19 = await call(setServiceState, { service: "s1", state: true });
+	check("service/state/update 回传 affected 与完整列表",
 		r19.ok && r19.value.success === true && Array.isArray(r19.value.affected)
 		&& Array.isArray(r19.value.plugins), JSON.stringify(r19));
 
 	cascade = null;
 	toggled = null;
 	const r20 = await call(setPluginState, body("p1", { state: 1 }));
-	check("set_plugin_state 宽松转换, 无连带时 affected 为空",
+	check("bot/plugin/state/update 宽松转换, 无连带时 affected 为空",
 		r20.ok && r20.value.success === true && r20.value.state === true
 		&& toggled?.state === true && Array.isArray(r20.value.affected)
 		&& r20.value.affected.length === 0 && !("plugins" in r20.value), JSON.stringify(r20));
@@ -321,7 +321,7 @@ try {
 	cascade = null;
 
 	const r21 = await call(setPluginState, body("ghost", { state: true }));
-	check("set_plugin_state 目标不存在抛 404", !r21.ok && r21.error.code === 404);
+	check("bot/plugin/state/update 目标不存在抛 404", !r21.ok && r21.error.code === 404);
 
 	/* ---------- 5. 前端联动接线(静态契约) ---------- */
 	console.log("\n[前端联动接线]");
@@ -335,7 +335,7 @@ try {
 	check("插件页消费 affected 并逐个对齐卡片",
 		pluginsSrc.includes("data.affected") && pluginsSrc.includes("setPluginStatus"));
 	check("失败时用只读列表对齐界面(不重新扫描目录)",
-		pluginsSrc.includes("/api/get_plugin_list"));
+		pluginsSrc.includes("/api/bot/plugin/list"));
 } finally {
 	// 纯内存, 无需清理
 }

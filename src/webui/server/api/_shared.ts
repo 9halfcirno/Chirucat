@@ -68,7 +68,7 @@ export function requireRunningBot(core: Core, id: string): Bot {
 /**
  * 校验并取出一个 `{ platform, id }` 目标, 两者都必须是非空字符串
  *
- * `field` 给嵌套场景(如 `bind_account` 的 source/target)用, 错误信息会带上字段名。
+ * `field` 给嵌套场景(如 `user/account/bind` 的 source/target)用, 错误信息会带上字段名。
  */
 export function parseTarget(value: unknown, field?: string): { platform: string; id: string } {
 	const { platform, id } = (value ?? {}) as { platform?: unknown; id?: unknown };
@@ -154,7 +154,7 @@ export async function savePluginConfig(
  *   而不是笼统的保存失败(前端据此提示用户重启)
  * - 其余未知错误: 一并 500
  *
- * update_bot_config / update_settings 共用这一段。
+ * bot/config/update / settings/update 共用这一段。
  *
  * @param e patch 抛出的错误
  * @param label 错误信息里的动作名, 形如 "保存设置" / "保存Bot设置"
@@ -176,7 +176,7 @@ export function rethrowSettingsError(e: unknown, label: string): never {
 /**
  * 取整数并夹在 [min, max] 内; 非数字时用默认值
  *
- * 分页参数等"客户端给的数字不可信"场景共用(list_users / get_user_overview)。
+ * 分页参数等"客户端给的数字不可信"场景共用(users/list / users/overview)。
  */
 export function clampInt(value: unknown, fallback: number, min: number, max: number): number {
 	if (typeof value !== "number" || !Number.isFinite(value)) return fallback;

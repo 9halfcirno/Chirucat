@@ -6,7 +6,7 @@
  * 前端不做"事件流"那套增量同步, 而是**每次都拿权威清单来对账**:
  *
  * ```
- * GET /api/get_webui_pages  →  {
+ * GET /api/webui/page/get  →  {
  *   version,          // 服务插件页面清单版本
  *   corePagesVersion, // 核心可选页面清单版本
  *   pages: [{ key, scope, service, title, icon, module, styles, order, menu }],
@@ -21,7 +21,7 @@
  * 对账是幂等的, 所以触发方式可以随便叠加, 任何一条路生效都不会导致不一致:
  *
  * - 启动时一次;
- * - 服务启停 / `refresh_services` 之后主动一次(那是导航变化的直接原因);
+ * - 服务启停 / `services/scan` 之后主动一次(那是导航变化的直接原因);
  * - 设置页保存 core 域后主动一次(统计开关会决定统计页该不该存在);
  * - 窗口重新获得焦点 / 标签页重新可见时一次;
  * - 兜底轮询 (默认 60s, 清单很小)。
@@ -265,7 +265,7 @@ export function createServicePageSync(app, { insertBefore = null, pollMs = DEFAU
 	async function run(force) {
 		let payload;
 		try {
-			payload = await callAPI("get_webui_pages", null, "GET");
+			payload = await callAPI("webui/page/get", null, "GET");
 		} catch (err) {
 			// 服务未就绪 / 网络抖动: 保持现状, 等下一次触发 (轮询是兜底)
 			console.warn("[SPA] 读取服务插件页面清单失败:", err?.message ?? err);
