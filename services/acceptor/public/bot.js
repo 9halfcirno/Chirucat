@@ -44,10 +44,13 @@ export default {
 	render(div, bot) {
 		renderAcceptorPage(div, bot);
 	},
+	
 };
 
 /** 渲染整个页面 */
-function renderAcceptorPage(div, bot) {
+function renderAcceptorPage(botDiv, bot) {
+	let div = document.createElement("div");
+	botDiv.appendChild(div);
 	div.classList.add("acceptor-page");
 
 	/** 最近一次交互时刻: 表格重建会抽走正在操作的下拉, 刚碰过就先别动 */
