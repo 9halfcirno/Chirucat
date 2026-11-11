@@ -199,6 +199,8 @@ const documentStub = {
 	body: new El("body"),
 	documentElement: { dataset: {} },
 	createElement: (tag) => new El(tag),
+	/* 图表组件用 SVG: 同一个 El 桩即可, 不需要真命名空间语义 */
+	createElementNS: (_ns, tag) => new El(tag),
 	/* DocumentFragment 桩: 只需能装子节点, 再整体 append 到真实容器 */
 	createDocumentFragment: () => new El("#fragment"),
 	getElementById: (id) => elements.get(id) ?? null,
@@ -268,6 +270,13 @@ globalThis.EventSource = EventSourceStub;
 let rafSeq = 0;
 globalThis.requestAnimationFrame = (fn) => setTimeout(() => fn(Date.now()), 0);
 globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
+
+/** ResizeObserver 桩: 图表只在尺寸变化时重绘, 测试里不需要真观测 */
+globalThis.ResizeObserver = class {
+	observe() { }
+	unobserve() { }
+	disconnect() { }
+};
 
 // matchMedia: 同一个查询返回同一个对象 (与浏览器一致), 用例可直接改它的 matches
 const mediaQueries = new Map();
@@ -640,7 +649,9 @@ export default { render(container, bot) { container.textContent = "Bot 名单: "
 
 /** 服务端清单的替身 (核心可选页面与插件页面同一份清单) */
 function pageViews(version, pages, corePages = []) {
-	return { version, corePagesVersion: corePages.length > 0 ? 1 : 0, pages, corePages };
+	/* 版本号取核心页 key 的拼接长度: 条目增删/改名都会变, 且不必手写递增数 */
+	const coreKey = corePages.map((view) => view.key).sort().join(",");
+	return { version, corePagesVersion: coreKey.length, pages, corePages };
 }
 
 let payload = pageViews(1, []);
@@ -981,9 +992,22 @@ section("Bot 详情窗口: 服务插件页面的挂载与实时消失");
 
 const { createBotContent } = await import("../src/webui/public/js/pages/bots/bot-content.js");
 
-payload = pageViews(7, [filterView, botView]);
+// 核心可选页的 bot 条目 (与后端 page/get 返回的形状一致: 统计页是可选模块)
+const coreBotStats = {
+	key: "bot-stats",
+	scope: "bot",
+	title: "统计",
+	icon: "/img/icons/stats.svg",
+	module: "/js/pages/bots/bot-pages/stats.js",
+	// 刻意不写 styles: 验证窗口能靠模块自身的 styles 声明把样式挂上
+	// (之前就是清单条目漏了 styles, 统计页变成裸样式)
+	order: 40,
+	menu: [],
+};
+
+payload = pageViews(7, [filterView, botView], [coreBotStats]);
 await serviceSync.sync();
-eq(serviceSync.botPages().map((v) => v.title), ["名单"], "清单里有 bot 作用域页面");
+eq(serviceSync.botPages().map((v) => v.title), ["名单", "统计"], "清单里有 bot 作用域页面 (服务插件 + 核心可选)");
 
 const botContent = createBotContent({ id: "bot-a", name: "机器人A" });
 documentStub.body.appendChild(botContent);
@@ -991,7 +1015,7 @@ await settle(12);
 
 const botNav = () => botContent.querySelector(".bot-nav");
 const botMain = () => botContent.querySelector(".bot-main");
-eq(botNav().children.map((b) => b.getAttribute("aria-label")), ["信息", "插件", "日志", "名单", "设置"], "核心子页 + 插件页按 order 合并排序");
+eq(botNav().children.map((b) => b.getAttribute("aria-label")), ["信息", "插件", "日志", "名单", "统计", "设置"], "核心子页 + 插件页按 order 合并排序");
 eq(botMain().textContent.includes("bot-a"), true, "默认打开第一项(信息)");
 
 await botNav().children[3].click();
@@ -999,15 +1023,21 @@ await settle(4);
 eq(botMain().textContent, "Bot 名单: bot-a", "插件页面拿到当前 Bot 并渲染");
 
 // 服务停用: 已经打开的窗口里那一项当场消失, 并落到第一项
-payload = pageViews(8, [filterView]);
+payload = pageViews(8, [filterView], [coreBotStats]);
 await serviceSync.sync();
 await settle(4);
-eq(botNav().children.map((b) => b.getAttribute("aria-label")), ["信息", "插件", "日志", "设置"], "停用后该项从窗口里消失");
+eq(botNav().children.map((b) => b.getAttribute("aria-label")), ["信息", "插件", "日志", "统计", "设置"], "停用后该项从窗口里消失, 核心可选页仍在");
 eq(botMain().textContent.includes("bot-a"), true, "停在它上面时落到第一项");
+
+// 统计模块停用: 清单里不再有 scope: "bot" 的核心条目, 窗口入口一并消失
+payload = pageViews(9, [filterView], []);
+await serviceSync.sync();
+await settle(4);
+eq(botNav().children.map((b) => b.getAttribute("aria-label")), ["信息", "插件", "日志", "设置"], "统计模块停用后窗口里的统计入口也消失");
 
 // 窗口关闭后不再响应清单变化
 botContent.disposeBotContent();
-payload = pageViews(9, [filterView, botView]);
+payload = pageViews(10, [filterView, botView], [coreBotStats]);
 await serviceSync.sync();
 await settle(3);
 eq(botNav().children.length, 4, "关闭后的窗口不再被清单变化驱动");
@@ -1150,6 +1180,114 @@ logContentB.disposeBotContent();
 eq(logSourceB.closed, true, "关窗时关闭 SSE 连接");
 
 logContent.disposeBotContent();
+
+section("Bot 统计页: 查询范围限定在当前 Bot");
+
+const statsBodies = [];
+const okPayload = (payload) => ({ ok: true, status: 200, json: async () => payload });
+
+globalThis.fetch = async (url, options) => {
+	const target = String(url);
+	const body = JSON.parse(options?.body ?? "{}");
+
+	if (target.endsWith("/api/stats/get")) {
+		statsBodies.push(body);
+		if (body.target === "summary") {
+			return okPayload({
+				summary: { total: 42, sent: 7, users: 5, sessions: 3, images: 2, commands: 1, partial: false },
+			});
+		}
+		if (body.target === "timeline") {
+			return okPayload({ timeline: [{ time: Date.now() - 3_600_000, count: 9, sent: 3 }] });
+		}
+		if (body.target === "rank") {
+			return okPayload({ by: "platform", rank: [{ id: "qq", count: 20 }] });
+		}
+		return okPayload({ commands: [{ id: "/ping", count: 4 }] });
+	}
+	if (target.endsWith("/api/bot/get")) {
+		return okPayload({
+			id: "bot-a", name: "机器人A", path: "C:\\bots\\bot-a",
+			running: true, runningTime: 1000, startedAt: Date.now() - 1000,
+			state: { enable: true, enabledPlugins: [] },
+		});
+	}
+	if (target.endsWith("/api/bot/plugin/scan")) {
+		return okPayload({ running: true, plugins: { global: [], bot: [] } });
+	}
+	return { ok: false, status: 404, json: async () => ({ err: `unexpected url ${url}` }) };
+};
+
+const statsContent = createBotContent({ id: "bot-a", name: "机器人A" });
+documentStub.body.appendChild(statsContent);
+await settle(12);
+
+// 按标题定位统计页 (服务插件页也会插到列表里, 下标不可靠)
+const statsNav = statsContent.querySelector(".bot-nav");
+const statsBtn = statsNav.children.find((b) => b.getAttribute("aria-label") === "统计");
+ok(!!statsBtn, "信息窗里有统计子页");
+await statsBtn.click();
+await settle(12);
+
+ok(statsBodies.length > 0, "打开统计页时发起了统计查询");
+ok(statsBodies.every((b) => b.bot === "bot-a"), "每次统计查询都带上当前 Bot");
+ok(statsBodies.some((b) => b.target === "summary"), "查询了概览");
+ok(statsBodies.some((b) => b.target === "timeline"), "查询了趋势");
+ok(
+	statsBodies.filter((b) => b.target === "rank").every((b) => b.by === "platform"),
+	"占比查询用的是平台维度",
+);
+
+const statsMain = statsContent.querySelector(".bot-main");
+ok(statsMain.textContent.includes("42"), "概览渲染收到的消息数");
+ok(statsMain.textContent.includes("平台 Top 10"), "平台占比卡片已渲染");
+ok(statsMain.textContent.includes("qq"), "平台数据来自接口响应");
+
+// 样式表: 清单条目没写 styles 时, 也要能靠模块自身的声明挂上
+ok(
+	documentStub.head.children.some(
+		(l) => l.tagName === "LINK" && String(l.href).includes("/js/pages/stats/stats.css"),
+	),
+	"统计页的样式表已加载 (靠模块声明)",
+);
+
+statsContent.disposeBotContent();
+globalThis.fetch = realFetch;
+
+section("Bot 窗口：同 order 时核心可选页排在服务插件页之前");
+
+// 与生产一致：acceptor 的 Bot 页 order 40，核心统计页也是 40。
+// WebUI 一级导航里统计靠 before 锚点一定在上方；Bot 窗口没有锚点，只能靠来源优先级。
+const acceptorView = {
+	key: "chirucat-acceptor-acceptor",
+	scope: "bot",
+	service: "chirucat-acceptor",
+	title: "受理人",
+	icon: null,
+	module: botModule,
+	styles: [],
+	order: 40,
+	menu: [],
+};
+
+payload = pageViews(11, [filterView, botView, acceptorView], [coreBotStats]);
+await serviceSync.sync();
+
+// 信息页会去拉 bot/get，这里随便给个 404（不影响导航断言）
+globalThis.fetch = async () => ({ ok: false, status: 404, json: async () => ({ err: "nope" }) });
+
+const orderContent = createBotContent({ id: "bot-a", name: "机器人A" });
+documentStub.body.appendChild(orderContent);
+await settle(12);
+
+eq(
+	orderContent.querySelector(".bot-nav").children.map((b) => b.getAttribute("aria-label")),
+	["信息", "插件", "日志", "名单", "统计", "受理人", "设置"],
+	"统计 (order 40, 核心) 排在受理人 (order 40, 服务) 之前",
+);
+
+orderContent.disposeBotContent();
+globalThis.fetch = realFetch;
 
 section("窄屏折叠菜单在列表变化时不崩");
 setNarrow(true);

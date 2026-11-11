@@ -45,6 +45,20 @@ export default {
 				order: 0,
 				menu: [],
 			});
+			// 同一模块在 Bot 详情窗口里也有一页: 统计是可选模块, 关闭后整站页
+			// 与窗口里的入口应当一起消失。走同一份清单, 前端才不用另建一套判断。
+			corePages.push({
+				key: "bot-stats",
+				scope: "bot",
+				title: "统计",
+				icon: "/img/icons/stats.svg",
+				module: "/js/pages/bots/bot-pages/stats.js",
+				// 弹窗里的子页不会像 SPA 页面那样自动收模块的 styles:
+				// bot-content 只看清单条目上的 styles, 缺了就会变成裸样式
+				styles: ["/js/pages/stats/stats.css"],
+				order: 40,
+				menu: [],
+			});
 		}
 		if (testLab) {
 			corePages.push({

@@ -3,9 +3,9 @@
  *
  * 左侧那排图标按钮是**窗口自己的二级导航**, 来源有两处:
  *
- * 1. 核心自带的子页 (`CORE_PAGES`, 见 bot-pages/);
- * 2. 服务插件注册的页面 (`ctx.core.webui.bot.pages.register` → 框架清单里
- *    `scope: "bot"` 的条目)。
+ * 1. 核心自带的子页 (`CORE_PAGES`, 见 bot-pages/) —— 恒在;
+ * 2. 清单里的 `scope: "bot"` 条目 —— 服务插件注册的页面, 以及核心的可选
+ *    Bot 子页 (如统计页)。它们跟着模块开关/服务启停一起出现或消失。
  *
  * 两者按 order 合并排序(核心子页的 order 也写在这里, 给插件留出插队的位置),
  * 并且**订阅清单变化**: 服务被停用时, 已经打开的窗口里那一项当场消失 ——
@@ -64,14 +64,26 @@ export function createBotContent(bot) {
 	/** 当前页面的清理函数 (render 的返回值); 切页/关窗时先调用 */
 	let disposeActive = null;
 
-	/** 建一个菜单项 (核心子页与服务插件页面共用) */
-	function addEntry({ key, title, icon, styles, order, render }) {
-		entries.set(key, { key, title, icon, styles, order: order ?? 100, seq: ++seq, render });
+	/** 建一个菜单项 (核心子页与清单页面共用) */
+	/**
+	 * 建一个菜单项 (核心子页与清单页面共用)
+	 *
+	 * `tier` 是同 order 时的打平手顺序: 0 = 核心 (自带子页 / 核心可选页),
+	 * 1 = 服务插件页。WebUI 一级导航里统计页靠 `before` 锚点就一定在服务插件
+	 * 页之前; Bot 窗口没有锚点, 只靠 order, 所以撞车时需要这个来源优先级,
+	 * 否则“先加入的在上”会让结果依赖遍历顺序。
+	 *
+	 * 注意它只在 order 相等时生效 —— 插件仍可靠更小的 order 插到核心页之前。
+	 */
+	function addEntry({ key, title, icon, styles, order, tier = 0, render }) {
+		entries.set(key, { key, title, icon, styles, order: order ?? 100, tier, seq: ++seq, render });
 	}
 
-	/** 排在界面上的顺序: order 升序, 同 order 保持加入顺序 */
+	/** 排在界面上的顺序: order 升序 → 同 order 核心先于插件 → 同组保持加入顺序 */
 	function ordered() {
-		return [...entries.values()].sort((a, b) => a.order - b.order || a.seq - b.seq);
+		return [...entries.values()].sort(
+			(a, b) => a.order - b.order || a.tier - b.tier || a.seq - b.seq,
+		);
 	}
 
 	function syncHighlight() {
@@ -158,45 +170,63 @@ export function createBotContent(bot) {
 		disposeActive = fn;
 	}
 
-	// ---- 服务插件注册的页面 ----
-	/** 把清单里的 bot 作用域条目同步进来 (多退少补, 只动服务来源的项) */
-	function applyServiceEntries() {
+	// ---- 清单注册的页面 (服务插件页 + 核心可选页) ----
+	/**
+	 * 把清单里的 bot 作用域条目同步进来 (多退少补, 只动清单来源的项)
+	 *
+	 * 统计页就走这条路: 它是可选模块, 关闭后服务器清单里不再有这条
+	 * (`scope: "bot"` 的 corePage), 对账时这里就把它从菜单里摘掉 —— 与整站
+	 * 统计页用同一套机制, 不需要在窗口里另写一份开关判断。
+	 */
+	function applyManifestEntries() {
 		const views = getServicePages()?.botPages() ?? [];
-		const wanted = new Set(views.map((view) => `svc:${view.key}`));
+		const wanted = new Set(views.map((view) => `manifest:${view.key}`));
 
 		for (const key of [...entries.keys()]) {
-			if (key.startsWith("svc:") && !wanted.has(key)) entries.delete(key);
+			if (key.startsWith("manifest:") && !wanted.has(key)) entries.delete(key);
 		}
 		for (const view of views) {
 			addEntry({
-				key: `svc:${view.key}`,
+				key: `manifest:${view.key}`,
 				title: view.title,
 				icon: view.icon,
 				styles: view.styles,
 				order: view.order,
+				// 核心可选页与服务插件页同 order 时, 前者在前 (与一级导航一致)
+				tier: view.source === "core" ? 0 : 1,
 				// 每次同步都换新的 render 闭包: 模块 URL 变了(服务重新注册)要 import 新的
-				render: (main, botArg, appArg) => renderServiceEntry(view.module, main, botArg, appArg),
+				render: (main, botArg, appArg) => renderManifestEntry(view.module, main, botArg, appArg),
 			});
 		}
 	}
 
-	/** 渲染一个服务插件页面 (默认导出函数, 或带 render 的对象) */
-	async function renderServiceEntry(url, main, botArg, appArg) {
+	/**
+	 * 渲染一个清单页面 (默认导出函数, 或带 render 的对象)
+	 *
+	 * 透传子页的返回值: 它可能是一个清理函数 (如统计页要停定时器、释放图表),
+	 * 由 select() 接管并在切页/关窗时调用。async 函数会把清理函数包进 Promise,
+	 * adoptDisposer 已兼容这种形状。
+	 */
+	async function renderManifestEntry(url, main, botArg, appArg) {
 		try {
 			const mod = await import(url);
 			const entry = mod?.default ?? mod;
+
+			// 模块自己声明的样式一并挂上: 清单条目上的 styles 只是入口声明,
+			// 子页把 ``styles`` 写在模块里才是它的自然位置 (与服务插件模块一致)。
+			// 两处都插是幂等的 (ensureStyles 会查重), 少一处都不至于裸样式。
+			if (Array.isArray(entry?.styles)) ensureStyles(entry.styles);
+
 			if (typeof entry === "function") {
-				await entry(main, botArg, appArg);
-				return;
+				return await entry(main, botArg, appArg);
 			}
 			if (entry && typeof entry.render === "function") {
-				await entry.render(main, botArg, appArg);
-				return;
+				return await entry.render(main, botArg, appArg);
 			}
 			main.textContent = "该插件页面没有导出可渲染的内容 (需要默认导出一个函数或 { render })";
 		} catch (err) {
 			// 服务在这一瞬间被停用、或插件模块本身有错: 给出可见的原因而不是空白
-			console.error(`[SPA] 加载插件 Bot 页面失败: ${url}`, err);
+			console.error(`[SPA] 加载 Bot 页面失败: ${url}`, err);
 			const tip = document.createElement("p");
 			tip.className = "muted";
 			tip.textContent = `加载失败: ${err?.message ?? err}`;
@@ -207,7 +237,7 @@ export function createBotContent(bot) {
 	// 订阅清单变化: 服务启停后, 已经打开的窗口要跟着增删菜单
 	const unsubscribe = getServicePages()?.subscribe(() => {
 		if (closed) return;
-		applyServiceEntries();
+		applyManifestEntries();
 		paintMenu();
 	}) ?? null;
 
@@ -220,7 +250,7 @@ export function createBotContent(bot) {
 		if (typeof dispose === "function") dispose();
 	};
 
-	// 先加载核心子页, 再合并服务插件页面并画出来 (与旧的逐个 addPage 等价, 只是有了顺序与来源)
+	// 先加载核心子页, 再合并清单页面并画出来 (与旧的逐个 addPage 等价, 只是有了顺序与来源)
 	void (async () => {
 		for (const { url, order } of CORE_PAGES) {
 			try {
@@ -239,7 +269,7 @@ export function createBotContent(bot) {
 		}
 
 		if (closed) return;
-		applyServiceEntries();
+		applyManifestEntries();
 		paintMenu();
 	})();
 

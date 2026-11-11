@@ -41,6 +41,10 @@
  * 发现"本地有、清单没有" → `app.unregister(id)`: 框架会调 `destroy()`、移除页面样式、
  * 并把用户带到别的页面(若正停在它上面, 这里再补一句提示)。
  * 核心可选页面同理: 模块被关闭后清单里的 `corePages` 条目消失, 对账时按同一套逻辑注销。
+ *
+ * 注意 `corePages` 里也可能出现 `scope: "bot"` 的条目 (如统计页): 它不进活动栏,
+ * 而是和服务插件注册的 Bot 页面一起交给 Bot 详情窗口。两者形状相同, 窗口不需要
+ * 区分来源 —— 统计模块停用后窗口里的统计入口会跟着消失。
  */
 import { callAPI } from "./api.js";
 import toast from "./toast.js";
@@ -277,7 +281,17 @@ export function createServicePageSync(app, { insertBefore = null, pollMs = DEFAU
 		version = next;
 
 		const views = Array.isArray(payload?.pages) ? payload.pages : [];
-		botEntries = views.filter((view) => view.scope === "bot");
+		const coreAll = Array.isArray(payload?.corePages) ? payload.corePages : [];
+
+		// Bot 作用域条目有两个来源: 服务插件注册的, 以及核心可选页 (如统计)。
+		// 两者形状相同, 调用方 (Bot 详情窗口) 不需要区分来源才能渲染。
+		// `source` 只用于排序打平手时: 同一 order 下核心页先于服务插件页
+		// (见 bot-content.js 的 ordered()), 否则 order 撞车时谁先加入谁在上,
+		// 结果会跟 WebUI 一级导航不一致。
+		botEntries = [
+			...views.filter((view) => view.scope === "bot").map((view) => ({ ...view, source: "service" })),
+			...coreAll.filter((view) => view.scope === "bot").map((view) => ({ ...view, source: "core" })),
+		];
 
 		// ---- 新增 / 更新 ----
 		const wanted = new Map(views.filter((view) => view.scope !== "bot").map((view) => [view.key, view]));
@@ -306,8 +320,9 @@ export function createServicePageSync(app, { insertBefore = null, pollMs = DEFAU
 		}
 
 		// ---- 核心可选页面: 同一份清单, 同一套对账 ----
-		coreViews = (Array.isArray(payload?.corePages) ? payload.corePages : [])
-			.filter((view) => view.scope !== "bot");
+		coreViews = Array.isArray(payload?.corePages)
+			? payload.corePages.filter((view) => view.scope !== "bot")
+			: [];
 		const coreWanted = new Map(coreViews.map((view) => [view.key, view]));
 
 		for (const [id, view] of coreWanted) {
@@ -379,7 +394,7 @@ export function createServicePageSync(app, { insertBefore = null, pollMs = DEFAU
 			listeners.add(listener);
 			return () => listeners.delete(listener);
 		},
-		/** 当前清单里的 Bot 作用域条目 */
+		/** 当前清单里的 Bot 作用域条目 (服务插件 + 核心可选页) */
 		botPages() {
 			return botEntries.slice();
 		},
