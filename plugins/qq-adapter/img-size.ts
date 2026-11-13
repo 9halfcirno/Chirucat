@@ -73,6 +73,29 @@ export function imageScaleFromBytes(buf: Uint8Array): ImageSize | null {
 	return parsed === NEED_MORE ? null : parsed;
 }
 
+/**
+ * 读业务侧在 image 块 `extra` 里声明的尺寸: 先 width/height, 再 size.{width,height}
+ *
+ * 已知尺寸就不必解析 buffer 头部、更不必为外链发 Range 探测请求。
+ * 两个维度必须都合法, 只给一半时整体作废 —— 半个尺寸会让平台按错误的宽高比拉伸。
+ */
+export function imageSizeFromExtra(extra: Record<string, any> | undefined): ImageSize | null {
+	return readSizePair(extra) ?? readSizePair(extra?.size);
+}
+
+function readSizePair(src: Record<string, any> | undefined): ImageSize | null {
+	if (!src) return null;
+	const width = toPx(src.width);
+	const height = toPx(src.height);
+	return width === null || height === null ? null : { width, height };
+}
+
+/** 尺寸标签写的是 px 整数; 非法值返回 null 让调用方回退, 不能填 0(0 是"交给平台自适应") */
+function toPx(value: unknown): number | null {
+	if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+	return Math.max(1, Math.round(value));
+}
+
 function isRiffWebp(buf: Uint8Array): boolean {
 	return buf.length >= 12 &&
 		buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 && // "RIFF"

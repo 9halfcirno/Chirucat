@@ -7,7 +7,7 @@ import type { QQApi } from "./api";
 import { splitSendBlocks, stringifyContent } from "./codec";
 import type { ImageMaterialCache } from "./image-cache";
 import { MSG_TYPE_MEDIA, MSG_TYPE_TEXT, PLATFORM, QQ_FILE_TYPE } from "./config";
-import { getImageSize, imageScaleFromBytes } from "./img-size";
+import { getImageSize, imageSizeFromExtra, imageScaleFromBytes } from "./img-size";
 import { resolveFileName, toBuffer } from "./media";
 import type { PassiveReplyWindow } from "./passive-window";
 import type { MixedSegment } from "./send-router";
@@ -238,7 +238,8 @@ async function sendMedia(
  * 图文混合走单条 markdown: 按原始消息块顺序渲染(文本/提及/图片各自归位),
  * 不再固定"文前图后"。图片解析:
  * - Buffer 图片经素材缓存换 qqbot-media:// URL(去重、可复用);
- * - http(s) 图片直接外链内嵌, 尺寸用 Range 探测(探测失败按 #0px 自适应)。
+ * - http(s) 图片直接外链内嵌, 尺寸用 Range 探测(探测失败按 #0px 自适应);
+ * - 块 extra 里声明了尺寸就直接采信, 不再解析字节 / 探测外链。
  *
  * 返回 null 表示"未发出任何消息、应回退到逐条通道": 素材上传失败、markdown 超长/为空、
  * markdown 发送被拒都在这个前提下, 回退不会产生重复消息。
@@ -267,13 +268,14 @@ async function trySendMixedMarkdown(
 				continue;
 			}
 			if (block.type !== "image") continue;
+			const declared = imageSizeFromExtra(block.extra);
 			if (block.buffer) {
 				const bytes = toBuffer(block.buffer);
 				const name = resolveFileName(bytes, QQ_FILE_TYPE.image);
 				const url = await deps.imageCache.getImageUrl({ buffer: bytes, fileName: name });
-				segments.push({ kind: "image", url, size: imageScaleFromBytes(bytes) ?? undefined });
+				segments.push({ kind: "image", url, size: declared ?? imageScaleFromBytes(bytes) ?? undefined });
 			} else if (block.url && isHttpUrl(block.url)) {
-				const size = await getImageSize(block.url);
+				const size = declared ?? await getImageSize(block.url);
 				segments.push({ kind: "image", url: block.url, size: size ?? undefined });
 			}
 			// 无可用来源的 image 块与 splitSendBlocks 的丢弃行为对齐

@@ -92,8 +92,8 @@ function imageTag(url: string, size: ImageSize | undefined): string {
 /**
  * 按片段顺序拼装图文混排的 markdown
  *
- * 尺寸标签来自图片自身头部解析(img-size): 不带 `#宽px #高px` 时 QQ 客户端
- * 会把图拉伸到统一框, 表情包会变形得很明显。解析不到按 `#0px #0px` 交给平台自适应。
+ * 尺寸标签来自业务侧声明(块 extra)或图片自身头部解析(img-size): 不带 `#宽px #高px` 时
+ * QQ 客户端会把图拉伸到统一框, 表情包会变形得很明显。都拿不到按 `#0px #0px` 交给平台自适应。
  *
  * @param maxImageHeight 显示高度上限(px, 0=不限制, 来自 material.max_image_height),
  *   超高图片等比缩放
