@@ -199,7 +199,7 @@ const service = new Service({
 	manifest: { id: "ctx-probe", version: "0.0.0", main: "index.ts", path: pluginDir },
 	core,
 });
-const serviceContext = new ServiceContext(service, new PluginExports(), new CommandManager({}));
+const serviceContext = new ServiceContext(service, new PluginExports(), new CommandManager({}), new Map());
 
 serviceContext.webui!.register({ path: "echo", method: "POST", auth: false, handler: () => ({ from: "ctx" }) });
 serviceContext.webui!.pages.register({

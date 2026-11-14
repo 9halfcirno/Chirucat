@@ -124,6 +124,28 @@ export abstract class ManagedHostBase<
 
 	/* ---------- 注册表与依赖图 ---------- */
 
+	/**
+	 * 跨重载暂存的桶: 插件 id -> 桶
+	 *
+	 * 放在宿主而不是实体上, 因为实体不一定是长寿的: 服务宿每次扫描都会重建关态实例
+	 * (`shouldReplace` 恒为 true), 挂在实体上等于"打开一次 WebUI 服务页就清零"。
+	 */
+	private readonly memories = new Map<string, Map<string, unknown>>();
+
+	/**
+	 * 取(必要时建)某插件的暂存桶, 由子类的 `createContext` 交给上下文
+	 *
+	 * 只在宿主实例存活期间存在: Bot 宿随该 Bot 销毁, 服务宿随 Core 销毁。
+	 */
+	protected memoryFor(id: string): Map<string, unknown> {
+		const found = this.memories.get(id);
+		if (found) return found;
+
+		const created = new Map<string, unknown>();
+		this.memories.set(id, created);
+		return created;
+	}
+
 	/** 全部实体, 按 registries 顺序 */
 	allEntities(): E[] {
 		return this.registries().flatMap((r) => [...r.values()]);
@@ -284,6 +306,8 @@ export abstract class ManagedHostBase<
 			if (!collected.has(id) && !ACTIVE.includes(entity.status)) {
 				await entity.context?.dispose();
 				registry.delete(id);
+				// 代码都没了, 暂存也就没人负责重写: 这里丢弃, 重载(停用再启用)不走这条路
+				this.memories.delete(id);
 			}
 		}
 	}

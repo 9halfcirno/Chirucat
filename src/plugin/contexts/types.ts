@@ -232,6 +232,55 @@ export interface PluginKVAPI {
 }
 
 /**
+ * 跨重载暂存 (只存在于内存)
+ *
+ * 与 `kv` 的分工只看一件事: **重启之后还有人把它写回来吗?**
+ * - 只有插件代码在 `init` 里写进来的(其他插件注册进来的词条、运行时算出的中间结果),
+ *   用 `memory` —— 它跟着宿主实例活到进程结束, 本插件被停用再启用、模块被重建都还在,
+ *   重启则自然清零(反正插件会重新注册一遍);
+ * - WebUI 手工加的、指令加的、重启后没人负责补写的, 用 `kv` —— 它落盘, 才是真的持久。
+ *
+ * 存进去和取出来的都是**副本**: 值经结构化复制, 与插件手里的对象互不影响,
+ * 因此改了本地对象不会偷偷改到暂存值, 反过来也一样。
+ * 代价是值只能是可复制的数据 —— 函数、Symbol、循环引用一律抛错;
+ * 类实例会被剥成普通对象(原型与方法丢失), 别指望取回来还能调用它的方法。
+ *
+ * 桶按插件 id 归属, 插件之间互相看不见; 卸载**本**插件不清空(那是重载),
+ * 插件目录从磁盘上消失时随注册表条目一起丢弃。
+ */
+export interface PluginMemoryAPI {
+	/**
+	 * 读取暂存值
+	 * @param key 键
+	 * @param defaultValue 键不存在时的返回值
+	 */
+	get<T = unknown>(key: string, defaultValue?: T): T | undefined;
+	/**
+	 * 写入暂存值
+	 * @param key 键
+	 * @param value 可复制的数据; 含函数/Symbol/循环引用时抛出 StateError
+	 */
+	set(key: string, value: unknown): void;
+	/**
+	 * 键是否存在
+	 * @param key 键
+	 */
+	has(key: string): boolean;
+	/**
+	 * 删除键
+	 * @param key 键
+	 * @returns 是否存在并被删除
+	 */
+	delete(key: string): boolean;
+	/** 列出全部键 */
+	keys(): string[];
+	/** 列出全部键值对(值为副本) */
+	entries(): [string, unknown][];
+	/** 当前暂存的键数量 */
+	size(): number;
+}
+
+/**
  * 使插件可操作webui
  * @todo 尚未实现(apis/webui.ts 仍为空文件)
  */

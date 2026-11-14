@@ -8,11 +8,12 @@ export const PluginContextFactory = {
 	create(
 		plugin: Plugin,
 		exports: PluginExports,
+		memory: Map<string, unknown>,
 		serviceExports: PluginExports | null = null,
 		adapterExports: PluginExports = new PluginExports(),
 	): PluginContext {
 		return plugin.manifest.type === "adapter"
-			? new AdapterContext(plugin, exports, serviceExports, adapterExports)
-			: new PluginContext(plugin, exports, serviceExports, adapterExports);
+			? new AdapterContext(plugin, exports, serviceExports, adapterExports, memory)
+			: new PluginContext(plugin, exports, serviceExports, adapterExports, memory);
 	}
 }

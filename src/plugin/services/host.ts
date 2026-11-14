@@ -98,7 +98,7 @@ export class ServiceHost extends ManagedHostBase<Service, ServiceContext> {
 	}
 
 	protected createContext(service: Service): ServiceContext {
-		return new ServiceContext(service, this.exports, this.command);
+		return new ServiceContext(service, this.exports, this.command, this.memoryFor(service.id));
 	}
 
 	protected async loadModule(service: Service): Promise<ServiceModule> {

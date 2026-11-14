@@ -57,6 +57,7 @@ export class PluginContext extends ManagedContextBase {
 		exports: PluginExports,
 		serviceExports: PluginExports | null = null,
 		adapterExports: PluginExports = new PluginExports(),
+		memory: Map<string, unknown>,
 	) {
 		super({
 			manifest: plugin.manifest,
@@ -65,6 +66,7 @@ export class PluginContext extends ManagedContextBase {
 			// bot.path 为绝对路径, resolve 会从其重置; 若为相对路径则以 root 为基准
 			storageRoot: path.resolve(root, plugin.bot.path, "data", "plugins", plugin.manifest.id),
 			config: plugin.config,
+			memory,
 			ownExports: exports,
 			serviceExports,
 			commands: plugin.bot.command,

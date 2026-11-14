@@ -31,6 +31,7 @@
     "check:settings": "tsx scripts/check-settings.ts && tsx scripts/check-settings-api.ts",
     "check:startup": "tsx scripts/check-startup-settings.ts",
     "check:plugin-manager": "tsx scripts/check-plugin-manager.ts",
+    "check:memory": "tsx scripts/check-plugin-memory.ts",
     "check:config-manager": "tsx scripts/check-config-manager.ts",
     "check:entity-state": "tsx scripts/check-entity-state.ts",
     "check:baseline": "tsx scripts/check-plugin-manager.ts && tsx scripts/check-config-manager.ts && tsx scripts/check-entity-state.ts",

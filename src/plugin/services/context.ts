@@ -93,12 +93,14 @@ export class ServiceContext extends ManagedContextBase {
 		service: Service,
 		serviceExports: PluginExports,
 		commandManager: CommandManager,
+		memory: Map<string, unknown>,
 	) {
 		super({
 			manifest: service.manifest,
 			loggerName: "Service",
 			storageRoot: path.resolve(root, "data", "services", service.manifest.id),
 			config: service.config,
+			memory,
 			// 服务插件的导出表只有一张: 既是自己的 `exports`, 也是 `ctx.service` 的来源
 			ownExports: serviceExports,
 			serviceExports,

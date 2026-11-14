@@ -171,7 +171,7 @@ const consumer = new Plugin({
 	bot,
 });
 const ownExports = new PluginExports();
-const ctx = PluginContextFactory.create(consumer, ownExports, core.services.exports);
+const ctx = PluginContextFactory.create(consumer, ownExports, new Map(), core.services.exports);
 
 check("Bot 插件可通过 ctx.require 读取服务导出", (ctx.service.a as { value: number })?.value === 42);
 

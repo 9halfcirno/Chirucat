@@ -61,7 +61,7 @@ const manifest: PluginManifest = {
 	path: tmp,
 	main: "index.ts",
 };
-const ctx = new ServiceContext(new Service({ manifest, core }), new PluginExports(), new CommandManager({}));
+const ctx = new ServiceContext(new Service({ manifest, core }), new PluginExports(), new CommandManager({}), new Map());
 
 /* ---------- 1. 形状: 扁平, 没有后门 ---------- */
 

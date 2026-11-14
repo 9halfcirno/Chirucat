@@ -39,9 +39,10 @@ export class AdapterContext extends PluginContext {
 		exports: PluginExports,
 		serviceExports: PluginExports | null = null,
 		adapterExports: PluginExports = new PluginExports(),
+		memory: Map<string, unknown>,
 	) {
 		if (plugin.manifest.type !== "adapter") throw new Error(`Plugin Context: AdapterContext仅 type: adapter 的插件可创建`)
-		super(plugin, exports, serviceExports, adapterExports);
+		super(plugin, exports, serviceExports, adapterExports, memory);
 
 		this.bot = {
 			id: this._bot.id,

@@ -154,6 +154,8 @@ export default {
 
 `dependencies` 里可以写其他服务插件的 id: 依赖会先于本插件加载, 存在依赖环或依赖缺失时本插件拒绝加载。依赖方可以通过 `ctx.require` 或 `ctx.service.xx` 取到对方发布的导出(见[服务插件上下文](contexts/service.md#插件间导入导出exportsrequire))。
 
+`ctx.service.xx` 每次取都实时查表, 别把返回值存下来 —— 对方卸载后那份导出就失效了。真正容易漏的是**一次性注册**: 依赖方在 `init` 里 `ctx.service.help?.set(...)` 之后就再也不会调用, 而 help 服务一旦停用再启用, 模块被整个重建(见[无缓存重载](loader.md)), 那条注册就永久丢了。服务插件应当把注册进来的数据顺手写进 [`ctx.memory`](contexts/service.md#memory对象), 重新启用时先读回来重建索引 —— 它专治这个: 跨重载, 不跨重启。
+
 ## 上下游
 
 - 上下文 API: [服务插件上下文](contexts/service.md)

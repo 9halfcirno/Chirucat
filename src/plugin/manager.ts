@@ -75,7 +75,8 @@ export class PluginManager extends ManagedHostBase<Plugin, PluginContext> {
 
 	protected createContext(plugin: Plugin): PluginContext {
 		return PluginContextFactory.create(
-			plugin, this.pluginExports, this.bot.core.services.exports, this.#adapterExports);
+			plugin, this.pluginExports, this.memoryFor(plugin.id),
+			this.bot.core.services.exports, this.#adapterExports);
 	}
 
 	protected async loadModule(plugin: Plugin): Promise<PluginModule> {

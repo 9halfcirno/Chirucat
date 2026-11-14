@@ -2,7 +2,7 @@
  * 插件与服务插件共通的运行上下文骨架
  *
  * `PluginContext`(每个 Bot 一份) 与 `ServiceContext`(全局单例) 的日志、消息回调、
- * 平台事件订阅、指令登记、配置与 KV 生命周期、释放流程逐行同构, 差异只有构造参数
+ * 平台事件订阅、指令登记、配置与 KV 生命周期、跨重载暂存、释放流程逐行同构, 差异只有构造参数
  * (数据目录、指令表、导出注册表、Cron 来源) 与少数域能力。
  *
  * 与 `ManagedEntity` / `ManagedHostBase` 同一套做法: 共通部分固定在基类, 差异由
@@ -31,6 +31,7 @@ import { CronScope } from "./contexts/apis/cron";
 import { FileSystemAPI } from "./contexts/apis/fs";
 import { KVStore } from "./contexts/apis/kv";
 import { MessageAPI } from "./contexts/apis/message";
+import { PluginMemory } from "./contexts/apis/memory";
 import type {
 	MessageCallbackEntry,
 	PlatformEventCallback,
@@ -39,6 +40,7 @@ import type {
 	PluginCronAPI,
 	PluginFileSystemAPI,
 	PluginKVAPI,
+	PluginMemoryAPI,
 	PluginMessageAPI,
 	ReadonlyFsAPI,
 } from "./contexts/types";
@@ -56,6 +58,13 @@ export type ManagedContextOptions = {
 	storageRoot: string;
 	/** 配置值管理器; 未声明配置时为 null */
 	config: ConfigManager | null;
+	/**
+	 * 跨重载暂存的桶, 由宿主的 `memoryFor` 给出
+	 *
+	 * 与实体不同, 这个桶不随上下文一起重建 —— 插件停用再启用后读到的还是同一份,
+	 * 这正是它存在的理由(见 `PluginMemoryAPI`)。
+	 */
+	memory: Map<string, unknown>;
 	/** 本上下文自己的导出注册表 (`exports` / `require` 的操作对象) */
 	ownExports: PluginExports;
 	/** 其他服务插件的导出注册表 (`ctx.service`); 无则为 null */
@@ -97,6 +106,8 @@ export abstract class ManagedContextBase {
 	readonly service: Record<string, unknown>;
 	/** 指令登记入口: 普通插件写进本 Bot 的指令表, 服务插件写进全局指令表 */
 	readonly command: PluginCommandAPI;
+	/** 跨重载暂存: 本插件的内存桶视图(值经复制, 不随上下文重建而清空) */
+	readonly memory: PluginMemoryAPI;
 
 	private readonly _commandsRegistry: CommandManager;
 	private readonly _serviceExports: PluginExports | null;
@@ -132,6 +143,7 @@ export abstract class ManagedContextBase {
 		this.plugin = new FileSystemAPI(path.resolve(root, this._manifest.path), { writable: false });
 		this._kv = new KVStore(path.join(options.storageRoot, ".kv.db"));
 		this.kv = this._kv;
+		this.memory = new PluginMemory(options.memory);
 		this._config = new PluginConfig(options.config);
 		this.config = this._config;
 		this._cronScope = new CronScope(

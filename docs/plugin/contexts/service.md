@@ -25,6 +25,7 @@
 - [自带静态资源](#自带静态资源)
 - [持久化存储](#持久化存储)
   - [kv对象](#kv对象)
+  - [memory对象](#memory对象)
   - [fs对象](#fs对象)
   - [plugin对象](#plugin对象)
 - [其他](#其他)
@@ -445,11 +446,39 @@ export default {
 
 ## 持久化存储
 
-三种存储的用法与普通上下文一致, 差别只在根目录都落在**服务插件自己的数据目录** `data/services/<插件id>/`。
+四种存储的用法与普通上下文一致, 差别只在**落盘**那三种的根目录都落在服务插件自己的数据目录 `data/services/<插件id>/`。
 
 ### kv对象
 
 自动序列化/反序列化 JSON 的简易键值存储, 需先 `ctx.kv.init()`。方法见[普通上下文的 `kv` 对象](./normal.md#kv对象)。
+
+### memory对象
+
+跨重载的内存暂存 —— 服务插件最常用它: 别的服务/插件通过 `ctx.service.<id>` 注册进来的数据只会注册一次, 而本服务随时可能被停用再启用(模块被重建, 见[无缓存重载](../loader.md)), 重新启用后没人会再注册一遍。把那份数据同时写进 `ctx.memory`, `init` 时先读回来重建索引就行。
+
+方法、值规则(副本语义、拒绝函数与循环引用)与生命周期见[普通上下文的 `memory` 对象](./normal.md#memory对象); 服务插件的桶活到进程结束。
+
+要注意它和普通模块级变量的**唯一**差别就是"扛得过重载": 同一个插件里的模块级 `let` 在停用后即失效, 而桶里的值还在。
+
+典型场景是服务插件留住其他插件注册进来的数据 —— 对方只会调一次, 而服务随时可能被重启:
+
+```ts
+// help 服务: 别的插件 ctx.service.help?.set("/hello", "Hello World!") 一次就完事
+export default {
+	init(ctx: ServiceContext) {
+		// 上一轮注册进来的词条还在桶里, 重建索引即可, 不必等对方再注册一遍
+		const replies = new Map<string, string>(ctx.memory.entries() as [string, string][]);
+
+		ctx.exports = {
+			set: (command: string, text: string) => {
+				replies.set(command, text);
+				ctx.memory.set(command, text);
+			},
+			get: (command: string) => replies.get(command),
+		};
+	},
+} as ServiceModule;
+```
 
 ### fs对象
 
