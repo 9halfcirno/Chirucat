@@ -91,7 +91,10 @@ async function exit(exitCode: number) {
 	logger.log("Chirucat 已退出");
 
 	process.exitCode = exitCode;
-	setTimeout(() => process.exit(exitCode), 1000).unref();
+	setTimeout(() => {
+		logger.warn(`Chirucat 关闭超时, 强制退出`);
+		process.exit(exitCode);
+	}, 1000).unref();
 }
 
 
@@ -108,7 +111,7 @@ try {
 	args = argsParser.parse(process.argv.slice(2));
 } catch (e) {
 	if (e instanceof ArgParseError) {
-		console.error(`[${e.code}] ${e.message}`);
+		logger.error(`[${e.code}] ${e.message}`);
 		process.exit(1);
 	}
 	throw e;
