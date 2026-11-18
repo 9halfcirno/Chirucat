@@ -1,0 +1,611 @@
+/**
+ * Chirucat WebUI 设计令牌 — Chirucat 风格皮肤 (浅色 + 深色), 界面风格的默认档
+ *
+ * 自包含皮肤, 由 js/spa/theme.js 在运行时注入 <link>, 挂载点:
+ *   :root[data-theme="chirucat"]       浅色
+ *   :root[data-theme="chirucat-dark"]  深色
+ *
+ * 视觉语言取自 Cyan Utility: 「独立小工具 / 渲染器控制面板」气质 —— 白与浅灰
+ * 表面、克制的青蓝交互色、靠 1–2px 细边框而不是阴影分层、2–8px 小圆角、
+ * 紧凑矩形控件、偏技术向的等宽字体。
+ *
+ * 它不是彻底的扁平: 标志性的细节是「右下边」—— 卡片与设置面板只画
+ * 右边和底边各 2px, 颜色比面板底略深一档, 由此撑起一层板; 进度指示
+ * 同理。按钮相反, 走整圈描边。浮起来的表面 (弹窗 / 下拉 / Toast /
+ * 登录卡) 也用整圈边。这条边是结构性的, 不许拿 box-shadow 去替代。
+ *
+ * 深色档是本皮肤没有原始参照的部分, 按同一逻辑推导: 表面取青调深灰
+ * (#181F24 系列), 强调色提亮到 #5BC8FF, 仍然靠描边而不是阴影分层。
+ *
+ * 结构:
+ *   1. 浅色颜色令牌  (:root[data-theme="chirucat"])
+ *   2. 深色颜色令牌  (:root[data-theme="chirucat-dark"])
+ *   3. 共用结构令牌 + 形态钩子 (语义清单见 default.css)
+ *   4. 组件外观覆盖: 只留令牌表达不了的真结构差异
+ *      (右下 2px 边 / 控件整圈 2px 边 / 导航底部 2px 选中条 / 方头滑块)
+ */
+
+/* ==================== 1. 浅色 ==================== */
+
+:root[data-theme="chirucat"] {
+	color-scheme: light;
+
+	/* ---- 表面: 白 → 浅青白 → 灰卡片 → 深一档灰井 ---- */
+	--bg-app: #ffffff;
+	--bg-activity: #efefef;   /* 活动栏: 面板灰, 与内容区拉开一档 */
+	--bg-sidebar: #fbffff;    /* 次级侧栏: 菜单面 */
+	--bg-panel: #f5f5f5;      /* 卡片 / 内容表面: 中性浅灰, 叠在白窗口底上 */
+	--bg-elevated: #fbffff;   /* 浮层: 近白带青 (靠描边分层, 不加深) */
+	--bg-input: #ffffff;      /* 输入底色: 纯白 */
+
+	/* 交互态: hover 落在浅青项底上, 选中/激活用同色加深 */
+	--bg-hover: rgba(131, 206, 215, 0.20);
+	--bg-active: #daebf6;     /* --ui-accent-bg */
+	--bg-selected: #edfdff;   /* --ui-item: 选中行 / 列表项 */
+
+	/* 皮肤自有中性色 (面板两档 + 两档描边 + 面板右下边), 供第 4 节使用 */
+	--cu-panel: #efefef;       /* --ui-panel: 设置分组底 */
+	--cu-panel-dark: #d5d5d5;  /* --ui-panel-dark: 列表井 / 需要强中性底处 */
+	--cu-border: #d7d7d7;     /* 普通分隔线与输入描边 */
+	--cu-border-strong: #bbbbbb;
+	--cu-border-cyan: #83ced7;
+	--cu-edge: #d7d7d7;       /* 卡片/面板的右+下 2px 边: 比面板底略深一档 */
+
+	/* ---- 文字: 深灰而不是纯黑 ---- */
+	--fg: #444444;
+	--fg-muted: #767676;      /* 比基线 #888 稍深, 保住小字号对比 */
+	--fg-subtle: #8b8b8b;
+	--fg-on-accent: #ffffff;
+
+	/* ---- 线条 ---- */
+	--border: var(--cu-border);
+	--border-strong: var(--cu-border-strong);
+
+	/* ---- 语义 ---- */
+	--accent: #1f74af;        /* 交互文字色必须能压在浅灰上读清 */
+	--accent-hover: #18608f;
+	--accent-bright: #45c6ff; /* 焦点环 / 填充式强调: 只做指示不做文字 */
+	--ok: #4f8a68;            /* 基线 #86b998 在浅底做文字太淡, 压深一档 */
+	--warn: #a3823a;          /* 基线 #d7b76a 同上 */
+	--danger: #c06565;        /* 基线 #d78a8a 同上 */
+
+	--accent-soft: rgba(69, 198, 255, 0.14);
+	--ok-soft: #eff8f0;
+	--ok-line: rgba(79, 138, 104, 0.5);
+	--warn-soft: #fff9e9;
+	--warn-line: rgba(163, 130, 58, 0.5);
+	--danger-soft: #fff0f0;
+	--danger-line: rgba(192, 101, 101, 0.5);
+
+	--fg-on-danger: #ffffff;
+
+	/* ---- 插件类型标识: 蓝 / 青 / 紫, 全部压深保证浅底可读 ---- */
+	--type-adapter: #1f74af;
+	--type-adapter-soft: rgba(31, 116, 175, 0.12);
+	--type-service: #2f8f99;
+	--type-service-soft: rgba(47, 143, 153, 0.14);
+	--type-normal: #6b57b8;
+	--type-normal-soft: rgba(107, 87, 184, 0.12);
+
+	/* ---- 遮罩 / 浮层: 不用毛玻璃, 浮层是实心面 ---- */
+	--scrim: rgba(68, 68, 68, 0.28);
+	--overlay-bg: rgba(251, 255, 255, 0.72);
+	--glass-bg: #fbffff;
+	--glass-blur: 0px;
+	/* 青边只留给菜单 / 弹窗 / 选中边界; 普通卡片走中性描边, 否则全站都在发青 */
+	--glass-border: var(--cu-border);
+
+	/* 日志终端区: 整站唯一保持深底的地方 */
+	--log-bg: rgba(24, 31, 36, 0.95);
+	--log-fg: #cfe3e8;
+
+	/* ---- 滑块 (第 4 节消费): 轨道浅蓝, 填充蓝灰 ---- */
+	--cu-slider-track: #daebf6;
+	--cu-slider-fill: #b3c8d5;
+	--cu-slider-thumb-border: #8fa8b8;
+
+	/* ==================== 结构 ==================== */
+
+	/* 开发者向字体: 数值对齐、终端气质的技术工具 */
+	--font-ui: ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, "Microsoft YaHei", "PingFang SC", monospace;
+
+	/* 密度: 控件比 VSC 基准再紧一点, 但保留可点面积 */
+	--ctl-h: 28px;
+	--row-h: 26px;
+
+	/* 形状: 2 / 4 / 8px, 不出现胶囊与大圆角 */
+	--r-sm: 2px;
+	--r-md: 4px;
+	--r-lg: 4px;
+	--r-xl: 8px;
+
+	/* 动效: 短而平, 无回弹 */
+	--dur-fast: 0.12s;
+	--dur: 0.18s;
+	--dur-slow: 0.24s;
+	--ease: ease-out;
+
+	/* ---- 形态钩子 (语义清单见 default.css) ---- */
+	--btn-r: var(--r-md);
+	--btn-bg: #f1f1f1;
+	--btn-border: var(--cu-border-strong);
+	--btn-fw: 500;
+	--btn-ls: 0.02em;        /* 按钮/标签用字距而非全大写, 避免中文标题变形 */
+	--icon-btn-r: var(--r-md);
+	--input-focus-ring: 0 0 0 2px rgba(69, 198, 255, 0.45);
+	--card-border: var(--cu-border);
+	--card-shadow: none;
+	--dialog-border: var(--cu-border-cyan);
+	--dialog-divider: var(--cu-border);
+	--dialog-title-fs: 16px;
+	--dialog-title-fw: 600;
+	--tooltip-r: var(--r-sm);
+	--tooltip-px: var(--sp-2);
+	--bar-h: 8px;            /* 进度条带边框, 需要厚度才看得出轨道 */
+	--activity-r: var(--r-sm);
+	--nav-gap: 0;
+	--nav-edge: var(--sp-2);
+	--nav-item-r: var(--r-sm);
+	--nav-item-mx: 0;
+	--nav-item-px: var(--sp-3);
+	--nav-active-bg: var(--bg-selected);
+	--nav-active-fw: 500;
+	--bot-nav-extra: 0px;
+
+	/* 分层全靠描边: 阴影令牌归零 (弹窗/浮层的 box-shadow 会跟着消失) */
+	--shadow-1: none;
+	--shadow-2: none;
+}
+
+/* ==================== 2. 深色 ==================== */
+
+:root[data-theme="chirucat-dark"] {
+	color-scheme: dark;
+
+	/* ---- 表面: 青调深灰, 由暗到亮分层 ---- */
+	--bg-app: #141a1f;
+	--bg-activity: #1c242b;
+	--bg-sidebar: #181f24;
+	--bg-panel: #222c33;
+	--bg-elevated: #26313a;
+	--bg-input: #2c383f;
+
+	--bg-hover: rgba(91, 200, 255, 0.10);
+	--bg-active: rgba(91, 200, 255, 0.18);
+	--bg-selected: #2a3b45;
+
+	--cu-panel: #1c242b;
+	--cu-panel-dark: #1a2228;
+	--cu-border: #324049;
+	--cu-border-strong: #4b5c66;
+	--cu-border-cyan: #3f8491;
+	/* 深色档同理: 右下边要比面板底 (#222c33) 更深, 才读得出"压出来的边" */
+	--cu-edge: #0e1519;
+
+	/* ---- 文字 ---- */
+	--fg: #dce8ec;
+	--fg-muted: #a6b7bf;
+	--fg-subtle: #7f929b;
+	--fg-on-accent: #0e1a22;  /* 深色档强调是浅青蓝, 文字取深 */
+
+	--border: var(--cu-border);
+	--border-strong: var(--cu-border-strong);
+
+	/* ---- 语义 ---- */
+	--accent: #5bc8ff;
+	--accent-hover: #82d6ff;
+	--accent-bright: #5bc8ff;
+	--ok: #7fc69b;
+	--warn: #d9bd6f;
+	--danger: #e08d8d;
+
+	--accent-soft: rgba(91, 200, 255, 0.16);
+	--ok-soft: rgba(127, 198, 155, 0.14);
+	--ok-line: rgba(127, 198, 155, 0.5);
+	--warn-soft: rgba(217, 189, 111, 0.14);
+	--warn-line: rgba(217, 189, 111, 0.5);
+	--danger-soft: rgba(224, 141, 141, 0.14);
+	--danger-line: rgba(224, 141, 141, 0.5);
+
+	--fg-on-danger: #1d1010;
+
+	--type-adapter: #5bc8ff;
+	--type-adapter-soft: rgba(91, 200, 255, 0.16);
+	--type-service: #5fd0d8;
+	--type-service-soft: rgba(95, 208, 216, 0.16);
+	--type-normal: #a794e8;
+	--type-normal-soft: rgba(167, 148, 232, 0.16);
+
+	--scrim: rgba(8, 12, 15, 0.55);
+	--overlay-bg: rgba(20, 26, 31, 0.72);
+	--glass-bg: #26313a;
+	--glass-blur: 0px;
+	--glass-border: var(--cu-border);
+
+	--log-bg: rgba(10, 14, 17, 0.95);
+	--log-fg: #cfe3e8;
+
+	--cu-slider-track: #2a3b45;
+	--cu-slider-fill: #3d5563;
+	--cu-slider-thumb-border: #5bc8ff;
+
+	/* 结构令牌与浅色档完全一致, 只有控件填充/描边换方向 */
+	--font-ui: ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, "Microsoft YaHei", "PingFang SC", monospace;
+	--ctl-h: 28px;
+	--row-h: 26px;
+	--r-sm: 2px;
+	--r-md: 4px;
+	--r-lg: 4px;
+	--r-xl: 8px;
+	--dur-fast: 0.12s;
+	--dur: 0.18s;
+	--dur-slow: 0.24s;
+	--ease: ease-out;
+
+	--btn-r: var(--r-md);
+	--btn-bg: #2a353c;
+	--btn-border: var(--cu-border-strong);
+	--btn-fw: 500;
+	--btn-ls: 0.02em;
+	--icon-btn-r: var(--r-md);
+	--input-focus-ring: 0 0 0 2px rgba(91, 200, 255, 0.45);
+	--card-border: var(--cu-border);
+	--card-shadow: none;
+	--dialog-border: var(--cu-border-cyan);
+	--dialog-divider: var(--cu-border);
+	--dialog-title-fs: 16px;
+	--dialog-title-fw: 600;
+	--tooltip-r: var(--r-sm);
+	--tooltip-px: var(--sp-2);
+	--bar-h: 8px;
+	--activity-r: var(--r-sm);
+	--nav-gap: 0;
+	--nav-edge: var(--sp-2);
+	--nav-item-r: var(--r-sm);
+	--nav-item-mx: 0;
+	--nav-item-px: var(--sp-3);
+	--nav-active-bg: var(--bg-selected);
+	--nav-active-fw: 500;
+	--bot-nav-extra: 0px;
+
+	--shadow-1: none;
+	--shadow-2: none;
+}
+
+/* ==================== 3. 明暗共用的覆盖色 ==================== */
+
+:root[data-theme="chirucat"],
+:root[data-theme="chirucat-dark"] {
+	/* 主按钮: Cyan Utility 不用大面积实心蓝, 而是浅蓝底 + 青边 + 蓝字 */
+	--btn-primary-bg: var(--cu-slider-track);
+	--btn-primary-fg: var(--accent);
+	--btn-primary-border: var(--cu-border-cyan);
+	--btn-primary-hover: var(--bg-selected);
+}
+
+:root[data-theme="chirucat-dark"] {
+	--btn-primary-bg: rgba(91, 200, 255, 0.18);
+	--btn-primary-fg: var(--accent);
+	--btn-primary-border: var(--cu-border-cyan);
+	--btn-primary-hover: rgba(91, 200, 255, 0.28);
+}
+
+/* ==================== 4. 组件外观覆盖 ====================
+ * 只留形态钩子令牌表达不了的真结构差异。
+ * :root[data-theme^="chirucat"] 同时命中 chirucat / chirucat-dark。 */
+
+/* ---- 控件描边: 本皮肤的边界靠 2px 实线而不是阴影 ---- */
+
+:root[data-theme^="chirucat"] .btn,
+:root[data-theme^="chirucat"] .config-table-add {
+	border-width: 2px;
+}
+
+:root[data-theme^="chirucat"] :is(.input, textarea.input),
+:root[data-theme^="chirucat"] :is(input.config-input, textarea.config-textarea, .config-select),
+:root[data-theme^="chirucat"] .config-checkbox-item input {
+	border-width: 2px;
+	border-color: var(--cu-border);
+}
+
+:root[data-theme^="chirucat"] .config-select {
+	border-radius: var(--r-md);
+}
+
+/* 分组容器落到面板灰一档: 白底内容 → 灰底分组 → 分组里的白输入框 */
+:root[data-theme^="chirucat"] :is(.config-group-box, .config-checkbox-group) {
+	background: var(--cu-panel);
+}
+
+/* ---- 主按钮 / 危险按钮: 浅底 + 描边, 不用实心色块 ---- */
+
+:root[data-theme^="chirucat"] .btn.primary {
+	color: var(--btn-primary-fg);
+	background: var(--btn-primary-bg);
+	border-color: var(--btn-primary-border);
+}
+
+:root[data-theme^="chirucat"] .btn.primary:hover {
+	background: var(--btn-primary-hover);
+	border-color: var(--accent);
+}
+
+:root[data-theme^="chirucat"] .btn.danger {
+	color: var(--danger);
+	background: var(--danger-soft);
+	border-color: var(--danger-line);
+}
+
+:root[data-theme^="chirucat"] .btn.danger:hover {
+	background: var(--danger-soft);
+	border-color: var(--danger);
+}
+
+/* 键盘焦点: 单圈实心青环 (outline 而不是阴影, 与「不靠阴影分层」一致)。
+ * 不接管的话这些控件落到浏览器的系统强调色环上, 与本皮肤无关。 */
+:root[data-theme^="chirucat"] :is(.btn, .icon-btn, .activity-btn, .sidebar-toggle, .config-table-add, .config-table-del, .config-table-toggle):focus-visible {
+	outline: 2px solid var(--accent-bright);
+	outline-offset: 1px;
+}
+
+/* ---- 面板的右下边 ----
+ * 本皮肤最标志性的细节: 卡片与设置面板不画整圈框, 只在右和下各来一条
+ * 2px 实边, 颜色比面板底略深一档, 于是读起来是"浮起的一层板"。
+ * 这是结构性的边, 不是模糊阴影 —— 不要用 box-shadow 代替。
+ * 浮起来的表面 (弹窗 / 下拉 / Toast / 登录卡) 不在这条规律里, 仍走整圈青边。 */
+
+:root[data-theme^="chirucat"] :is(
+		.card,
+		.stats-card,
+		.stats-chart-box,
+		.stats-rank,
+		.users-bind-group,
+		.users-id,
+		.users-stat-card,
+		.test-log,
+		.config-group-box,
+		.config-table-box,
+		.config-checkbox-group) {
+	border: 0;
+	border-right: 2px solid var(--cu-edge);
+	border-bottom: 2px solid var(--cu-edge);
+}
+
+/* 概览卡在各自页面 css 里走的是 --glass-bg (近白带青), 不是 .card 的
+ * --bg-panel —— 上面虽然给它们画了卡片的右下边, 底色却漏改了。这里补齐:
+ * 与本皮肤其它卡片同档的中性灰, 去掉青白。只作用于 chirucat, 不碰共享 css。 */
+:root[data-theme^="chirucat"] :is(
+		.stats-card, .stats-chart-box, .stats-rank,
+		.users-stat-card) {
+	background: var(--bg-panel);
+	backdrop-filter: none;
+}
+
+/* 页面里的 glass 卡片只是普通内容面板 (用户管理各页在用), 与 .card 同档;
+ * 青边留给弹窗 / 下拉面板 / Toast / 登录卡这些真正浮起来的表面 */
+:root[data-theme^="chirucat"] .card.glass {
+	background: var(--bg-elevated);
+	backdrop-filter: none;
+}
+
+/* 弹窗: 青边 + 无阴影 (弹窗自带 box-shadow: var(--shadow-2), 令牌已归零) */
+:root[data-theme^="chirucat"] .dialog-window {
+	border: 2px solid var(--cu-border-cyan);
+}
+
+/* ---- 浮层: 阴影归零后必须靠描边站住 ---- */
+
+/* Toast: 与弹窗同档 (青边实心面) */
+:root[data-theme^="chirucat"] .toast {
+	backdrop-filter: none;
+	border: 2px solid var(--cu-border-cyan);
+}
+
+/* 悬停提示: 用前景色当底 (浅档=深灰白字, 深档=浅青深字), 反相保证可读 */
+:root[data-theme^="chirucat"] .spa-tooltip {
+	background: var(--fg);
+	color: var(--bg-panel);
+	border: 1px solid var(--cu-border-strong);
+}
+
+:root[data-theme^="chirucat"] .config-select-panel {
+	backdrop-filter: none;
+	border: 1px solid var(--cu-border-cyan);
+	background: var(--bg-elevated);
+}
+
+/* ---- 导航: 去掉 VS Code 的整高竖条, 选中统一用底部强调条 ----
+ * 两处导航同一条语言: 选中行的下缘通宽 2px 条 (两侧不留空, 留空会显得像
+ * 特意画的一根短杠)。厚度取 2px: 4px 的通宽亮青条会读成一根填满的进度条。 */
+
+:root[data-theme^="chirucat"] .activity-btn.active::before {
+	content: none;
+}
+
+:root[data-theme^="chirucat"] .activity-btn.active {
+	background: var(--bg-selected);
+}
+
+:root[data-theme^="chirucat"] .activity-btn.active::after {
+	content: "";
+	position: absolute;
+	inset: auto 0 0 0;
+	height: 2px;
+	background: var(--accent-bright);
+}
+
+:root[data-theme^="chirucat"] .activity-btn .icon {
+	position: relative;
+}
+
+:root[data-theme^="chirucat"] .spa-sidebar-item.active::before {
+	inset: auto 0 0 0;
+	width: auto;
+	height: 2px;
+	background: var(--accent-bright);
+}
+
+:root[data-theme^="chirucat"] .spa-sidebar-item.active {
+	color: var(--accent);
+	background: var(--bg-selected);
+}
+
+/* 次级菜单里的分组标题: 短标题用字距 + 弱化色, 不搞全大写 */
+:root[data-theme^="chirucat"] .spa-sidebar-label {
+	color: var(--fg-muted);
+	font-weight: 600;
+}
+
+/* ---- 表格: 表头是面板灰, 行分隔线保留 ---- */
+
+/* 各页自绘的表格: 表头补面板灰 + 2px 下边 (真 border 即可) */
+:root[data-theme^="chirucat"] table th {
+	background: var(--cu-panel);
+	border-bottom: 2px solid var(--cu-edge);
+}
+
+/* 配置编辑器的表头吸顶 (position: sticky) + border-collapse 下, 真 border 会在
+ * 滚动时被浏览器丢掉, 所以这里用 2px 的 inset 硬线画同一条边 —— 它是边, 不是模糊阴影。
+ * 选择器比上面那条多一级类, 无论顺序都压得住。 */
+:root[data-theme^="chirucat"] .config-table th {
+	background: var(--bg-activity);
+	color: var(--fg-muted);
+	box-shadow: inset 0 -2px 0 var(--cu-edge);
+}
+
+/* ---- 进度条: 矩形轨道 + 右下 2px 边, 不做胶囊 ---- */
+
+:root[data-theme^="chirucat"] :is(.bar, .bar-fill) {
+	border-radius: var(--r-sm);
+}
+
+:root[data-theme^="chirucat"] .bar {
+	background: var(--cu-slider-track);
+	border-right: 2px solid var(--cu-edge);
+	border-bottom: 2px solid var(--cu-edge);
+}
+
+:root[data-theme^="chirucat"] .bar-fill {
+	background: var(--cu-slider-fill);
+}
+
+/* ---- 滑块: 浅蓝轨道 (同样带右下边) + 蓝灰方块旋钮 ---- */
+
+:root[data-theme^="chirucat"] input.config-slider::-webkit-slider-runnable-track {
+	height: 8px;
+	border-radius: var(--r-sm);
+	background-color: var(--cu-slider-track);
+	border-right: 2px solid var(--cu-edge);
+	border-bottom: 2px solid var(--cu-edge);
+}
+
+:root[data-theme^="chirucat"] input.config-slider::-webkit-slider-thumb {
+	width: 14px;
+	height: 18px;
+	margin-top: -5px;
+	border: 1px solid var(--cu-slider-thumb-border);
+	border-radius: var(--r-sm);
+	background-color: var(--cu-slider-fill);
+	box-shadow: none;
+}
+
+:root[data-theme^="chirucat"] input.config-slider::-moz-range-track {
+	height: 8px;
+	border-radius: var(--r-sm);
+	background-color: var(--cu-slider-track);
+	border-right: 2px solid var(--cu-edge);
+	border-bottom: 2px solid var(--cu-edge);
+}
+
+:root[data-theme^="chirucat"] input.config-slider::-moz-range-thumb {
+	width: 14px;
+	height: 18px;
+	border: 1px solid var(--cu-slider-thumb-border);
+	border-radius: var(--r-sm);
+	background-color: var(--cu-slider-fill);
+	box-shadow: none;
+}
+
+/* 勾选框保持方角小框: r-sm 已是 2px, 这里只把选中底色换成实心青 */
+:root[data-theme^="chirucat"] .config-checkbox-item input:checked {
+	background-color: var(--accent-bright);
+	border-color: var(--accent);
+}
+
+/* ---- 开关: 圆点是本皮肤唯一的圆形, 描边按语义色走 ---- */
+
+:root[data-theme^="chirucat"] .dot-switch {
+	border-width: 2px;
+}
+
+/* ---- 登录卡: 靠边框分层, 阴影令牌已归零 ---- */
+
+:root[data-theme^="chirucat"] .login-card {
+	border: 2px solid var(--cu-border-cyan);
+	border-radius: var(--r-xl);
+}
+
+/* 顶栏与导航条的分割线加到 2px, 让区域边界明确 */
+:root[data-theme^="chirucat"] :is(#activity-bar, #side-bar) {
+	border-right-width: 2px;
+	border-right-color: var(--cu-border);
+}
+
+/* 字标是单色黑, chirucat-dark 下要反色 (layout.css 只处理了 VSC 的 data-theme="dark") */
+:root[data-theme="chirucat-dark"] .login-logo {
+	filter: invert(1);
+}
+
+/* ---- 胶囊控件收直 ----
+ * 页面样式里有批控件用 999px 画胶囊 (范围按钮 / 类型徽章 / 进度轨)。
+ * 本皮肤不出现胶囊, 但也不去改各页 CSS, 在这里统一收成一个圆角档位。 */
+
+:root[data-theme^="chirucat"] :is(
+		.stats-range,
+		.users-range,
+		.stats-rank-track,
+		.stats-rank-fill,
+		.users-bar-track,
+		.users-bar-fill,
+		.users-badge,
+		.plugin-card-type,
+		.bot-info-state,
+		.bot-info-hint,
+		.bot-adapter-chip,
+		.info-chip) {
+	border-radius: var(--r-sm);
+}
+
+/* 范围按钮: 选中态从实心强调底改成浅蓝底 + 青边 + 蓝字 (主按钮同款层级) */
+:root[data-theme^="chirucat"] :is(.stats-range, .users-range) {
+	border: 2px solid var(--cu-border);
+	background: var(--bg-input);
+}
+
+:root[data-theme^="chirucat"] :is(.stats-range, .users-range):hover {
+	border-color: var(--cu-border-cyan);
+	background: var(--bg-selected);
+}
+
+:root[data-theme^="chirucat"] :is(.stats-range, .users-range).active {
+	color: var(--accent);
+	border-color: var(--cu-border-cyan);
+	background: var(--cu-slider-track);
+}
+
+/* 徽章补一圈细描边, 靠边框而不是色块表达边界 */
+:root[data-theme^="chirucat"] :is(.users-badge, .plugin-card-type, .bot-info-state, .bot-info-hint, .bot-adapter-chip) {
+	border: 1px solid var(--cu-border);
+}
+
+/* 页面自绘的进度轨: 与 .bar 同款 —— 浅蓝底 + 右下 2px 边, 填充用蓝灰 */
+:root[data-theme^="chirucat"] :is(.stats-rank-track, .users-bar-track) {
+	background: var(--cu-slider-track);
+	border-right: 2px solid var(--cu-edge);
+	border-bottom: 2px solid var(--cu-edge);
+}
+
+:root[data-theme^="chirucat"] :is(.stats-rank-fill, .users-bar-fill) {
+	background: var(--cu-slider-fill);
+}
+

@@ -84,6 +84,10 @@ body {
 }
 
 #top-nav .brand {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--sp-2);
+
 	font-size: var(--fs-sm);
 	font-weight: 600;
 	letter-spacing: 0.02em;
@@ -92,6 +96,17 @@ body {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* 吉祥物是 20x17 逻辑像素的像素画 (存成 320x272, 每格 16px)。
+   显示尺寸必须取逻辑网格的整数倍, pixelated 才能每个像素占满整数 CSS 像素;
+   非整数倍 (如旧的 24px = 1.41 格) 会让最近邻采样丢掉整行整列, 边缘破碎。
+   取 1 倍 => 20x17, 放进 36px 顶栏上下各留约 9px。2 倍 (40x34) 虽更醒目,
+   但会把顶栏撑满显挤, 加高顶栏又会让整条偏高 —— 故取 1 倍求整体协调。 */
+.brand-logo {
+	width: 20px;   /* 20 格 x 1 */
+	height: 17px;  /* 17 格 x 1 */
+	image-rendering: pixelated;
 }
 
 /* 当前页面名: 品牌之后, 窄屏下与品牌一起让位给省略号, 主题按钮始终留在最右 */
@@ -114,12 +129,13 @@ body {
 	font-weight: 400;
 }
 
-/* 主题切换按钮: 推到顶栏最右 */
+/* 主题切换按钮: 顶栏那只推到最右 */
 #theme-toggle {
 	margin-left: auto;
 }
 
-#theme-toggle svg {
+/* 图标尺寸与显隐对两处按钮同时生效 (顶栏 + 登录卡) */
+.theme-toggle svg {
 	width: 16px;
 	height: 16px;
 }
@@ -127,21 +143,21 @@ body {
 /* 只显示与当前模式对应的那一个图标: 半圆=跟随系统(默认), 太阳=浅色, 月亮=深色。
    判断依据是 data-theme-mode (用户选的模式), 而不是 data-theme (实际配色) ——
    跟随系统时配色会随系统变, 但图标应当始终是"跟随系统"那一个。 */
-#theme-toggle .theme-icon-light,
-#theme-toggle .theme-icon-dark {
+.theme-toggle .theme-icon-light,
+.theme-toggle .theme-icon-dark {
 	display: none;
 }
 
-:root[data-theme-mode="light"] #theme-toggle .theme-icon-auto,
-:root[data-theme-mode="dark"] #theme-toggle .theme-icon-auto {
+:root[data-theme-mode="light"] .theme-toggle .theme-icon-auto,
+:root[data-theme-mode="dark"] .theme-toggle .theme-icon-auto {
 	display: none;
 }
 
-:root[data-theme-mode="light"] #theme-toggle .theme-icon-light {
+:root[data-theme-mode="light"] .theme-toggle .theme-icon-light {
 	display: block;
 }
 
-:root[data-theme-mode="dark"] #theme-toggle .theme-icon-dark {
+:root[data-theme-mode="dark"] .theme-toggle .theme-icon-dark {
 	display: block;
 }
 
@@ -391,6 +407,8 @@ body:not(.authed) #main {
 }
 
 .login-card {
+	position: relative; /* 右上角明暗按钮的定位基准 */
+
 	display: flex;
 	flex-direction: column;
 	align-items: stretch;
@@ -403,6 +421,13 @@ body:not(.authed) #main {
 	border: 1px solid var(--border);
 	border-radius: var(--r-xl);
 	box-shadow: var(--shadow-2);
+}
+
+/* 登录卡的明暗按钮: 贴在卡片右上角, 不参与卡片的纵向排布 */
+.login-theme-toggle {
+	position: absolute;
+	top: var(--sp-2);
+	right: var(--sp-2);
 }
 
 .login-icon {
@@ -420,10 +445,8 @@ body:not(.authed) #main {
 	height: auto;
 }
 
-/* 该字标是单色黑 (fill:#000000), 深色主题下反色才可见 */
-:root[data-theme="dark"] .login-logo {
-	filter: invert(1);
-}
+/* 登录字标 (单色黑) 的深色反色规则已下沉到各皮肤文件:
+   四套皮肤各有自己的 <style>-dark 标记, 反色规则随皮肤自包含。 */
 
 .login-title {
 	margin: 0;

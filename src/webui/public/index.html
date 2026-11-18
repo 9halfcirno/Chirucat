@@ -7,13 +7,13 @@
 	<link rel="icon" type="image/png" href="/favicon.png">
 	<title>Chirucat WebUI</title>
 	<script>
-		/* 在样式生效前定好主题, 避免深色偏好下的白闪。
+		/* 在样式生效前定好首帧主题, 避免深色偏好下的白闪。
 		   localStorage 的 "chirucat-theme" 由顶栏主题按钮写入, 三态:
 		     "auto"            跟随系统 (默认)
 		     "light" / "dark"  手动指定
-		   这里同时写两个标记, 分工不同:
+		   两个标记分工不同:
 		     data-theme-mode  用户选的模式 → 决定顶栏显示哪个图标
-		     data-theme       "dark" 或不存在 → 决定实际配色
+		     data-theme       实际配色标记 → 决定首帧皮肤
 		   放在 <head> 且同步执行, 才能早于首屏绘制。 */
 		(() => {
 			try {
@@ -23,15 +23,16 @@
 
 				const dark = mode === "dark"
 					|| (mode === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
-				if (dark) document.documentElement.dataset.theme = "dark";
+				document.documentElement.dataset.theme = dark ? "chirucat-dark" : "chirucat";
 			} catch {
-				/* localStorage 不可用 (隐私模式等): 按跟随系统处理, 不阻塞页面 */
+				/* localStorage 不可用 (隐私模式等): 按跟随系统的浅色默认处理 */
 				document.documentElement.dataset.themeMode = "auto";
+				document.documentElement.dataset.theme = "chirucat";
 			}
 		})();
 	</script>
-	<link rel="stylesheet" href="css/themes/default.css">
-	<link rel="stylesheet" href="css/themes/dark.css">
+	<link rel="stylesheet" href="css/themes/tokens.css">
+	<link rel="stylesheet" href="css/themes/chirucat.css">
 	<link rel="stylesheet" href="css/layout.css">
 	<link rel="stylesheet" href="css/base.css">
 	<link rel="stylesheet" href="css/components/dialog.css">
@@ -45,14 +46,17 @@
 
 <body class="auth-pending nav-collapsed">
 	<header id="top-nav">
-		<span class="brand">=^ - ^= WebUI</span>
+		<span class="brand">
+			<img class="brand-logo" src="/favicon.png" alt="Chirucat 吉祥物" />
+			<span class="brand-text">WebUI</span>
+		</span>
 
 		<!-- 当前页面名: 由 SPA 框架在导航时写入 (窄屏下活动栏只有图标, 靠它辨认页面) -->
 		<span id="page-title" class="page-title"></span>
 
 		<!-- 主题切换。三个图标对应三种模式, 只显示当前那一个:
 		     半圆=跟随系统, 太阳=浅色, 月亮=深色 -->
-		<button id="theme-toggle" class="icon-btn" type="button" aria-label="切换主题">
+		<button id="theme-toggle" class="icon-btn theme-toggle" type="button" aria-label="切换主题">
 			<svg class="theme-icon theme-icon-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 				<circle cx="12" cy="12" r="9" />
 				<path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none" />
@@ -88,6 +92,22 @@
 	<!-- 登录卡片: 鉴权失败/过期时显示, 登录成功后隐藏 (由 app.js 控制) -->
 	<div id="login-view" hidden>
 		<form id="login-form" class="login-card">
+			<!-- 登录时主界面 (含顶栏) 被整块淡出, 明暗切换只能再给卡片自己配一个。
+			     图标与顶栏那只按钮保持同一套 markup, 行为由 js/spa/theme.js 统一绑定。 -->
+			<button class="icon-btn theme-toggle login-theme-toggle" type="button" aria-label="切换主题">
+				<svg class="theme-icon theme-icon-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<circle cx="12" cy="12" r="9" />
+					<path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none" />
+				</svg>
+				<svg class="theme-icon theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<circle cx="12" cy="12" r="4" />
+					<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+				</svg>
+				<svg class="theme-icon theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+				</svg>
+			</button>
+
 			<img class="login-icon" src="/favicon.png" alt="Chirucat icon" />
 			<img class="login-logo" src="/img/chirucat.svg" alt="Chirucat text" />
 			<h1 class="login-title">WebUI</h1>
