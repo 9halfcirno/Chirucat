@@ -138,7 +138,7 @@ async function handleSave(domain, list) {
 	if (pageSwitchChanged) await syncServicePages();
 
 	// 界面风格是下发给前端的设置项: 保存后当场换皮肤, 不必刷新页面。
-	// 取后端规范化后的值 (值文件里缺省时会被补成 schema 的 "vsc")。
+	// 取后端规范化后的值 (值文件里缺省时会被补成 schema 的 default)。
 	if (domain.id === "webui" && changed.includes("frontConfig.uiStyle")) {
 		setUIStyle(result?.values?.frontConfig?.uiStyle ?? patch?.frontConfig?.uiStyle);
 	}

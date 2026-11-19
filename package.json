@@ -40,6 +40,7 @@
     "check:value-tools": "tsx scripts/check-value-tools.ts",
     "check:webui-config": "tsx scripts/check-webui-config-api.ts",
     "check:webui-spa": "node scripts/check-webui-spa.mjs",
+    "check:webui-theme": "node scripts/check-webui-theme.mjs",
     "check:types": "tsc -p tsconfig.check.json --noEmit",
     "check:plugin-imports": "tsx scripts/check-plugin-imports.ts",
     "check:plugins": "tsc -p tsconfig.plugins.json --noEmit && tsx scripts/check-plugin-imports.ts"

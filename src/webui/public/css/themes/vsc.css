@@ -1,0 +1,144 @@
+/**
+ * VS Code 风格皮肤 — 本项目的基准观感
+ *
+ * 重构前这套色板住在 default.css 的 :root (浅) 与 dark.css (深) 里,
+ * VSC 因此是"无 data-theme 标记"的特例。现在它和 md3/winui/chirucat 一样
+ * 降级成一套普通皮肤: 靠 :root[data-theme="vsc"] / [data-theme="vsc-dark"]
+ * 命中, 由 theme.js 的 themeAttr() 统一推导标记。
+ *
+ * 只覆盖「颜色」令牌; 结构令牌 (尺寸/字体/间距/层级/动效/圆角/形态钩子)
+ * 全部继承 tokens.css 的 :root —— 与重构前 default.css + dark.css 的分工一致,
+ * 观感逐像素不变。皮肤作者契约见 docs/webui/theme-contract.md。
+ */
+
+:root[data-theme="vsc"] {
+	color-scheme: light;
+
+	/* ==================== 表面 ==================== */
+	--bg-app: #f3f3f3;        /* 窗口底色 */
+	--bg-activity: #e8e8e8;   /* 活动栏: 最左侧窄图标条 */
+	--bg-sidebar: #f6f6f6;    /* 次级侧栏 */
+	--bg-panel: #ffffff;      /* 内容区表面 / 卡片 */
+	--bg-elevated: #ffffff;   /* 浮层: 弹窗 / Toast */
+	--bg-input: #ffffff;      /* 输入类控件底色 */
+
+	--bg-hover: rgba(0, 0, 0, 0.055);
+	--bg-active: rgba(0, 0, 0, 0.09);
+	--bg-selected: rgba(0, 95, 184, 0.10);
+
+	/* ==================== 文字 ==================== */
+	--fg: #1f1f1f;            /* 正文 */
+	--fg-muted: #616161;      /* 次要信息 */
+	--fg-subtle: #8b8b8b;     /* 弱化: 单位 / 脚注 / 占位符 */
+	--fg-on-accent: #ffffff;  /* 强调色底上的文字 */
+	--fg-on-danger: var(--fg-on-accent); /* 危险填充底上的文字 */
+
+	/* ==================== 线条 ==================== */
+	--border: rgba(0, 0, 0, 0.10);        /* 分隔线 / 卡片描边 */
+	--border-strong: rgba(0, 0, 0, 0.22); /* 输入框等需要更明确边界处 */
+
+	/* ==================== 语义 ==================== */
+	--accent: #005fb8;        /* 强调 / 选中 / 进度 */
+	--accent-hover: #0078d4;
+	--ok: #2f9e44;
+	--warn: #b7791f;
+	--danger: #d13438;
+
+	--accent-soft: rgba(0, 95, 184, 0.12);
+	--ok-soft: rgba(47, 158, 68, 0.16);
+	--ok-line: rgba(47, 158, 68, 0.55);
+	--warn-soft: rgba(183, 121, 31, 0.16);
+	--warn-line: rgba(183, 121, 31, 0.55);
+	--danger-soft: rgba(209, 52, 56, 0.12);
+	--danger-line: rgba(209, 52, 56, 0.5);
+
+	/* 插件类型标识: 适配器(蓝) / 服务插件(青绿) / 普通插件(靖紫) */
+	--type-adapter: #005fb8;
+	--type-adapter-soft: rgba(0, 95, 184, 0.12);
+	--type-service: #0f7b6c;
+	--type-service-soft: rgba(15, 123, 108, 0.12);
+	--type-normal: #6f42c1;
+	--type-normal-soft: rgba(111, 66, 193, 0.12);
+
+	/* ==================== 遮罩 / 毛玻璃 ==================== */
+	--scrim: rgba(0, 0, 0, 0.14);
+	--overlay-bg: rgba(243, 243, 243, 0.6);
+	--glass-bg: rgba(255, 255, 255, 0.78);
+	--glass-border: rgba(0, 0, 0, 0.12);
+
+	/* 日志终端区: 刻意保持深色表面 (浅色主题下也是终端观感) */
+	--log-bg: rgba(20, 24, 32, 0.92);
+	--log-fg: #cfd6e4;
+}
+
+:root[data-theme="vsc-dark"] {
+	color-scheme: dark;
+
+	/* ==================== 表面 ==================== */
+	--bg-app: #1e1e1e;
+	--bg-activity: #333333;
+	--bg-sidebar: #252526;
+	--bg-panel: #252526;
+	--bg-elevated: #2d2d30;
+	--bg-input: #3c3c3c;
+
+	--bg-hover: rgba(255, 255, 255, 0.07);
+	--bg-active: rgba(255, 255, 255, 0.12);
+	--bg-selected: rgba(74, 158, 255, 0.18);
+
+	/* ==================== 文字 ==================== */
+	--fg: #d4d4d4;
+	--fg-muted: #9d9d9d;
+	--fg-subtle: #7a7a7a;
+	--fg-on-accent: #ffffff;
+	--fg-on-danger: var(--fg-on-accent);
+
+	/* ==================== 线条 ==================== */
+	--border: rgba(255, 255, 255, 0.10);
+	--border-strong: rgba(255, 255, 255, 0.24);
+
+	/* ==================== 语义 ==================== */
+	--accent: #4a9eff;
+	--accent-hover: #6cb2ff;
+	--ok: #4ec9b0;
+	--warn: #d7ba7d;
+	--danger: #f48771;
+
+	--accent-soft: rgba(74, 158, 255, 0.16);
+	--ok-soft: rgba(78, 201, 176, 0.16);
+	--ok-line: rgba(78, 201, 176, 0.5);
+	--warn-soft: rgba(215, 186, 125, 0.16);
+	--warn-line: rgba(215, 186, 125, 0.5);
+	--danger-soft: rgba(244, 135, 113, 0.16);
+	--danger-line: rgba(244, 135, 113, 0.5);
+
+	/* 插件类型标识: 深色下提亮, 保持与背景的对比 */
+	--type-adapter: #4a9eff;
+	--type-adapter-soft: rgba(74, 158, 255, 0.16);
+	--type-service: #3ddc97;
+	--type-service-soft: rgba(61, 220, 151, 0.16);
+	--type-normal: #b392f0;
+	--type-normal-soft: rgba(179, 146, 240, 0.16);
+
+	/* ==================== 遮罩 / 毛玻璃 ==================== */
+	--scrim: rgba(0, 0, 0, 0.45);
+	--overlay-bg: rgba(30, 30, 30, 0.6);
+	--glass-bg: rgba(45, 45, 48, 0.82);
+	--glass-border: rgba(255, 255, 255, 0.12);
+
+	/* 日志终端区: 深色下略比浅色主题更暗 (log-fg 沿用浅色档取值) */
+	--log-bg: rgba(12, 14, 18, 0.92);
+	--log-fg: #cfd6e4;
+
+	/* ==================== 阴影 ====================
+	   深色下阴影必须更重才有层次感 (原 dark.css 的值) */
+	--shadow-1: 0 1px 3px rgba(0, 0, 0, 0.5);
+	--shadow-2: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+/* 登录字标是单色黑, 深色下反色才可见。
+   原来这条规则住在 layout.css、挂在 vsc 专用的 :root[data-theme="dark"] 上;
+   vsc 深色标记统一为 vsc-dark 后, 随皮肤一起搬进来 (与其他三套皮肤自包含做法一致)。 */
+:root[data-theme="vsc-dark"] .login-logo {
+	filter: invert(1);
+}
