@@ -124,6 +124,9 @@ type SessionPlatformInfo = {
 
 - `register(command: string, handler: (msg: Message | null, args: (string | number)[]) => void): Command`: 注册一个指令回调, 当指令触发时, 会触发该回调函数, 并将指令参数传入回调函数, 指令名支持携带空格
 
+> [!NOTICE]
+> 指令名应当是裸指令, 如`"help"`, `"菜单"`, 而不是`"/help"`等, 框架会自动匹配指令前缀
+
 - `unregister(command: Command)`: 注销一个指令回调, 传入`register`方法的返回值即可
 
 - `exec: (message: Message | string, args?: (string | number)[])`: 触发一个指令

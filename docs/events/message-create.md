@@ -62,6 +62,7 @@ ctx.bot.dispatch({
 	senderName: data.author.username,
 	sessionType: "group",
 	sessionId: ctx.session.get("qq", "group", data.group_openid), // 平台会话id -> 会话uuid
+	mentionedSelf: true, // AT_MESSAGE 永远后是被@才派发的
 	text: data.content.trim(),
 	richContent: [{ type: "text", text: data.content.trim() }],
 	quoteToken: data.message_scene.ext.find(kv => kv.startsWith("msg_idx=")).split("=")[1], // 引用消息需要的idx (Token)
