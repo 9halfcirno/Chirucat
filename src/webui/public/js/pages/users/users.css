@@ -50,6 +50,7 @@
 	padding: var(--sp-2) var(--sp-3);
 	border: 1px solid var(--glass-border);
 	border-radius: var(--r-md);
+	background: var(--bg-panel);
 }
 
 .users-bind-title {

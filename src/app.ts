@@ -100,7 +100,7 @@ async function exit(exitCode: number) {
 
 
 const argsSchema = {
-	'no-ver-check': { type: 'boolean', default: false, desc: "跳过 Node 版本检查, 以不受控制的状态启动框架" },
+	'no-ver-check': { type: 'boolean', default: false, desc: "跳过 Node 版本检查, 以忽略警告的状态启动框架" },
 	"help": { type: 'boolean', alias: 'h', desc: '显示帮助' },
 } as const;
 let args: ParseResult<ValuesOf<typeof argsSchema>>

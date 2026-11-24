@@ -1,41 +1,101 @@
-/* 首页: 仪表盘 */
+/* 首页: 仪表盘
+ *
+ * 版式照 WEBUI_HOME.md 的字符画: 左右两列、每列三块。
+ *   左列 (自适应)     右列 (~320px)
+ *   ├ 机器人           ├ 系统资源 (环图, 吃掉本列剩余高度)
+ *   ├ Chirucat核心     └ 操作系统
+ *   └ 进程信息 (按内容高)
+ *
+ * 高度: 页面占满 #page-view → 网格那一行定高 → 右列被拉满、系统资源卡吃
+ * 掉富余 (字符画里"剩下的都是环图的高度预留") → 环图因此能长到列尾。
+ * 左列刻意不拉伸 (align-self: start), 三张卡按内容排, 底边比右列短一截 ——
+ * 换来的是进程信息卡不再为了对齐而空出半张卡。
+ * 链上每一环都要能收缩 (min-height: 0 / minmax(0, …)), 否则会按内容撑开,
+ * 把整页顶出可视区。
+ */
 
-/* ---- 状态条: 多个状态项横排, 每个由状态点 + 文本组成 ---- */
-#status {
+/* ==================== 页面骨架 ==================== */
+
+/* 错误提示条 + 两列网格; 用 flex 列排, 提示条天然在网格上方 */
+.home-page {
 	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: var(--sp-1) var(--sp-4);
-}
-
-.status-item {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	font-size: var(--fs-sm);
-	color: var(--fg);
-}
-
-/* ---- 板块网格: 宽屏 2x2, 窄屏单列 ---- */
-.panel-grid {
-	display: grid;
+	flex-direction: column;
 	gap: var(--sp-3);
-	grid-template-columns: 1fr;
-	margin-top: var(--sp-3);
+
+	/* 首页是整屏仪表盘: 占满 #page-view 的高度, 下面两列的 1fr 行才有高度
+	   可以分配 (否则 1fr 在不定高容器里等于"按内容", 环图会挤成一团)。
+	   #page-view 是定高的滚动容器, 百分比高度在这里成立。 */
+	height: 100%;
+	min-height: 0;
 }
 
-@media (min-width: 768px) {
-	.panel-grid {
-		grid-template-columns: repeat(2, 1fr);
+.home-grid {
+	flex: 1 1 auto;
+
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+	/* 行必须写成 minmax(0, 1fr): 隐含的 auto 行会按内容撑开, 不受容器高度约束,
+	   两列的富余高度就分配不出去, 整页被内容顶出可视区 (实测溢出 350px)。 */
+	grid-template-rows: minmax(0, 1fr);
+	gap: var(--sp-3);
+	align-items: stretch;
+
+	min-height: 0;
+}
+
+/* 左列: 三张卡都按内容高。
+ * align-self: start 让这一列不被 .home-grid 拉平成整列高;
+ * align-content: start 是必需的 —— 默认的 stretch 会把富余高度摊给 auto 行,
+ * 卡片会重新被拉高 (那样进程信息卡的下半部分又会空出来)。 */
+.home-main {
+	display: grid;
+	grid-template-rows: none;
+	align-content: start;
+	align-self: start;
+	gap: var(--sp-3);
+	min-width: 0;
+}
+
+/* 右列: 系统资源补齐剩余, 操作系统按内容高 */
+.home-side {
+	display: grid;
+	grid-template-rows: minmax(0, 1fr) auto;
+	gap: var(--sp-3);
+	min-width: 0;
+}
+
+/* 窄屏: 收成单列, 各板块恢复按内容高度 (1fr 行在不定高容器里没有意义) */
+@media (max-width: 980px) {
+
+	.home-page {
+		height: auto;
+	}
+
+	.home-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.home-main,
+	.home-side {
+		grid-template-rows: none;
+	}
+
+	/* 单列时列高按内容算, 环图没有可分配的高度, 给它一个定高 */
+	.ring {
+		flex: 0 0 auto;
+		height: 150px;
 	}
 }
 
-/* ---- 板块外壳 ---- */
+/* ==================== 板块外壳 ==================== */
+
 .panel {
 	display: flex;
 	flex-direction: column;
 	gap: var(--sp-2);
+
 	min-width: 0;
+	min-height: 0;
 }
 
 .panel-head {
@@ -51,49 +111,19 @@
 	color: var(--fg);
 }
 
-.panel-icon {
-	font-size: var(--fs-lg);
-	line-height: 1;
-}
-
+/* 卡片主体撑满剩余高度, 让内部 (如环图) 能纵向分配空间 */
 .panel-body {
+	flex: 1 1 auto;
+
 	display: flex;
 	flex-direction: column;
 	gap: var(--sp-2);
+
 	min-width: 0;
+	min-height: 0;
 }
 
-/* 主数值: 大号加粗, 后缀单位小号弱化 */
-.panel-main {
-	font-size: var(--fs-xl);
-	font-weight: 700;
-	line-height: 1.15;
-	color: var(--fg);
-	font-variant-numeric: tabular-nums;
-
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-/* 单位不能用 em: .panel-main 现在是绝对字号, 0.42em 会小到 8px */
-.panel-main .unit {
-	margin-left: var(--sp-1);
-	font-size: var(--fs-sm);
-	font-weight: 500;
-	color: var(--fg-subtle);
-}
-
-.panel-sub {
-	font-size: var(--fs-sm);
-	color: var(--fg-muted);
-
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-/* 板块脚注: 顶部细分隔线, 弱化字号 */
+/* 脚注: 顶部细分隔线, 弱化字号, 单行截断 */
 .panel-foot {
 	padding-top: var(--sp-1);
 	border-top: 1px solid var(--border);
@@ -106,7 +136,7 @@
 	white-space: nowrap;
 }
 
-/* ---- 通用 kv 行 (CPU/进程板块) ---- */
+/* ---- 通用 kv 行 (进程信息 / 操作系统) ---- */
 .kv {
 	display: flex;
 	justify-content: space-between;
@@ -114,6 +144,10 @@
 	gap: var(--sp-2);
 	padding: 1px 0;
 	font-size: var(--fs-sm);
+}
+
+.kv[hidden] {
+	display: none;
 }
 
 .kv .k {
@@ -125,13 +159,149 @@
 	min-width: 0;
 	color: var(--fg);
 	text-align: right;
+	font-variant-numeric: tabular-nums;
 
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-/* ---- 机器人板块: 状态点列表 ---- */
+/* ==================== 内存构成 (进程信息卡下半) ====================
+ * Cyan Utility 风格的分段资源条: 方角小圆角、1px 边框、淡色轨道上叠各段,
+ * 段间 1px 缝隙露出轨道色当作分段边界 —— 几何与边界照 skill, 颜色全部映射
+ * 到主题令牌, 深浅主题都能落位。
+ * 条按 RSS 拆段, 宽度由 JS 写 flex-grow, 因此缝隙不会把总和顶出条外。
+ */
+
+.mem-compose {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-1);
+
+	/* 与上面的 kv 行拉开距离, 用分隔线分组 */
+	margin-top: var(--sp-1);
+	padding-top: var(--sp-2);
+	border-top: 1px solid var(--border);
+}
+
+.mem-compose[hidden] {
+	display: none;
+}
+
+.mem-compose-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--sp-2);
+
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+}
+
+.mem-compose-total {
+	color: var(--fg);
+	font-variant-numeric: tabular-nums;
+}
+
+.mem-stack {
+	display: flex;
+	gap: 1px;
+
+	/* 全站 border-box: 14px 含 1px 内衬与 1px 边框, 内容区约 10px */
+	height: 14px;
+	padding: 1px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--r-sm);
+	background: var(--accent-soft);
+	overflow: hidden;
+}
+
+.mem-seg {
+	flex: 1 0 0;
+	min-width: 0;
+	border-radius: 1px;
+}
+
+/* 数值为 0 的段要真正消失, 否则会在条上留下 1px 缝隙 */
+.mem-seg[hidden] {
+	display: none;
+}
+
+/* 图例: 固定列宽的读数网格, 数值右对齐 (工程仪表的读法) */
+.mem-legend {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 2px var(--sp-3);
+
+	margin: 0;
+	padding: 0;
+	list-style: none;
+
+	font-size: var(--fs-xs);
+	color: var(--fg-muted);
+}
+
+.mem-legend li {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-1);
+	min-width: 0;
+	white-space: nowrap;
+}
+
+.mem-legend li > span:nth-child(2) {
+	min-width: 0;
+
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.mem-swatch {
+	flex: 0 0 auto;
+	width: 8px;
+	height: 8px;
+	border-radius: var(--r-sm);
+}
+
+.mem-value {
+	margin-left: auto;
+	color: var(--fg);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ==================== 机器人: 左侧计数 + 右侧列表 ==================== */
+
+/* 两列并排: 计数栏 + 列表。计数纵向居中于列表 (字符画里 2 / 3 对着列表中部) */
+.bot-body {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: var(--sp-4);
+}
+
+.bot-count {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+}
+
+.bot-count-value {
+	font-size: var(--fs-xl);
+	font-weight: 700;
+	line-height: 1.15;
+	color: var(--fg);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.bot-count-label {
+	font-size: var(--fs-xs);
+	color: var(--fg-subtle);
+	white-space: nowrap;
+}
+
+/* bot 列表: 状态点 + 名称 + id (id 靠右) */
 .bot-state-list {
 	display: flex;
 	flex-direction: column;
@@ -140,6 +310,10 @@
 	margin: 0;
 	padding: 0;
 	list-style: none;
+
+	/* 机器人很多时列表自己滚, 不把整张卡片撑到失控 */
+	max-height: min(320px, 45vh);
+	overflow-y: auto;
 }
 
 .bot-state-item {
@@ -166,25 +340,72 @@
 	color: var(--fg-subtle);
 }
 
-/* ---- 内存板块: 指标行 ---- */
-.mem-row {
+/* ==================== Chirucat核心: 状态 + 运行时长 ==================== */
+
+.core-state {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	font-size: var(--fs);
+	font-weight: 600;
+}
+
+/* 状态点默认 0.7em, 在正文号下偏小, 这里定点 8px */
+.core-state .dot {
+	width: 8px;
+	height: 8px;
+}
+
+.core-state-text {
+	min-width: 0;
+
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.core-uptime {
+	margin: 0;
+	font-size: var(--fs-sm);
+	color: var(--fg-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ==================== 系统资源: 环图 ==================== */
+
+.res-panel .panel-body {
+	gap: var(--sp-3);
+}
+
+/* 一段环图: 标题行按内容高, 环图画布吃掉剩下的高度。
+ * flex-basis 取 auto 而不是 0: 卡片高度由内容决定时 (窄屏单列), basis 0 会让
+ * 整段塌成 0 高, 环图跟着一起消失。 */
+.res-item {
+	flex: 1 1 auto;
+
 	display: flex;
 	flex-direction: column;
 	gap: var(--sp-1);
+
+	min-height: 0;
 }
 
-.mem-row-head {
+.res-item-head {
 	display: flex;
-	justify-content: space-between;
 	align-items: baseline;
+	justify-content: space-between;
 	gap: var(--sp-2);
-	font-size: var(--fs-sm);
-	color: var(--fg-muted);
 }
 
-.mem-row-head .val {
-	min-width: 0;
+.res-name {
+	font-size: var(--fs-sm);
+	font-weight: 600;
 	color: var(--fg);
+}
+
+.res-note {
+	font-size: var(--fs-xs);
+	color: var(--fg-subtle);
 	font-variant-numeric: tabular-nums;
 
 	overflow: hidden;
@@ -192,14 +413,102 @@
 	white-space: nowrap;
 }
 
-/* 进度条 (.bar / .bar-fill) 已统一到 base.css, 此处不再重复定义 */
+.res-slot {
+	flex: 1 1 auto;
 
-/* 数据缺失时的占位条 */
-.bar-fill-na {
-	width: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--sp-1);
+
+	min-height: 0;
 }
 
-/* 板块网格中的错误提示: 横跨整行 (不清空已有板块, 仅在对应位置提示) */
-.grid-error {
-	grid-column: 1 / -1;
+/* 环图画布: 撑满 slot。
+ * 尺寸只需交给 SVG 自己: viewBox 是正方形且 preserveAspectRatio 默认 meet,
+ * 画布比例不合时它会居中留白, 圆不会被拉扁 —— 所以这里 width/height 都给
+ * 100% 也不会变形。上限 320px 是防止窄屏单列 (高度按内容算, 宽度可能很大)
+ * 时环被撑成一个巨大的圆。 */
+.ring {
+	flex: 1 1 auto;
+	width: 100%;
+
+	/* 允许被压缩到 0: 卡片高度不够时宁可不画, 也不要顶破卡片
+	   (窄屏那版会给它一个定高, 见上面的媒体查询) */
+	min-height: 0;
+}
+
+.ring-svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+	max-width: 320px;
+	max-height: 320px;
+
+	/* 画布宽于可用高度时水平居中 */
+	margin: 0 auto;
+}
+
+.ring-track {
+	fill: none;
+	stroke: var(--bg-active);
+	stroke-width: 8;
+}
+
+/* 弧的颜色由 ring.js 按层写进 stroke 属性, 这里只管几何 */
+.ring-arc {
+	fill: none;
+	stroke-width: 8;
+	stroke-linecap: butt;
+	transition: stroke-dasharray var(--dur-slow) var(--ease);
+}
+
+.ring-text {
+	fill: var(--fg);
+	font-size: 17px;
+	font-weight: 700;
+	text-anchor: middle;
+	dominant-baseline: central;
+	font-variant-numeric: tabular-nums;
+}
+
+.ring-sub {
+	fill: var(--fg-subtle);
+	font-size: 7.5px;
+	text-anchor: middle;
+	dominant-baseline: central;
+}
+
+/* 内存双环的图例: 解释两条弧各是谁 */
+.ring-legend {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: var(--sp-1) var(--sp-3);
+
+	margin: 0;
+	padding: 0;
+	list-style: none;
+
+	font-size: var(--fs-xs);
+	color: var(--fg-muted);
+}
+
+.ring-legend li {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--sp-1);
+	white-space: nowrap;
+}
+
+.ring-swatch {
+	flex: 0 0 auto;
+	width: 8px;
+	height: 8px;
+	border-radius: 2px;
+}
+
+.ring-legend-value {
+	color: var(--fg);
+	font-variant-numeric: tabular-nums;
 }
