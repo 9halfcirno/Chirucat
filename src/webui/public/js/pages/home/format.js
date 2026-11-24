@@ -15,7 +15,7 @@ export function formatBytes(bytes) {
 	return `${value >= 100 || i === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[i]}`;
 }
 
-/** 秒 → "Xd Xh Xm" 形式 */
+/** 秒 → "Xd Xh Xm" 形式 (给「系统运行」这类不关心秒的地方用) */
 export function formatUptime(sec) {
 	if (!Number.isFinite(sec) || sec < 0) return "-";
 	sec = Math.floor(sec);
@@ -29,9 +29,29 @@ export function formatUptime(sec) {
 	return `${s}秒`;
 }
 
-/** 占用率进度条颜色: 低绿 / 中黄 / 高红 */
-export function barColor(ratio) {
-	if (ratio < 0.6) return "#5cb85c";
-	if (ratio < 0.85) return "#f0ad4e";
-	return "#d9534f";
+/**
+ * 秒 → 紧凑形式 "1d2h3min45s" (首页「已运行」用)
+ *
+ * 与 formatUptime 的区别: 高位的 0 值省略、秒始终保留 —— 每秒都在跳的数值
+ * 用 "1小时 23分" 这种粗粒度表示会看不出它在走。
+ */
+export function formatUptimeShort(sec) {
+	if (!Number.isFinite(sec) || sec < 0) return "-";
+	sec = Math.floor(sec);
+	const d = Math.floor(sec / 86400);
+	const h = Math.floor((sec % 86400) / 3600);
+	const m = Math.floor((sec % 3600) / 60);
+	const s = sec % 60;
+
+	const parts = [];
+	if (d > 0) parts.push(`${d}d`);
+	if (d > 0 || h > 0) parts.push(`${h}h`);
+	if (d > 0 || h > 0 || m > 0) parts.push(`${m}min`);
+	parts.push(`${s}s`);
+	return parts.join("");
+}
+
+/** 0~1 的比例 → "12.3%" (无数据时为 "—") */
+export function formatPercent(ratio, digits = 1) {
+	return Number.isFinite(ratio) ? `${(ratio * 100).toFixed(digits)}%` : "—";
 }

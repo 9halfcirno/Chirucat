@@ -1,42 +1,16 @@
 /**
  * 首页仪表盘: 通用 UI 工厂
  *
- * 创建进度条 / kv 行 / 面板外壳 / 状态项等可复用骨架。
- * 骨架只在首次渲染时创建一次, 后续通过返回的 update / setValue
- * 做增量更新, 避免整块重建 DOM。
+ * 面板外壳与 kv 行这类骨架只在首次渲染时创建一次, 之后通过返回的
+ * setValue / setFoot 做增量更新, 避免整块重建 DOM。
+ *
+ * 环图在 ring.js (自成一体, 逻辑比这几个工厂复杂得多)。
  */
-import { barColor } from "./format.js";
 
 /**
- * 创建进度条元素; 返回 { bar, update }
- * update(ratio) 只改填充条宽度/颜色, 不重建节点; ratio 非法 (非数字/越界) 时整条置灰
+ * 创建一行 kv 文本; 返回 { row, setValue }, setValue 只改右侧数值
+ * row.hidden 可整行隐藏 (数据不存在时不留一条空行)
  */
-export function createBar(ratio) {
-	const bar = document.createElement("div");
-	bar.className = "bar";
-	const fill = document.createElement("div");
-	fill.className = "bar-fill";
-	bar.append(fill);
-
-	/** @param {number} r 占用率 0~1 */
-	const update = (r) => {
-		if (Number.isFinite(r)) {
-			fill.classList.remove("bar-fill-na");
-			const pct = Math.max(0, Math.min(1, r)) * 100;
-			fill.style.width = `${pct}%`;
-			fill.style.background = barColor(r);
-		} else {
-			// 数据缺失: 置灰占位条, 并清掉之前可能残留的内联样式
-			fill.classList.add("bar-fill-na");
-			fill.style.width = "";
-			fill.style.background = "";
-		}
-	};
-	update(ratio);
-	return { bar, update };
-}
-
-/** 创建一行 kv 文本; 返回 { row, setValue }, setValue 只改右侧数值 */
 export function createKV(key, value) {
 	const row = document.createElement("div");
 	row.className = "kv";
@@ -47,13 +21,18 @@ export function createKV(key, value) {
 	v.className = "v";
 	v.textContent = value;
 	row.append(k, v);
-	return { row, setValue(text) { v.textContent = text; } };
+	return {
+		row,
+		setValue(text) {
+			v.textContent = text;
+		},
+	};
 }
 
 /**
  * 创建板块外壳
  * setFoot: 首次调用创建脚注, 之后只更新文本 (不会叠加多个 footer)
- * @param {string} title 板块标题
+ * @param {string} title 板块标题 (字符画里每个方框顶部的名字)
  * @returns {{ section: HTMLElement, body: HTMLElement, setFoot: (text: string) => void }}
  */
 export function createPanel(title) {
@@ -86,20 +65,4 @@ export function createPanel(title) {
 			footEl.textContent = text;
 		},
 	};
-}
-
-/** 创建单个状态项: 状态点 + 文本 */
-export function createStatusItem(label) {
-	const item = document.createElement("span");
-	item.className = "status-item";
-
-	const dot = document.createElement("span");
-	dot.className = "dot";
-
-	const text = document.createElement("span");
-	text.className = "status-text";
-	text.textContent = label;
-
-	item.append(dot, text);
-	return { item, dot, text };
 }

@@ -360,7 +360,7 @@ export function renderQueryPage(div) {
 function idChip(id) {
 	const code = document.createElement("code");
 	code.className = "mono users-id";
-	code.textContent = shortId(id);
+	code.textContent = id; // shortId(id);
 	code.title = `${id}（点击复制）`;
 	code.addEventListener("click", () => copyText(String(id ?? "")));
 	return code;

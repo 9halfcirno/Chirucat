@@ -1,29 +1,36 @@
 /**
- * 首页仪表盘: 机器人板块
+ * 首页: 机器人板块
  *
- * 运行数 + 每个 bot 的状态点列表 (不用占用条)。
+ * 左边一个「运行中 / 总数」的计数, 右边是 bot 列表 (状态点 + 名称 + id),
+ * 与字符画一致: 计数在左侧竖排居中, 列表逐行往下排。
+ *
+ * 刷新是增量的: 已有的 <li> 复用, 只有新增 / 删除 / 顺序变化才动 DOM。
  */
 import { createPanel } from "../widgets.js";
 
-/** 机器人板块: 运行数 + 每个 bot 的状态点列表 (不用占用条) */
 export function createBotPanel() {
 	const { section, body } = createPanel("机器人");
+	body.classList.add("bot-body");
 
-	// 主数值: 运行中 / 总数 (数值单独占 span, 避免整体赋值误删单位)
-	const main = document.createElement("div");
-	main.className = "panel-main";
-	const mainText = document.createElement("span");
-	mainText.className = "panel-main-value";
-	const unit = document.createElement("span");
-	unit.className = "unit";
-	unit.textContent = "个运行中";
-	main.append(mainText, unit);
-	body.append(main);
+	// 计数: 左侧栏, 纵向居中于列表 (字符画里 2 / 3 与列表同高)
+	const count = document.createElement("div");
+	count.className = "bot-count";
 
-	// bot 状态列表: 运行中的排前面, 再按 id 排序
+	const countValue = document.createElement("span");
+	countValue.className = "bot-count-value";
+	countValue.textContent = "-";
+
+	const countLabel = document.createElement("span");
+	countLabel.className = "bot-count-label";
+	countLabel.textContent = "运行中 / 总数";
+
+	count.append(countValue, countLabel);
+
+	// bot 列表: 运行中的排前面, 再按 id 排序
 	const list = document.createElement("ul");
 	list.className = "bot-state-list";
-	body.append(list);
+
+	body.append(count, list);
 
 	/** bot id → 对应 <li>, 复用节点做增量更新 */
 	const itemMap = new Map();
@@ -44,27 +51,30 @@ export function createBotPanel() {
 		emptyLi = null;
 	};
 
+	const clearItems = () => {
+		for (const li of itemMap.values()) li.remove();
+		itemMap.clear();
+	};
+
 	const update = (state) => {
 		const core = state.core;
 
 		if (!core) {
 			// WebUI 独立运行: 清空列表, 只保留提示
-			mainText.textContent = "- / -";
-			for (const li of itemMap.values()) li.remove();
-			itemMap.clear();
+			countValue.textContent = "- / -";
+			clearItems();
 			showEmpty("WebUI 独立运行, 未连接核心");
 			return;
 		}
 
-		mainText.textContent = `${core.runningBotCount} / ${core.botCount}`;
+		countValue.textContent = `${core.runningBotCount} / ${core.botCount}`;
 
 		const bots = (core.bots ?? [])
 			.slice()
 			.sort((a, b) => (b.running - a.running) || a.id.localeCompare(b.id));
 
 		if (bots.length === 0) {
-			for (const li of itemMap.values()) li.remove();
-			itemMap.clear();
+			clearItems();
 			showEmpty("暂无机器人, 在 bots/ 目录下创建");
 			return;
 		}

@@ -83,6 +83,11 @@ export class Core {
 	webui: WebUIServer | null = null;
 	statistics: StatisticsManager | null = null;
 
+	/**
+	 * 核心的启动时刻 (ms 时间戳)
+	 */
+	runningAt: number | null = null;
+
 	constructor(config?: CoreOption) {
 		this.config = Object.assign(this.config, config)
 
@@ -159,6 +164,8 @@ export class Core {
 		await this.bot.scan(path.join(root, "bots")) // 扫描bot目录
 		await this.bot.syncState();
 
+		// 所有设施就绪才算"跑起来了": 运行时长从这里起算 (见 runningAt 的注释)
+		this.runningAt = Date.now();
 	}
 
 	/**
